@@ -1,4 +1,5 @@
 #include <queue>
+#include <vector>
 #include <utility>
 #include <iomanip>
 #include <iostream>
@@ -75,12 +76,55 @@ void collect_round(
             m.second,
             m.first,
             0,
-            10,
+            8,
             0,
             0
         );
     }
 
+}
+
+void reduce_set(
+    MaskMap &masks,
+    size_t limit
+) {
+    typedef std::pair<uint64_t, double> elemT;
+
+#ifndef NDEBUG
+    std::cout << "reducing mask set: " << std::dec << masks.size();
+#endif
+
+    // extract best
+
+    // TODO: test this code
+
+    auto comp = [](elemT a, elemT b ) { return a.second < b.second; };
+
+    std::priority_queue<elemT, std::vector<elemT>, decltype(comp)> chosen(comp);
+
+    for (auto p : masks) {
+        if (chosen.size() < limit) {
+            chosen.push(p);
+            continue;
+        }
+        if (comp(chosen.top(), p)) {
+            chosen.pop();
+            chosen.push(p);
+        }
+    }
+
+    // feed back to mask set
+
+    masks.clear();
+
+    while (!chosen.empty()) {
+        masks.insert(chosen.top());
+        chosen.pop();
+    }
+
+#ifndef NDEBUG
+    std::cout << " -> " << std::dec << masks.size() << std::endl;
+#endif
 }
 
 template <size_t Rounds, size_t Limit, Direction Dir>
@@ -94,13 +138,21 @@ void collect_sets(
             masks[r-1],
             approx
         );
+        std::cout << "number of masks: " << std::dec << masks[r].size() << std::endl;
+        reduce_set(masks[r], Limit);
+        std::cout << "number of masks: " << std::dec << masks[r].size() << std::endl;
+        getc(stdin);
     }
 }
 
 int main(int argc, char* argv[]) {
 
     const size_t Limit  = 1 << 20;
-    const size_t Rounds = 10;
+    const size_t Rounds = 5;
+
+#ifndef NDEBUG
+    std::cout << "warning: debug build" << std::endl;
+#endif
 
     // parse arguments
 
@@ -115,7 +167,8 @@ int main(int argc, char* argv[]) {
     std::vector<approx_t> fapprox [SBOX_VALUES];
     std::vector<approx_t> bapprox [SBOX_VALUES];
     approximate_sbox(fapprox, bapprox);
-
+    make_approximations_elp(fapprox);
+    make_approximations_elp(bapprox);
 
     // induce
 
