@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <iostream>
 #include <unordered_map>
+#include <unordered_set>
 #include "analysis.cpp"
 
 #define ARG_ALPHA (1)
@@ -11,11 +12,67 @@
 enum Direction { Forwards, Backwards };
 
 typedef std::unordered_map<uint64_t, double> MaskMap;
+typedef std::pair<uint64_t, double> elemT;
+
+auto comp = [](elemT a, elemT b ) { return a.second < b.second; };
+
+struct MaskCollector {
+    size_t size;
+    std::unordered_set<uint64_t> members;                                   // members of heap
+    std::priority_queue<elemT, std::vector<elemT>, decltype(comp)> fitness; // fitness min-heap
+};
+
+/* Applies the inverse round function to
+ * determine the E(LP) with the existing mask-set
+ *
+ * WARNINING: NO PERMUTATION APPLIED
+ */
+double back_propergate(
+    std::vector<approx_t> (&approx) [SBOX_VALUES], // sbox^-1 approx
+    MaskMap &pre_masks,                            // the mask set before this round
+    uint64_t pin,                                  // mask after round
+    uint64_t pout,                                 // mask before round           (init: 0)
+    double corr,                                   // ELP/corr of this sbox layer (init: 1)
+    size_t n                                       // sbox index                  (init: 0)
+) {
+    static const size_t Sboxes = SIZE / 4;
+
+    for (; n < Sboxes; n++) {
+
+        // fetch input parity
+
+        auto val_in = (pin >> (n * 4)) & 0xf;
+        if (val_in == 0)
+            continue;
+
+        // pick approximations
+
+        double col_corr = 0;
+        for (auto const &apx: approx[val_in]) {
+            assert(apx.input == val_in);
+            auto setter = apx.output << (n * 4);
+            col_corr += back_propergate (
+                approx,
+                pre_masks,
+                pin,
+                pout | setter,
+                corr * apx.corr,
+                n + 1
+            );
+        }
+        return col_corr;
+    }
+
+    // recursion leaf
+
+    return pre_masks[pout]; // default value: 0
+}
 
 void fill(
-    MaskMap &pool_new,
-    std::vector<approx_t> (&approx) [SBOX_VALUES],
-    double elp,
+    MaskMap &masks,                                 // masks from last round
+    MaskCollector &collect,                         // collector of new mask set
+    std::vector<approx_t> (&fapprox) [SBOX_VALUES], // forward approximation table
+    std::vector<approx_t> (&bapprox) [SBOX_VALUES], // backward approximation table
     uint64_t pin,
     uint64_t pout, // temp, initally 0
     size_t max_weight,
@@ -36,7 +93,7 @@ void fill(
 
         // pick approximations
 
-        for (auto const &apx: approx[val_in]) {
+        for (auto const &apx: fapprox[val_in]) {
             assert(apx.input == val_in);
             auto mask = apx.output << (n * 4);
             auto wght = pat_weight + 1;
@@ -45,9 +102,10 @@ void fill(
                 continue;
 
             fill(
-                pool_new,
-                approx,
-                elp * apx.corr,
+                masks,
+                collect,
+                fapprox,
+                bapprox,
                 pin,
                 pout | mask,
                 max_weight,
@@ -57,31 +115,69 @@ void fill(
         }
         return;
     }
-    pout = permute(pout);
-    pool_new[pout] += elp;
+
+    // recursion leaf
+
+    if (collect.members.find(pout) != collect.members.end())
+        return;
+
+    // back propergate to find E(LP)
+
+    double elp = back_propergate(
+        bapprox,
+        masks,
+        pout,
+        0,
+        1,
+        0
+    );
+
+    if (elp < TINY)
+        return;
+
+    if (collect.fitness.size() < collect.size) {
+        collect.members.insert(pout);
+        collect.fitness.push(elemT(pout, elp));
+        return;
+    }
+
+    auto worst = collect.fitness.top();
+    if (worst.second >= elp)
+        return;
+
+    // remove worst
+
+    collect.fitness.pop();
+    collect.members.erase(pout);
+
+    // insert new element
+
+    collect.fitness.push(elemT(pout, elp));
+    collect.members.insert(pout);
 }
 
 template <Direction Dir, size_t Limit>
 void collect_round(
-    MaskMap &o_masks,
-    MaskMap &i_masks,
-    std::vector<approx_t> (&approx) [SBOX_VALUES]
+    MaskMap &masks,
+    MaskCollector &collect,
+    std::vector<approx_t> (&fapprox) [SBOX_VALUES],
+    std::vector<approx_t> (&bapprox) [SBOX_VALUES]
 ) {
-    std::cout << "size: " << i_masks.size() << std::endl;
-    for (auto m : i_masks) {
+    std::cout << "size: " << masks.size() << std::endl;
+    for (auto m : masks) {
         std::cout << "process: " << std::setfill('0') << std::setw(16) << std::hex << m.first << std::endl;
-        fill(
-            o_masks,
-            approx,
-            m.second,
+        fill (
+            masks,
+            collect,
+            fapprox,
+            bapprox,
             m.first,
-            0,
-            8,
-            0,
-            0
+            0, // pout
+            8, // max-weight
+            0, // pat-weight
+            0  // n
         );
     }
-
 }
 
 void reduce_set(
@@ -130,17 +226,32 @@ void reduce_set(
 template <size_t Rounds, size_t Limit, Direction Dir>
 void collect_sets(
     MaskMap (&masks) [Rounds],
-    std::vector<approx_t> (&approx) [SBOX_VALUES]
+    std::vector<approx_t> (&fapprox) [SBOX_VALUES],
+    std::vector<approx_t> (&bapprox) [SBOX_VALUES]
 ) {
+    struct MaskCollector collector;
+
     for (size_t r = 1; r < Rounds; r++) {
+
+        // collect masks
+
+        collector.members.clear();
         collect_round<Dir, Limit>(
-            masks[r],
             masks[r-1],
-            approx
+            collector,
+            fapprox,
+            bapprox
         );
-        std::cout << "number of masks: " << std::dec << masks[r].size() << std::endl;
-        reduce_set(masks[r], Limit);
-        std::cout << "number of masks: " << std::dec << masks[r].size() << std::endl;
+
+        // empty collector
+
+        while (!collector.fitness.empty()) {
+            auto elem = collector.fitness.top();
+            masks[r].insert(elem);
+            collector.fitness.pop();
+        }
+        std::cout << "number of old masks: " << std::dec << masks[r].size() << std::endl;
+        std::cout << "number of new masks: " << std::dec << masks[r-1].size() << std::endl;
         getc(stdin);
     }
 }
@@ -176,6 +287,7 @@ int main(int argc, char* argv[]) {
     masks[0][alpha] = 1;
     collect_sets<Rounds, Limit, Forwards>(
         masks,
-        fapprox
+        fapprox,
+        bapprox
     );
 }
