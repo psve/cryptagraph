@@ -36,6 +36,7 @@ void make_approximations_elp(
     for (size_t n = 0; n < SBOX_VALUES; n++) {
         for (auto &approx : approximations[n]) {
             approx.corr = approx.corr * approx.corr;
+            assert(approx.corr <= 1);
         }
     }
 }

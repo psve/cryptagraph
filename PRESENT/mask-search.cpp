@@ -1,10 +1,23 @@
-#include <queue>
-#include <vector>
+// stream imports
+
 #include <utility>
 #include <iomanip>
 #include <iostream>
+
+// data structures
+
+#include <queue>
+#include <mutex>
+#include <vector>
+#include <atomic>
 #include <unordered_map>
 #include <unordered_set>
+
+// the nice subset of this lang
+
+#include <math.h>
+#include <assert.h>
+
 #include "analysis.cpp"
 
 #define ARG_ALPHA (1)
@@ -14,13 +27,27 @@ enum Direction { Forwards, Backwards };
 typedef std::unordered_map<uint64_t, double> MaskMap;
 typedef std::pair<uint64_t, double> elemT;
 
-auto comp = [](elemT a, elemT b ) { return a.second < b.second; };
+bool comp = [](elemT a, elemT b ) { return a.second < b.second; };
 
 struct MaskCollector {
+    class CompareMask {
+        public:
+            bool operator() (elemT &a, elemT &b) {
+                return a.second > b.second;
+            }
+    };
+
+    // content
+
     size_t size;
-    std::unordered_set<uint64_t> members;                                   // members of heap
-    std::priority_queue<elemT, std::vector<elemT>, decltype(comp)> fitness; // fitness min-heap
+    std::mutex mutex_;
+    std::unordered_set<uint64_t> members;                                // members of heap
+    std::priority_queue<elemT, std::vector<elemT>, CompareMask> fitness; // fitness min-heap
 };
+
+#ifndef NDEBUG
+bool DEBUG_FOUND_BACKPROP;
+#endif
 
 /* Applies the inverse round function to
  * determine the E(LP) with the existing mask-set
@@ -29,7 +56,7 @@ struct MaskCollector {
  */
 double back_propergate(
     std::vector<approx_t> (&approx) [SBOX_VALUES], // sbox^-1 approx
-    MaskMap &pre_masks,                            // the mask set before this round
+    MaskMap const &pre_masks,                      // the mask set before this round
     uint64_t pin,                                  // mask after round
     uint64_t pout,                                 // mask before round           (init: 0)
     double corr,                                   // ELP/corr of this sbox layer (init: 1)
@@ -65,11 +92,18 @@ double back_propergate(
 
     // recursion leaf
 
-    return pre_masks[pout]; // default value: 0
+    auto pre = pre_masks.find(pout);
+    if (pre == pre_masks.end())
+        return 0.0;
+    #ifndef NDEBUG
+    DEBUG_FOUND_BACKPROP = true;
+    #endif
+    return pre->second * corr;
 }
 
+
 void fill(
-    MaskMap &masks,                                 // masks from last round
+    MaskMap const &masks,                           // masks from last round
     MaskCollector &collect,                         // collector of new mask set
     std::vector<approx_t> (&fapprox) [SBOX_VALUES], // forward approximation table
     std::vector<approx_t> (&bapprox) [SBOX_VALUES], // backward approximation table
@@ -118,10 +152,17 @@ void fill(
 
     // recursion leaf
 
-    if (collect.members.find(pout) != collect.members.end())
+    collect.mutex_.lock();
+    auto found = collect.members.find(pout) != collect.members.end();
+    collect.mutex_.unlock();
+    if (found)
         return;
 
     // back propergate to find E(LP)
+
+    #ifndef NDEBUG
+    DEBUG_FOUND_BACKPROP = false;
+    #endif
 
     double elp = back_propergate(
         bapprox,
@@ -132,95 +173,76 @@ void fill(
         0
     );
 
+    assert(DEBUG_FOUND_BACKPROP);
+
+    // compare with worst mask in collector
+
     if (elp < TINY)
         return;
+
+    collect.mutex_.lock();
 
     if (collect.fitness.size() < collect.size) {
         collect.members.insert(pout);
         collect.fitness.push(elemT(pout, elp));
+        collect.mutex_.unlock();
         return;
     }
 
     auto worst = collect.fitness.top();
-    if (worst.second >= elp)
+    if (worst.second >= elp) {
+        collect.mutex_.unlock();
         return;
+    }
 
     // remove worst
 
     collect.fitness.pop();
-    collect.members.erase(pout);
+    collect.members.erase(worst.first);
 
     // insert new element
 
     collect.fitness.push(elemT(pout, elp));
     collect.members.insert(pout);
+
+    // release mutex
+
+    collect.mutex_.unlock();
 }
 
 template <Direction Dir, size_t Limit>
 void collect_round(
-    MaskMap &masks,
+    MaskMap const &masks,
     MaskCollector &collect,
     std::vector<approx_t> (&fapprox) [SBOX_VALUES],
     std::vector<approx_t> (&bapprox) [SBOX_VALUES]
 ) {
-    std::cout << "size: " << masks.size() << std::endl;
-    for (auto m : masks) {
-        std::cout << "process: " << std::setfill('0') << std::setw(16) << std::hex << m.first << std::endl;
-        fill (
-            masks,
-            collect,
-            fapprox,
-            bapprox,
-            m.first,
-            0, // pout
-            8, // max-weight
-            0, // pat-weight
-            0  // n
-        );
-    }
-}
+    size_t n = 0;
 
-void reduce_set(
-    MaskMap &masks,
-    size_t limit
-) {
-    typedef std::pair<uint64_t, double> elemT;
-
-#ifndef NDEBUG
-    std::cout << "reducing mask set: " << std::dec << masks.size();
-#endif
-
-    // extract best
-
-    // TODO: test this code
-
-    auto comp = [](elemT a, elemT b ) { return a.second < b.second; };
-
-    std::priority_queue<elemT, std::vector<elemT>, decltype(comp)> chosen(comp);
-
-    for (auto p : masks) {
-        if (chosen.size() < limit) {
-            chosen.push(p);
-            continue;
+    #pragma omp parallel
+    #pragma omp single
+    {
+        for (auto m : masks) {
+            n++;
+            if (n && n % 10000 == 0)
+                printf("dispatched %7zu / %7zu masks\n", n, masks.size());
+            #pragma omp task firstprivate(m)
+            {
+                fill (
+                    masks,
+                    collect,
+                    fapprox,
+                    bapprox,
+                    m.first,
+                    0,  // pout
+                    4,  // max-weight
+                    0,  // pat-weight
+                    0   // n
+                );
+            }
         }
-        if (comp(chosen.top(), p)) {
-            chosen.pop();
-            chosen.push(p);
-        }
+        #pragma omp taskwait
     }
-
-    // feed back to mask set
-
-    masks.clear();
-
-    while (!chosen.empty()) {
-        masks.insert(chosen.top());
-        chosen.pop();
-    }
-
-#ifndef NDEBUG
-    std::cout << " -> " << std::dec << masks.size() << std::endl;
-#endif
 }
 
 template <size_t Rounds, size_t Limit, Direction Dir>
@@ -231,11 +253,18 @@ void collect_sets(
 ) {
     struct MaskCollector collector;
 
+    collector.size = 1000000;
+
     for (size_t r = 1; r < Rounds; r++) {
+        std::cout << std::endl;
+        std::cout << "round: " << r << std::endl;
+        collector.members.clear();
 
         // collect masks
 
-        collector.members.clear();
+        assert(collector.members.empty());
+        assert(collector.fitness.empty());
+
         collect_round<Dir, Limit>(
             masks[r-1],
             collector,
@@ -243,23 +272,25 @@ void collect_sets(
             bapprox
         );
 
-        // empty collector
+        // empty collector and apply permutation
 
+        double total_elp = 0;
         while (!collector.fitness.empty()) {
             auto elem = collector.fitness.top();
+            total_elp += elem.second;
+            elem.first = permute(elem.first);
             masks[r].insert(elem);
             collector.fitness.pop();
         }
-        std::cout << "number of old masks: " << std::dec << masks[r].size() << std::endl;
-        std::cout << "number of new masks: " << std::dec << masks[r-1].size() << std::endl;
-        getc(stdin);
+        std::cout << "total ELP: 2^" << log2(total_elp) << std::endl;
+        std::cout << "number of masks: " << std::dec << masks[r].size() << std::endl;
     }
 }
 
 int main(int argc, char* argv[]) {
 
     const size_t Limit  = 1 << 20;
-    const size_t Rounds = 5;
+    const size_t Rounds = 12;
 
 #ifndef NDEBUG
     std::cout << "warning: debug build" << std::endl;
