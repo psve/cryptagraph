@@ -197,10 +197,12 @@ int main(int argc, char* argv[]) {
             work_elements += flat_size % world_size;
         }
 
+        assert(work_elements + work_offset <= flat_size);
+
         // do work
 
         #ifndef NDEBUG
-        std::cout << "node" << world_rank << ": work elements: " << masks.size() << std::endl;
+        std::cout << "node" << world_rank << ": WorkElements = " << work_elements << ", WorkOffset = " << work_offset << std::endl;
         std::cout << "node" << world_rank << ": begin search for round " << round_num << std::endl;
         #endif
 
@@ -208,7 +210,7 @@ int main(int argc, char* argv[]) {
             masks,
             collector,
             flat_buff + work_offset,
-            flat_size + work_elements,
+            work_elements,
             fapprox,
             bapprox
         );

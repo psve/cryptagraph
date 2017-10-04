@@ -54,13 +54,16 @@ double back_propergate(
 
         double col_corr = 0;
         for (auto const &apx: approx[val_in]) {
+            auto mask = apx.output << (n * 4);
+
             assert(apx.input == val_in);
-            auto setter = apx.output << (n * 4);
+            assert(mask != 0);
+
             col_corr += back_propergate (
                 approx,
                 pre_masks,
                 pin,
-                pout | setter,
+                pout | mask,
                 corr * apx.corr,
                 n + 1
             );
@@ -73,9 +76,11 @@ double back_propergate(
     auto pre = pre_masks.find(pout);
     if (pre == pre_masks.end())
         return 0.0;
+
     #ifndef NDEBUG
     DEBUG_FOUND_BACKPROP = true;
     #endif
+
     return pre->second * corr;
 }
 
@@ -93,6 +98,8 @@ void fill(
 ) {
     static const size_t Sboxes = SIZE / 4;
 
+    assert(pin != 0);
+
     for (; n < Sboxes; n++) {
 
         // fetch input parity
@@ -106,9 +113,12 @@ void fill(
         // pick approximations
 
         for (auto const &apx: fapprox[val_in]) {
-            assert(apx.input == val_in);
             auto mask = apx.output << (n * 4);
             auto wght = pat_weight + 1;
+
+            assert(mask != 0);
+            assert(apx.input != 0);
+            assert(apx.input == val_in);
 
             if (wght > max_weight)
                 continue;
@@ -127,6 +137,9 @@ void fill(
         }
         return;
     }
+
+    assert(n == Sboxes);
+    assert(pout != 0);
 
     // recursion leaf
 
@@ -151,7 +164,11 @@ void fill(
         0
     );
 
+    #ifndef NDEBUG
+    if (!DEBUG_FOUND_BACKPROP)
+        printf("%016x\n", pout);
     assert(DEBUG_FOUND_BACKPROP);
+    #endif
 
     // add to collector
 
@@ -175,20 +192,19 @@ void collect_round(
     #pragma omp single
     {
         for (int n = 0; n < size; n++) {
-            #pragma omp task firstprivate(n)
-            {
-                fill (
-                    masks,
-                    collect,
-                    fapprox,
-                    bapprox,
-                    slice[n].first,
-                    0,  // pout
-                    4,  // max-weight
-                    0,  // pat-weight
-                    0   // n
-                );
-            }
+            auto mask = slice[n].first;
+            assert(mask != 0);
+            fill (
+                masks,
+                collect,
+                fapprox,
+                bapprox,
+                mask,
+                0,  // pout
+                4,  // max-weight
+                0,  // pat-weight
+                0   // n
+            );
         }
         #pragma omp taskwait
     }
