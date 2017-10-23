@@ -7,11 +7,14 @@
 #include <utility>
 #include <iostream>
 
+/*
+ *
+ */
 double branch_bound_fill(
-    uint64_t& result,
+    uint64_t& result,  // best round trail
     std::vector<approx_t> (&approxes) [CIPHER_SBOX_VALUES], // elp approx
     size_t rounds,     // number of rounds to search
-    double bound,      // elp, lower bound
+    double bound,      // elp, lower bound (for rounds)
     size_t round,      // current round number
     double elp,        // elp
     uint64_t pin,      // input parity
@@ -41,44 +44,42 @@ double branch_bound_fill(
             // check bound
 
             auto new_elp = elp * approx.corr;
-            if (new_elp < bound)
+            if (new_elp <= bound)
                 continue;
 
             // fill sbox approximation
 
             auto mask = approx.output << (n * CIPHER_SBOX_SIZE);
-            bound = fmax(
+            bound = branch_bound_fill(
+                result,
+                approxes,
+                rounds,
                 bound,
-                branch_bound_fill(
-                    result,
-                    approxes,
-                    rounds,
-                    bound,
-                    round,
-                    new_elp,
-                    pin,
-                    pout | mask,
-                    n + 1
-                )
+                round,
+                new_elp,
+                pin,
+                pout | mask,
+                n + 1
             );
         }
-        return 0;
+        return bound;
     }
 
     assert(n == Sboxes);
 
-    // check if at end
-
-    if (round == rounds) {
-        result = pout;
-        return elp;
-    }
-
-    std::cout << "end" << std::endl;
-
     // apply permutation
 
     pin = permute(pout);
+
+    // check if at end
+
+    if (round == rounds) {
+        assert(elp < 1);
+        assert(elp > 0);
+        assert(elp > bound);
+        result = pout;
+        return elp;
+    }
 
     // progress to next round
 
@@ -100,24 +101,56 @@ std::pair<uint64_t, double> branch_bound_search(
     size_t rounds, // number of rounds to search
     uint64_t pin   // input parity
 ) {
-    double bound = 0;
-    uint64_t result = ~0; // some value
-    for (size_t rnd = 1; rnd <= rounds; rnd++) {
+    double elp = 1;
+    uint64_t mask = pin; // some value
+
+    for (size_t rnd = 0; rnd <= rounds; rnd++) {
+
+        // extend best trail to n rounds
+
         #ifndef NDEBUG
-        std::cout << "branching for " << rnd << " rounds, with bound: " << bound << std::endl;
+        printf("%3zu : extending mask 0x%016lx (2^%f) -> ", rnd, mask, log2(elp));
         #endif
-        bound = branch_bound_fill(
-            result,
+
+        elp = branch_bound_fill(
+            mask,     // new best trail end mask
+            approxes, // approximation table
+            rnd+1,    // one additional round
+            0,        // bound = none
+            rnd,      // start at offset
+            elp,      // E(LP) of trail is bound
+            mask,     // last round mask
+            0,
+            0
+        );
+
+        #ifndef NDEBUG
+        printf("0x%016lx (2^%f)\n", mask, log2(elp));
+        #endif
+
+        // bounded search for best n-round trail
+
+        #ifndef NDEBUG
+        printf("%3zu : improving mask 0x%016lx (2^%f) -> ", rnd, mask, log2(elp));
+        #endif
+
+        elp = branch_bound_fill(
+            mask,
             approxes,
             rnd,
-            bound,
+            elp,
             0,
             1,
             pin,
             0,
             0
         );
+
+        #ifndef NDEBUG
+        printf("0x%016lx (2^%f)\n", mask, log2(elp));
+        #endif
     }
-    return std::pair<uint64_t, double>(result, bound);
+
+    return std::pair<uint64_t, double>(mask, elp);
 }
 #endif

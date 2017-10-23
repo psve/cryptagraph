@@ -15,7 +15,7 @@ int main(int argc, char *argv[]) {
     make_approximations_elp(forward_approx);
     make_approximations_elp(backward_approx);
 
-    auto res = branch_bound_search(forward_approx, 3, 0x1);
+    auto res = branch_bound_search(forward_approx, 6, 0x4000);
 
     std::cout << res.first << std::endl;
     std::cout << res.second << std::endl;
