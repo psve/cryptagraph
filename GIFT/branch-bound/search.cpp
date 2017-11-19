@@ -7,24 +7,32 @@
 #include <utility>
 #include <iostream>
 
-/*
+/* Maintains upper bounds for the remaining rounds
  *
+ * bounds[rounds + 1];
+ *
+ * bounds[0] = 1; // best 0 round trail
+ * bounds[1]    ; // best 1 round trail
+ * ...
+ *
+ * when considering n-round trail T, discard if ELP(T) * bounds[n+1] <= bound[n].
+ * // uint64_t (&masks)[Rounds],  // recursion tail
  */
-double branch_bound_fill(
-    uint64_t& result,  // best round trail
-    std::vector<approx_t> (&approxes) [CIPHER_SBOX_VALUES], // elp approx
-    size_t rounds,     // number of rounds to search
-    double bound,      // elp, lower bound (for rounds)
-    size_t round,      // current round number
-    double elp,        // elp
-    uint64_t pin,      // input parity
-    uint64_t pout,     // temp, initally 0
-    size_t n
+template<size_t Rounds, size_t Sboxes, size_t Weight>
+void branch_bound_fill(
+    std::vector<approx_t> (&approxes) [CIPHER_SBOX_VALUES],
+    double   (&bounds)[Rounds + 1], // upper bounds
+    double   elp,                   // elp for trail
+    uint64_t pin,                   // input parity
+    uint64_t pout,                  // output paritu, initally 0
+    size_t   rounds,                // rounds of current search
+    size_t   weight,                // sboxes activated
+    size_t   r,                     // current round index
+    size_t   n                      // sbox index
 ) {
-    static const size_t Sboxes = CIPHER_SIZE / CIPHER_SBOX_SIZE;
-
     assert(n <= Sboxes);
-    assert(round <= rounds);
+    assert(r <= Rounds);
+    assert(r <= rounds);
 
     static_assert(CIPHER_SBOX_SIZE == 4, "currently assumes 4-bit sbox");
 
@@ -36,33 +44,40 @@ double branch_bound_fill(
         if (val_in == 0)
             continue;
 
+        if (weight >= Weight)
+            return;
+
         // pick approximations
 
         for (auto const &approx: approxes[val_in]) {
+
             assert(approx.input == val_in);
+            assert(rounds - (r + 1) >= 0);
 
             // check bound
 
             auto new_elp = elp * approx.corr;
-            if (new_elp <= bound)
+
+            if (new_elp * bounds[rounds - (r + 1)] <= bounds[rounds])
                 continue;
 
             // fill sbox approximation
 
             auto mask = approx.output << (n * CIPHER_SBOX_SIZE);
-            bound = branch_bound_fill(
-                result,
+
+            branch_bound_fill<Rounds, Sboxes, Weight>(
                 approxes,
-                rounds,
-                bound,
-                round,
+                bounds,
                 new_elp,
                 pin,
                 pout | mask,
+                rounds,
+                weight + 1,
+                r,
                 n + 1
             );
         }
-        return bound;
+        return;
     }
 
     assert(n == Sboxes);
@@ -73,84 +88,92 @@ double branch_bound_fill(
 
     // check if at end
 
-    if (round == rounds) {
-        assert(elp < 1);
-        assert(elp > 0);
-        assert(elp > bound);
-        result = pout;
-        return elp;
+    if (r + 1 == rounds) {
+        if(elp > bounds[rounds])
+            bounds[rounds] = elp;
+        return;
     }
 
     // progress to next round
 
-    return branch_bound_fill(
-        result,
+    branch_bound_fill<Rounds, Sboxes, Weight>(
         approxes,
-        rounds,
-        bound,
-        round + 1,
+        bounds,
         elp,
         pin,
         0,
+        rounds,
+        0,
+        r + 1,
         0
     );
 }
 
-std::pair<uint64_t, double> branch_bound_search(
-    std::vector<approx_t> (&approxes) [CIPHER_SBOX_VALUES], // elp approx
-    size_t rounds, // number of rounds to search
-    uint64_t pin   // input parity
+template <size_t Rounds, size_t Sboxes, size_t Weight>
+void branch_bound_start(
+    std::vector<approx_t> (&approxes) [CIPHER_SBOX_VALUES],
+    double   (&bounds)[Rounds + 1],
+    uint64_t pin,
+    size_t rounds,
+    size_t index,
+    size_t remain
 ) {
-    double elp = 1;
-    uint64_t mask = pin; // some value
 
-    for (size_t rnd = 0; rnd <= rounds; rnd++) {
+    if (remain > 0 && index < Sboxes) {
 
-        // extend best trail to n rounds
+        size_t c = index * 4;
+        for (uint64_t v = 0; v < 16; v++) {
+            branch_bound_start<Rounds, Sboxes, Weight>(
+                approxes,
+                bounds,
+                pin | (v << c),
+                rounds,
+                index + 1,
+                v == 0 ? remain : remain - 1
+            );
+        }
 
-        #ifndef NDEBUG
-        printf("%3zu : extending mask 0x%016lx (2^%f) -> ", rnd, mask, log2(elp));
-        #endif
+    } else if (pin != 0) {
 
-        elp = branch_bound_fill(
-            mask,     // new best trail end mask
-            approxes, // approximation table
-            rnd+1,    // one additional round
-            0,        // bound = none
-            rnd,      // start at offset
-            elp,      // E(LP) of trail is bound
-            mask,     // last round mask
-            0,
-            0
-        );
+        printf("%zu %016lx\n", rounds, pin);
 
-        #ifndef NDEBUG
-        printf("0x%016lx (2^%f)\n", mask, log2(elp));
-        #endif
-
-        // bounded search for best n-round trail
-
-        #ifndef NDEBUG
-        printf("%3zu : improving mask 0x%016lx (2^%f) -> ", rnd, mask, log2(elp));
-        #endif
-
-        elp = branch_bound_fill(
-            mask,
+        branch_bound_fill<Rounds, Sboxes, Weight>(
             approxes,
-            rnd,
-            elp,
-            0,
+            bounds,
             1,
             pin,
             0,
+            rounds,
+            0,
+            0,
             0
         );
 
-        #ifndef NDEBUG
-        printf("0x%016lx (2^%f)\n", mask, log2(elp));
-        #endif
+        std::cout << "2^" << log2(bounds[rounds]) << std::endl;
+
+    }
+}
+
+template <size_t Rounds>
+std::pair<uint64_t, double> branch_bound_search(
+    std::vector<approx_t> (&approxes) [CIPHER_SBOX_VALUES]
+) {
+    double bounds[Rounds + 1] = {0};
+    bounds[0] = 1;
+
+    static const size_t Weight = 5;
+    static const size_t Sboxes = CIPHER_SIZE / CIPHER_SBOX_SIZE;
+
+    for (size_t rounds = 1; rounds <= Rounds; rounds++) {
+        branch_bound_start<Rounds, Sboxes, Weight>(
+            approxes,
+            bounds,
+            0,
+            rounds,
+            0,
+            2
+        );
     }
 
-    return std::pair<uint64_t, double>(mask, elp);
 }
 #endif
