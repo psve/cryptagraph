@@ -165,6 +165,7 @@ std::pair<uint64_t, double> branch_bound_search(
     static const size_t Sboxes = CIPHER_SIZE / CIPHER_SBOX_SIZE;
 
     for (size_t rounds = 1; rounds <= Rounds; rounds++) {
+        bounds[rounds] = bounds[rounds - 1] * 0.00390625; // 2^-8
         branch_bound_start<Rounds, Sboxes, Weight>(
             approxes,
             bounds,
@@ -174,6 +175,5 @@ std::pair<uint64_t, double> branch_bound_search(
             2
         );
     }
-
 }
 #endif

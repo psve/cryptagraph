@@ -15,7 +15,7 @@ int main(int argc, char *argv[]) {
     make_approximations_elp(forward_approx);
     make_approximations_elp(backward_approx);
 
-    branch_bound_search<6>(forward_approx);
+    branch_bound_search<22>(forward_approx);
 
     return 0;
 }
