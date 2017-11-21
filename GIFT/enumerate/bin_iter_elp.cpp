@@ -5,6 +5,30 @@
 
 #define ARG_HW (1)
 
+void init_pool(
+    std::unordered_map<uint64_t, double> &map1,
+    uint64_t pin,
+    size_t index,
+    size_t hw
+) {
+
+    if (hw == 0 || index >= 16) {
+        map1[pin] = 1.0;
+        return;
+    }
+
+    size_t sht = index * SIZE_SBOX;
+
+    for (uint64_t v = 0; v < SBOX_VALUES; v++) {
+        init_pool(
+            map1,
+            pin | (v << sht),
+            index + 1,
+            v == 0 ? hw : hw - 1
+        );
+    }
+}
+
 void run(
     std::vector<approx_t> (&approximations) [SBOX_VALUES],
     uint64_t alpha,
@@ -17,17 +41,23 @@ void run(
     auto &pool_cur = map1;
     auto &pool_new = map2;
 
-    pool_cur[alpha] = 1.0;
+    printf("create initial pool\n");
 
-    printf("%016lx\n", alpha);
+    init_pool(pool_cur, 0, 0, hw);
+
+    printf("running\n");
 
     for (size_t round = 0; round < 22; round++) {
         if (pool_cur.size() == 0)
             break;
 
         // fill new pool
+        size_t pcs = 0;
+
         assert(pool_new.size() == 0);
         for (auto const &elem: pool_cur) {
+            if ((++pcs & 0xffff) == 0)
+                printf("%zu / %zu\n", pcs, pool_cur.size());
             fill(
                 pool_new,
                 approximations,
@@ -38,6 +68,7 @@ void run(
                 0,
                 0
             );
+            pcs++;
         }
 
         // swap

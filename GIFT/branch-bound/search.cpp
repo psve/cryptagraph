@@ -22,6 +22,8 @@ template<size_t Rounds, size_t Sboxes, size_t Weight>
 void branch_bound_fill(
     std::vector<approx_t> (&approxes) [CIPHER_SBOX_VALUES],
     double   (&bounds)[Rounds + 1], // upper bounds
+    uint64_t (&trace)[Rounds + 1],  // resulting trail (trace of execution)
+    uint64_t (&trail)[Rounds + 1],  // resulting trail (trace of execution)
     double   elp,                   // elp for trail
     uint64_t pin,                   // input parity
     uint64_t pout,                  // output paritu, initally 0
@@ -68,6 +70,8 @@ void branch_bound_fill(
             branch_bound_fill<Rounds, Sboxes, Weight>(
                 approxes,
                 bounds,
+                trace,
+                trail,
                 new_elp,
                 pin,
                 pout | mask,
@@ -88,9 +92,16 @@ void branch_bound_fill(
 
     // check if at end
 
+    assert(r + 1 <= Rounds);
+
+    trace[r + 1] = pin;
+
     if (r + 1 == rounds) {
-        if(elp > bounds[rounds])
+        if(elp > bounds[rounds]) {
             bounds[rounds] = elp;
+            for (size_t i = 0; i <= rounds; i++)
+                trail[i] = trace[i];
+        }
         return;
     }
 
@@ -99,6 +110,8 @@ void branch_bound_fill(
     branch_bound_fill<Rounds, Sboxes, Weight>(
         approxes,
         bounds,
+        trace,
+        trail,
         elp,
         pin,
         0,
@@ -113,10 +126,11 @@ template <size_t Rounds, size_t Sboxes, size_t Weight>
 void branch_bound_start(
     std::vector<approx_t> (&approxes) [CIPHER_SBOX_VALUES],
     double   (&bounds)[Rounds + 1],
+    uint64_t (&trail)[Rounds + 1],
     uint64_t pin,
-    size_t rounds,
-    size_t index,
-    size_t remain
+    size_t   rounds,
+    size_t   index,
+    size_t   remain
 ) {
 
     if (remain > 0 && index < Sboxes) {
@@ -126,6 +140,7 @@ void branch_bound_start(
             branch_bound_start<Rounds, Sboxes, Weight>(
                 approxes,
                 bounds,
+                trail,
                 pin | (v << c),
                 rounds,
                 index + 1,
@@ -135,11 +150,17 @@ void branch_bound_start(
 
     } else if (pin != 0) {
 
-        printf("%zu %016lx\n", rounds, pin);
+        // printf("%zu %016lx\n", rounds, pin);
+
+        uint64_t trace[Rounds + 1];
+
+        trace[0] = pin;
 
         branch_bound_fill<Rounds, Sboxes, Weight>(
             approxes,
             bounds,
+            trace,
+            trail,
             1,
             pin,
             0,
@@ -149,30 +170,36 @@ void branch_bound_start(
             0
         );
 
-        std::cout << "2^" << log2(bounds[rounds]) << std::endl;
+        // std::cout << "2^" << log2(bounds[rounds]) << std::endl;
 
     }
 }
 
 template <size_t Rounds>
 std::pair<uint64_t, double> branch_bound_search(
-    std::vector<approx_t> (&approxes) [CIPHER_SBOX_VALUES]
+    std::vector<approx_t> (&approxes) [CIPHER_SBOX_VALUES],
+    double   (&bounds)[Rounds + 1],
+    uint64_t (&trail)[Rounds + 1]
 ) {
-    double bounds[Rounds + 1] = {0};
+
+    for (size_t i = 0; i <= Rounds; i++)
+        bounds[i] = 0;
     bounds[0] = 1;
 
-    static const size_t Weight = 5;
+    static const size_t Weight = 4;
     static const size_t Sboxes = CIPHER_SIZE / CIPHER_SBOX_SIZE;
 
     for (size_t rounds = 1; rounds <= Rounds; rounds++) {
+        printf("round: %zu\n", rounds);
         bounds[rounds] = bounds[rounds - 1] * 0.00390625; // 2^-8
         branch_bound_start<Rounds, Sboxes, Weight>(
             approxes,
             bounds,
+            trail,
             0,
             rounds,
             0,
-            2
+            Weight
         );
     }
 }
