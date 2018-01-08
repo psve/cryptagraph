@@ -25,6 +25,9 @@ pub struct CliArgs {
     #[structopt(short = "a", long = "approximations", help = "Number of single round approximations to generate.")]
     pub approximation_limit: usize,
 
-    #[structopt(short = "s", long = "search", help = "Number of input masks to search in search mode.")]
+    #[structopt(short = "s", long = "search", help = "Number of approximations to search in search mode.")]
     pub search_limit: Option<usize>,
+
+    #[structopt(short = "f", long = "file", help = "File to dump mask set to in single mode.")]
+    pub file_path: Option<String>,
 }

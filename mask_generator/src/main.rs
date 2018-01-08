@@ -15,6 +15,7 @@ use options::CliArgs;
 use structopt::StructOpt;
 use std::collections::HashSet;
 use std::io::{self, Write};
+use std::fs::OpenOptions;
 
 /* Performs the hull set search for multiple input masks. The masks are searched in descending
  * order of their possible correlations over one round. 
@@ -23,7 +24,7 @@ use std::io::{self, Write};
  * rounds                   The number of rounds.
  * pattern_limit            The maximum number of single round S-box patterns to generate.
  * approximation_limit      The maximum number of single round approximations to generate.
- * search_limit             The maximum number of input masks to search.
+ * search_limit             The maximum number of approximations to search.
  */
 fn run_search<T: Cipher + Clone>
     (cipher: T, rounds: usize, pattern_limit: usize, 
@@ -46,16 +47,10 @@ fn run_search<T: Cipher + Clone>
     let mut percentage = 0;
 
     for approximation in sorted_approximations {
-        let alpha = approximation.alpha;
-
-        if alpha_set.contains(&alpha) {
-            continue
-        }
-        
         progress += 1;
 
+        // Lazy progress bar. Make nicer at some point
         if progress > (search_limit / 100 * percentage) {
-            // println!("{}%, {} found", percentage, results.len());
             print!("=");
             io::stdout().flush().ok().expect("Could not flush stdout");
             percentage += 1;
@@ -65,6 +60,12 @@ fn run_search<T: Cipher + Clone>
             break
         }
 
+        let alpha = approximation.alpha;
+
+        if alpha_set.contains(&alpha) {
+            continue
+        }
+        
         alpha_set.insert(alpha);
 
         let edge_map = find_paths::find_paths(&single_round_map, rounds, alpha);
@@ -97,9 +98,12 @@ fn run_search<T: Cipher + Clone>
  * alpha                    The input mask to the first round.
  * pattern_limit            The maximum number of single round S-box patterns to generate.
  * approximation_limit      The maximum number of single round approximations to generate.
+ * file_name                If supplied, dumps the union of all hull sets to disk. 
  */
 fn run_single<T: Cipher + Clone>
-    (cipher: T, rounds: usize, alpha: u64, pattern_limit: usize, approximation_limit: usize) {
+    (cipher: T, rounds: usize, alpha: u64, 
+     pattern_limit: usize, approximation_limit: usize,
+     file_name: Option<String>) {
     println!("Searching for hulls starting from a single input mask.");
     println!("\tCipher: {}.", cipher.name());
     println!("\tRounds: {}.", rounds);
@@ -110,8 +114,10 @@ fn run_single<T: Cipher + Clone>
     let single_round_map = 
         find_paths::generate_single_round_map(&cipher, pattern_limit, approximation_limit);
     let edge_map = find_paths::find_paths(&single_round_map, rounds, alpha);
+    
     let mut min_correlation = 1.0_f64;
     let mut max_correlation = 0.0_f64;
+    let mut total_set = HashSet::new();
 
     if edge_map.map.len() > 0 {
         println!("Found {} approximations:\n", edge_map.map.len());
@@ -126,8 +132,12 @@ fn run_single<T: Cipher + Clone>
             let mut sorted_set: Vec<u64> = edge.masks.iter().map(|x| *x).collect();
             sorted_set.sort();
             
-            for mask in &sorted_set {
+            for &mask in &sorted_set {
                 print!("{:016x} ", mask);
+
+                if file_name.is_some() {
+                    total_set.insert(mask);
+                }
             }
             println!("}} [{}, {}]\n", edge.num_paths, edge.value.log2());
         }
@@ -135,9 +145,28 @@ fn run_single<T: Cipher + Clone>
         println!("Smallest squared correlation: {}", min_correlation.log2());
         println!("Largest squared correlation:  {}", max_correlation.log2());
     }
+
+    // Dump union of all hull sets if path is specified
+    match file_name {
+        Some(path) => {
+            let mut file = OpenOptions::new()
+                                       .write(true)
+                                       .append(false)
+                                       .create(true)
+                                       .open(path)
+                                       .expect("Could not open file.");
+            
+            for mask in &total_set {
+                write!(file, "{:016x}\n", mask).expect("Could not write to file.");
+            }
+        },
+        None => { }
+    }
 }
 
 fn main() {
+
+
     let options = CliArgs::from_args();
 
     match options.mode.as_ref() {
@@ -146,15 +175,26 @@ fn main() {
             let alpha = options.alpha.expect("Alpha must be specified in single mode!");
             let pattern_limit = options.pattern_limit;
             let approximation_limit = options.approximation_limit;
+            let file_path = options.file_path;
 
             match options.cipher.as_ref() {
                 "present" => {
                     let cipher = Present::new();
-                    run_single(cipher, rounds, alpha, pattern_limit, approximation_limit);
+                    run_single(cipher, rounds, alpha, 
+                               pattern_limit, approximation_limit,
+                               file_path);
                 },
                 "gift"    => {
                     let cipher = Gift::new();
-                    run_single(cipher, rounds, alpha, pattern_limit, approximation_limit);
+                    run_single(cipher, rounds, alpha, 
+                               pattern_limit, approximation_limit,
+                               file_path);
+                },
+                "twine"    => {
+                    let cipher = Twine::new();
+                    run_single(cipher, rounds, alpha, 
+                               pattern_limit, approximation_limit,
+                               file_path);
                 },
                 _ => {
                     println!("Cipher must be one of: present, gift");
@@ -176,6 +216,10 @@ fn main() {
                     let cipher = Gift::new();
                     run_search(cipher, rounds, pattern_limit, approximation_limit, search_limit);
                 },
+                "twine"    => {
+                    let cipher = Twine::new();
+                    run_search(cipher, rounds, pattern_limit, approximation_limit, search_limit);
+                },
                 _ => {
                     println!("Cipher must be one of: present, gift");
                 }
@@ -186,3 +230,4 @@ fn main() {
         },
     }
 }
+    

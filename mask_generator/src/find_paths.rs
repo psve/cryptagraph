@@ -2,6 +2,8 @@ use approximation::{Approximation};
 use single_round::{SortedApproximations};
 use cipher::Cipher;
 use std::collections::{HashMap,HashSet};
+use std::cmp;
+use std::io::{self, Write};
 use time;
 
 /* A structure representing an edge in the compressed linear hull graph. 
@@ -185,10 +187,22 @@ pub fn generate_single_round_map<T: Cipher + Clone>
     // let mut single_round_map = SingleRoundMap::with_capacity(approximation_limit);
     let mut single_round_map = SingleRoundMap::new();
     let mut last = Approximation::new(0, 0, None);
-    
+    let search_limit = cmp::min(approximation_limit, sorted_approximations.len());
+    let mut progress = 0;
+    let mut percentage = 0;
+
     for approximation in sorted_approximations {
         single_round_map.insert(approximation.clone());
         last = approximation;
+
+        progress += 1;
+
+        // Lazy progress bar. Make nicer at some point
+        if progress > (search_limit / 100 * percentage) {
+            print!("=");
+            io::stdout().flush().ok().expect("Could not flush stdout");
+            percentage += 1;
+        }
 
         if single_round_map.len() >= approximation_limit {
             break;
@@ -197,10 +211,9 @@ pub fn generate_single_round_map<T: Cipher + Clone>
     
     stop = time::precise_time_s();
     
-    println!("Single round approximations generated. [{} s]", stop-start);
+    println!("\nSingle round approximations generated. [{} s]", stop-start);
     println!("Last approximation is: {:?} = {}\n", last, last.value.log2());
 
-    // single_round_map.shrink_to_fit();
     single_round_map
 }
 
