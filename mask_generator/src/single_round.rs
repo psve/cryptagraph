@@ -228,7 +228,7 @@ impl<T: Cipher + Clone> SortedApproximations<T> {
         let mut corr_values = vec![];
 
         for (key, _) in &lat_map.map {
-            corr_values.push(*key)
+            corr_values.push(*key);
         }
 
         // We need the values in descending order
@@ -336,12 +336,6 @@ impl<T: Cipher + Clone> Iterator for SortedApproximations<T> {
             // Counter bias of the current S-box
             let value = pattern[i];
 
-            // Skip the zero approximations
-            // Assumes that the sbox doesn't have non-trivial approximations with correlation 1 
-            if value == 1 << (self.cipher.sbox().size - 1) {
-                continue
-            }
-
             // Get the current S-box approximation corresponding to the bias
             // This unwrap should never fail
             let sbox_app = &(*self.lat_map.get(&value).unwrap())[app_index];
@@ -360,12 +354,6 @@ impl<T: Cipher + Clone> Iterator for SortedApproximations<T> {
 
         while i < self.current_app_index.len() {
             let value = pattern[i];
-            
-            // Skip zero approximation
-            if value == 1 << (self.cipher.sbox().size - 1) {
-                i += 1;
-                continue
-            }
 
             if self.current_app_index[i]+1 < self.lat_map.len_of(value) {
                 self.current_app_index[i] += 1;

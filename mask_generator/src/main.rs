@@ -165,8 +165,6 @@ fn run_single<T: Cipher + Clone>
 }
 
 fn main() {
-
-
     let options = CliArgs::from_args();
 
     match options.mode.as_ref() {

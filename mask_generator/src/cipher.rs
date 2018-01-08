@@ -260,7 +260,7 @@ impl Cipher for Twine {
         self.size
     }
 
-    /* Returns the number of S-boxes in TWINE. This is always 16. */
+    /* Returns the number of S-boxes in TWINE. This is always 8. */
     fn num_sboxes(&self) -> usize {
         self.size / self.sbox.size
     }
