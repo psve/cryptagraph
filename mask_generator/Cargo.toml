@@ -1,0 +1,9 @@
+[package]
+name = "mask_generator"
+version = "0.1.0"
+authors = ["psve <psve@dtu.dk>"]
+
+[dependencies]
+time = "*"
+structopt = "*"
+structopt-derive = "*"
