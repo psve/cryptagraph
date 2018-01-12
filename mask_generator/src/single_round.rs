@@ -5,12 +5,14 @@ use approximation::{Approximation};
 
 /* A structure that represents the LAT of an S-box as map from correlations to approximations.
  *
- * map  The mapping from the counter bias (abs(#pairs that hold - 2^(n-1))) to
-        a vector of approximations that have that bias. 
+ * map          The mapping from the counter bias (abs(#pairs that hold - 2^(n-1))) to
+                a vector of approximations that have that bias. 
+ * alpha_map    Same as map, but where only the input of the approximations are kept. 
  */
 #[derive(Clone)]
-struct LatMap {
+pub struct LatMap {
     map: HashMap<i16, Vec<Approximation>>,
+    alpha_map: HashMap<i16, Vec<Approximation>>,
 }
 
 impl LatMap {
@@ -20,22 +22,32 @@ impl LatMap {
      */
     fn new(sbox: &Sbox) -> LatMap {
         let mut map = HashMap::new();
-        let lat = sbox.lat();
+        let mut alpha_map = HashMap::new();
+        
         // The number of pairs the hold for a balanced approximation (i.e. 2^(n-1))
         let balance = (1 << (sbox.size - 1)) as i16;
 
-        for (alpha, row) in lat.iter().enumerate() {
+        for (alpha, row) in sbox.lat.iter().enumerate() {
             for (beta, element) in row.iter().enumerate() {
                 // If the approximation is not balanced, we add it to the map
                 if *element as i16 != balance {
                     let abs_counter_bias = ((*element as i16) - balance).abs();
+                    
                     let entry = map.entry(abs_counter_bias).or_insert(vec![]);
-                    entry.push(Approximation::new(alpha as u64, beta as u64, None))
+                    entry.push(Approximation::new(alpha as u64, beta as u64, None));
+
+                    let entry = alpha_map.entry(abs_counter_bias).or_insert(vec![]);
+                    entry.push(Approximation::new(alpha as u64, 0, None));
                 }
             }
         }
 
-        LatMap{map: map}
+        for alphas in alpha_map.values_mut() {
+            alphas.sort();
+            alphas.dedup();
+        }
+
+        LatMap{map: map, alpha_map: alpha_map}
     }
 
     /* Getter to avoid unecessary syntax. Simply reimplements HashMap::get */
@@ -43,12 +55,25 @@ impl LatMap {
         self.map.get(k)
     }
 
+    /* Getter for the alpha map */
+    fn get_alpha(&self, k: &i16) -> Option<&Vec<Approximation>> {
+        self.alpha_map.get(k)
+    }
+
     /* Gets the number of approximations that has a certain counter bias.
      * 
      * value    The target counter bias.
      */
-    fn len_of(&self, value: i16) -> usize {
+    pub fn len_of(&self, value: i16) -> usize {
         self.get(&value).unwrap().len()
+    }
+
+    /* Gets the number of input masks that has a certain counter bias.
+     * 
+     * value    The target counter bias.
+     */
+    fn len_of_alpha(&self, value: i16) -> usize {
+        self.get_alpha(&value).unwrap().len()
     }
 }
 
@@ -169,6 +194,7 @@ impl Eq for InternalSboxPattern {}
  * Pattern      A vector describing the counter bias of each S-box.
  * Value        Squared correlation of the pattern.
  */
+#[derive(Clone)]
 pub struct SboxPattern {
     pub pattern: Vec<i16>,
     pub value: f64
@@ -202,14 +228,18 @@ impl SboxPattern {
  * current_approximation    The last approximation generated.
  * current_pattern          The index of the current pattern considered in sorted_sbox_patterns.
  * current_app_index        Describes the indexing of lat_map for the current approximation.
+ * alpha                    Wether the iterator only generates the input masks.
  */
-pub struct SortedApproximations<T: Cipher> {
+#[derive(Clone)]
+pub struct SortedApproximations<T: Cipher + Clone> {
     pub cipher: T,
-    lat_map: LatMap,
+    pub lat_map: LatMap,
     pub sorted_sbox_patterns: Vec<SboxPattern>,
     pub current_approximation: Approximation,
-    current_pattern: usize,
-    current_app_index: Vec<usize>
+    pub current_pattern: usize,
+    pub range_map: HashMap<u64, (usize, usize)>,
+    current_app_index: Vec<usize>,
+    alpha: bool,
 }
 
 impl<T: Cipher + Clone> SortedApproximations<T> {
@@ -222,9 +252,10 @@ impl<T: Cipher + Clone> SortedApproximations<T> {
      * cipher           The cipher whose round function we are considering. 
      * pattern_limit    The number of patterns we want to generate. 
      */
-    pub fn new(cipher: T, pattern_limit: usize) -> SortedApproximations<T> {
+    pub fn new(cipher: T, pattern_limit: usize, alpha: bool) -> SortedApproximations<T> {
         // Generate LAT map and get S-box counter bias values
-        let lat_map: LatMap = LatMap::new(cipher.sbox());
+        let lat_map = LatMap::new(cipher.sbox());
+
         let mut corr_values = vec![];
 
         for (key, _) in &lat_map.map {
@@ -249,19 +280,29 @@ impl<T: Cipher + Clone> SortedApproximations<T> {
         let mut heap = BinaryHeap::new();
         heap.push(current_pattern);
 
+        // Keep track of current correlation and location in heap
+        let mut range_map: HashMap<u64, (usize, usize)> = HashMap::new();
+        let mut current_corr = 1.0f64.to_bits();
+        let mut current_idx  = 0;
+
         // While we havn't generated enough patterns
         while sorted_sbox_patterns.len() < pattern_limit {
             // We ran out of patterns, so we return what we have so far
             if heap.is_empty() {
-                let sorted_sbox_patterns = sorted_sbox_patterns.iter()
-                                                       .map(|x| SboxPattern::new(x))
-                                                       .collect();
+                let sorted_sbox_patterns: Vec<SboxPattern> 
+                    = sorted_sbox_patterns.iter()
+                                          .map(|x| SboxPattern::new(x))
+                                          .collect();
+                range_map.insert(current_corr, (current_idx, sorted_sbox_patterns.len()));
+
                 return SortedApproximations{cipher: cipher.clone(),
                                             lat_map: lat_map.clone(),
                                             sorted_sbox_patterns: sorted_sbox_patterns,
                                             current_approximation: Approximation::new(0, 0, None),
                                             current_pattern: 0,
-                                            current_app_index: vec![0; cipher.num_sboxes()]}
+                                            range_map: range_map,
+                                            current_app_index: vec![0; cipher.num_sboxes()],
+                                            alpha: alpha}
             }
 
             // Extract the current best pattern
@@ -286,36 +327,61 @@ impl<T: Cipher + Clone> SortedApproximations<T> {
             
             // Add current pattern if it was complete
             if current_pattern.is_complete() {
+                let new_corr = current_pattern.value.to_bits();
+
+                // Found a new class of patterns, update range map
+                if new_corr != current_corr {
+                    range_map.insert(current_corr, (current_idx, sorted_sbox_patterns.len()));
+
+                    current_corr = new_corr;
+                    current_idx = sorted_sbox_patterns.len();
+                }
+
                 sorted_sbox_patterns.push(current_pattern);
             }
         }
 
-        let sorted_sbox_patterns = sorted_sbox_patterns.iter()
-                                                       .map(|x| SboxPattern::new(x))
-                                                       .collect();
+        let sorted_sbox_patterns: Vec<SboxPattern> 
+            = sorted_sbox_patterns.iter()
+                                  .map(|x| SboxPattern::new(x))
+                                  .collect();
+        range_map.insert(current_corr, (current_idx, sorted_sbox_patterns.len()));
+
         return SortedApproximations{cipher: cipher.clone(),
                                     lat_map: lat_map.clone(),
                                     sorted_sbox_patterns: sorted_sbox_patterns,
                                     current_approximation: Approximation::new(0, 0, None),
                                     current_pattern: 0,
-                                    current_app_index: vec![0;  cipher.num_sboxes()]}
+                                    range_map: range_map,
+                                    current_app_index: vec![0;  cipher.num_sboxes()],
+                                    alpha: alpha}
     }
 
+    /* Returns the number of approximations which can be generated from the patterns. */
     pub fn len(&self) -> usize {
         let mut len = 0;
 
         for pattern in &self.sorted_sbox_patterns {
-            let mut combinations = 1;
-
-            for &value in &pattern.pattern {
-                combinations *= self.lat_map.len_of(value);
-            }
+            let combinations = if self.alpha {
+                pattern.pattern.iter().fold(1, |acc, &x| acc * self.lat_map.len_of_alpha(x))
+            } else {
+                pattern.pattern.iter().fold(1, |acc, &x| acc * self.lat_map.len_of(x))
+            };
 
             len += combinations;
         }
 
         len
     }
+
+    /* Returns the range of patterns that match the correlation value.
+     *
+     * correlation      Value to search for.
+     */
+    /*pub fn get_range(&self, correlation: f64) -> Option<&(usize, usize)> {
+        let key = correlation.to_bits();
+        self.range_map.get(&key)
+    }*/
 }
 
 impl<T: Cipher + Clone> Iterator for SortedApproximations<T> {
@@ -331,37 +397,39 @@ impl<T: Cipher + Clone> Iterator for SortedApproximations<T> {
         // Generate next approximation from the current S-box pattern and the LAT map
         let mut new_approximation = Approximation::new(0, 0, Some(self.sorted_sbox_patterns[self.current_pattern].value));
         let pattern = &self.sorted_sbox_patterns[self.current_pattern].pattern;
+        let mut new_pattern = true;
 
-        for (i, &app_index) in self.current_app_index.iter().enumerate() {
+        for i in 0..self.current_app_index.len() {
+        // for (i, &app_index) in self.current_app_index.iter().enumerate() {
             // Counter bias of the current S-box
             let value = pattern[i];
 
             // Get the current S-box approximation corresponding to the bias
             // This unwrap should never fail
-            let sbox_app = &(*self.lat_map.get(&value).unwrap())[app_index];
+            let sbox_app = if self.alpha {
+                &(*self.lat_map.get_alpha(&value).unwrap())[self.current_app_index[i]]
+            } else {
+                &(*self.lat_map.get(&value).unwrap())[self.current_app_index[i]]
+            };
 
             // Stitch together the full round approximation
             new_approximation.alpha ^= sbox_app.alpha << (self.cipher.sbox().size * i);
             new_approximation.beta ^= sbox_app.beta << (self.cipher.sbox().size * i);
-        }
 
-        new_approximation.beta = self.cipher.linear_layer(new_approximation.beta);
-        self.current_approximation = new_approximation;
+            // Advance approximation index
+            if new_pattern {
+                let max_len = if self.alpha {
+                    self.lat_map.len_of_alpha(value)
+                } else {
+                    self.lat_map.len_of(value)
+                };
 
-        // Advance approximation index
-        let mut new_pattern = true;
-        let mut i = 0;
-
-        while i < self.current_app_index.len() {
-            let value = pattern[i];
-
-            if self.current_app_index[i]+1 < self.lat_map.len_of(value) {
-                self.current_app_index[i] += 1;
-                new_pattern = false;
-                break;
-            } else {
-                self.current_app_index[i] = 0;
-                i += 1;
+                if self.current_app_index[i]+1 < max_len {
+                    self.current_app_index[i] += 1;
+                    new_pattern = false;
+                } else {
+                    self.current_app_index[i] = 0;
+                }
             }
         }
 
@@ -370,6 +438,9 @@ impl<T: Cipher + Clone> Iterator for SortedApproximations<T> {
             self.current_pattern += 1;
             self.current_app_index = vec![0; self.current_app_index.len()];
         }
+
+        new_approximation.beta = self.cipher.linear_layer(new_approximation.beta);
+        self.current_approximation = new_approximation;
 
         Some(self.current_approximation.clone())
     }

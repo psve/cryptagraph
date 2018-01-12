@@ -7,3 +7,4 @@ authors = ["psve <psve@dtu.dk>"]
 time = "*"
 structopt = "*"
 structopt-derive = "*"
+bloom = "*"

@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -30,6 +31,22 @@ impl Approximation {
             }
         }
     }
+}
+
+impl Ord for Approximation {
+    fn cmp(&self, other: &Approximation) -> Ordering {
+        if self.alpha == other.alpha {
+            self.beta.cmp(&other.beta)
+        } else {
+            self.alpha.cmp(&other.alpha)
+        }
+    }
+}
+
+impl PartialOrd for Approximation {
+    fn partial_cmp(&self, other: &Approximation) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }   
 }
 
 impl PartialEq for Approximation {
