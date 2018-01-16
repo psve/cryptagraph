@@ -1,11 +1,11 @@
 use approximation::{Approximation};
-use single_round::{SortedApproximations, SboxPattern};
+use single_round::{SortedApproximations};
 use cipher::Cipher;
 use std::collections::{HashMap,HashSet};
 use std::cmp;
 use std::io::{self, Write};
 use time;
-use bloom::{ASMS, BloomFilter};
+use bloom_filter::{BloomBuilder, Bloom};
 
 /* A structure representing an edge in the compressed linear hull graph. 
  * 
@@ -151,7 +151,7 @@ impl EdgeMap {
  * cipher           The cipher of interest.
  * pattern_limit    The maximum number of patterns to generate.
  */
-fn create_alpha_filter<T: Cipher + Clone>(cipher: &T, pattern_limit: usize) -> BloomFilter {
+fn create_alpha_filter<T: Cipher + Clone>(cipher: &T, pattern_limit: usize) -> Bloom<u64> {
     let mut start = time::precise_time_s();
 
     // Generate alpha bloom filter
@@ -163,12 +163,12 @@ fn create_alpha_filter<T: Cipher + Clone>(cipher: &T, pattern_limit: usize) -> B
     println!("There are {} possible alpha values.\n", sorted_alphas.len());
 
     start = time::precise_time_s();
-    let mut alpha_filter = BloomFilter::with_rate(0.01, num_alphas as u32);
+    let mut alpha_filter = BloomBuilder::new(num_alphas as u64).with_fpr(0.01).finish().unwrap();
     let mut progress = 0;
     let mut percentage = 0;
 
     for approximation in sorted_alphas {
-        alpha_filter.insert(&approximation.alpha);
+        alpha_filter.insert(approximation.alpha);
 
         // Lazy progress bar. Make nicer at some point
         if progress > (num_alphas / 100 * percentage) {
@@ -182,7 +182,6 @@ fn create_alpha_filter<T: Cipher + Clone>(cipher: &T, pattern_limit: usize) -> B
     
     stop = time::precise_time_s();
     println!("\nAlpha filter generated. [{} s]", stop-start);
-    println!("Bits in alpha filter: {:?}", alpha_filter.num_bits());
 
     alpha_filter
 }
@@ -218,7 +217,7 @@ pub fn generate_single_round_map<T: Cipher + Clone>
     let mut percentage = 0;
 
     for approximation in sorted_approximations {
-        if alpha_filter.contains(&approximation.beta) {
+        if alpha_filter.lookup(approximation.beta) {
             single_round_map.insert(approximation.clone());
             last = approximation;
         }

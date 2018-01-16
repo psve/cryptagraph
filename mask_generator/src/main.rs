@@ -1,7 +1,7 @@
 extern crate time;
 extern crate structopt;
 #[macro_use] extern crate structopt_derive;
-extern crate bloom;
+extern crate bloom_filter;
 
 mod cipher;
 mod utility;
