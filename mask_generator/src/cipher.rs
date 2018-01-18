@@ -541,3 +541,165 @@ impl Cipher for Midori {
         String::from("Midori")
     }
 }
+
+
+
+
+
+/*****************************************************************
+                            LED
+******************************************************************/
+
+/* A structure representing the LED cipher.
+ *
+ * size         Size of the cipher in bits. This is fixed to 64.
+ * sbox         The LED S-box.
+ */
+#[derive(Clone)]
+pub struct Led {
+    size: usize,
+    sbox: Sbox,
+    shift_rows_table: [usize; 16]
+}
+
+impl Led {
+    /* Generates a new instance of the LED cipher */
+    pub fn new() -> Led {
+        let table = vec![0xc, 0x5, 0x6, 0xb, 0x9, 0x0, 0xa, 0xd, 0x3, 0xe, 0xf, 0x8, 0x4, 0x7, 0x1, 0x2];
+        let shift_rows_table = [0, 1, 2, 3, 7, 4, 5, 6, 10, 11, 8, 9, 13, 14, 15, 12];
+        Led{size: 64, sbox: Sbox::new(4, table), shift_rows_table: shift_rows_table}
+    }
+}
+
+fn led_times2(x: u64) -> u64 {
+    ((x & 0x7777) << 1) ^ ((x & 0x8888) >> 3) ^ ((x & 0x8888) >> 2)
+}
+
+impl Cipher for Led {
+    /* Returns the size of the input to LED. This is always 64 bits. */
+    fn size(&self) -> usize {
+        self.size
+    }
+
+    /* Returns the number of S-boxes in LED. This is always 16. */
+    fn num_sboxes(&self) -> usize {
+        self.size / self.sbox.size
+    }
+
+    /* Returns the LED S-box */
+    fn sbox(&self) -> &Sbox {
+        &self.sbox
+    }
+
+    /* Applies the ShuffleCell and MixColumn steps of LED to the input.
+     *
+     * input    Input to be transformed.
+     */
+    fn linear_layer(&self, input: u64) -> u64{
+        let mut x = 0;
+
+        // Apply ShiftRows
+        for i in 0..16 {
+            x ^= ((input >> (i*4)) & 0xf) << (self.shift_rows_table[i]*4);
+        }
+
+        // Apply MixColumnsSerial
+        let mut y = 0;
+
+        for _ in 0..4 {
+            y = x >> 16;
+            y ^= led_times2(led_times2(x & 0xffff)) << 48;
+            y ^= (x & 0xffff0000) << 32;
+            y ^= led_times2((x & 0xffff00000000) >> 32) << 48;
+            y ^= led_times2((x & 0xffff000000000000) >> 48) << 48;
+            x = y;
+        }
+
+        x
+    }
+
+    /* Returns the string "LED". */
+    fn name(&self) -> String {
+        String::from("LED")
+    }
+}
+
+
+/*****************************************************************
+                            RECTANGLE
+******************************************************************/
+
+/* A structure representing the RECTANGLE cipher.
+ *
+ * size         Size of the cipher in bits. This is fixed to 64.
+ * sbox         The RECTANGLE S-box.
+ * permutation  The RECTANGLE bit permutation.
+ */
+#[derive(Clone)]
+pub struct Rectangle {
+    size: usize,
+    sbox: Sbox,
+    permutation: [u64; 64]
+}
+
+impl Rectangle {
+    /* Generates a new instance of the RECTANGLE cipher */
+    pub fn new() -> Rectangle {
+        let table = vec![0x6, 0x5, 0xc, 0xa, 0x1, 0xe, 0x7, 0x9, 0xb, 0x0, 0x3, 0xd, 0x8, 0xf, 0x4, 0x2];
+        
+        let permutation = [ 0,  5, 50, 55,
+                            4,  9, 54, 59,
+                            8, 13, 58, 63,
+                           12, 17, 62,  3,
+                           16, 21,  2,  7,
+                           20, 25,  6, 11,
+                           24, 29, 10, 15,
+                           28, 33, 14, 19,
+                           32, 37, 18, 23,
+                           36, 41, 22, 27,
+                           40, 45, 26, 31,
+                           44, 49, 30, 35,
+                           48, 53, 34, 39,
+                           52, 57, 38, 43,
+                           56, 61, 42, 47,
+                           60,  1, 46, 51];
+
+        Rectangle{size: 64, sbox: Sbox::new(4, table), permutation: permutation}
+    }
+}
+
+impl Cipher for Rectangle {
+    /* Returns the size of the input to RECTANGLE. This is always 64 bits. */
+    fn size(&self) -> usize {
+        self.size
+    }
+
+    /* Returns the number of S-boxes in RECTANGLE. This is always 16. */
+    fn num_sboxes(&self) -> usize {
+        self.size / self.sbox.size
+    }
+
+    /* Returns the RECTANGLE S-box */
+    fn sbox(&self) -> &Sbox {
+        &self.sbox
+    }
+
+    /* Applies the bit permutation of RECTANGLE to the input.
+     *
+     * input    Input to be permuted.
+     */
+    fn linear_layer(&self, input: u64) -> u64{
+        let mut output = 0;
+
+        for i in 0..64 {
+            output ^= ((input >> i) & 0x1) << self.permutation[i];
+        }
+
+        output
+    }
+
+    /* Returns the string "RECTANGLE". */
+    fn name(&self) -> String {
+        String::from("RECTANGLE")
+    }
+}
