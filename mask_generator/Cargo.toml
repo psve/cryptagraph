@@ -9,3 +9,7 @@ structopt = "*"
 structopt-derive = "*"
 bloom = "*"
 bloom_filter = "*"
+
+[[bin]]
+name = "generate"
+path = "src/bin_generate.rs"
