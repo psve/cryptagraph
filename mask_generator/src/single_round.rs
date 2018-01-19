@@ -51,12 +51,12 @@ impl LatMap {
     }
 
     /* Getter to avoid unecessary syntax. Simply reimplements HashMap::get */
-    fn get(&self, k: &i16) -> Option<&Vec<Approximation>> {
+    pub fn get(&self, k: &i16) -> Option<&Vec<Approximation>> {
         self.map.get(k)
     }
 
     /* Getter for the alpha map */
-    fn get_alpha(&self, k: &i16) -> Option<&Vec<Approximation>> {
+    pub fn get_alpha(&self, k: &i16) -> Option<&Vec<Approximation>> {
         self.alpha_map.get(k)
     }
 
