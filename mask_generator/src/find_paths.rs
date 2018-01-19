@@ -6,41 +6,6 @@ use std::collections::{HashMap,HashSet};
 use time;
 use utility::ProgressBar;
 
-/* A structure representing an edge in the compressed linear hull graph. 
- * 
- * approximation    The edge goes from node approximation.alpha to approximation.beta.
- * masks            All intermediate masks known to be part of the hull between alpha and beta.
- * num_paths        Number of paths contained in this edge.
- */
-#[derive(Clone)]
-pub struct Edge {
-    pub approximation: Approximation,
-    // pub masks: HashSet<u64>,
-    pub num_paths: usize,
-}
-
-impl Edge {
-    /* Generate a new edge from a single round approximation.
-     *
-     * single_round_app     An approximation over a single round
-     */
-    fn new(single_round_app: &Approximation) -> Edge {
-        // let masks = [single_round_app.alpha, single_round_app.beta].iter().cloned().collect();
-
-        Edge {approximation: single_round_app.clone(),
-              // masks: masks,
-              num_paths: 1}
-    }
-
-    /* Reimplementation of HashSet<u64>::insert */    
-    /*fn insert(&mut self, value: u64) -> bool {
-        self.masks.insert(value)
-    }*/
-}
-
-/***********************************************************************************************/
-
-
 /* A struct representing a set of single round approximations.
  *
  * map      The map from alpha to a number of pairs (beta, squared correlation).
@@ -48,13 +13,12 @@ impl Edge {
  */
 pub struct SingleRoundMap {
     pub map: HashMap<u64, Vec<(u64, f64)>>,
-    pub size: usize
 }
 
 impl SingleRoundMap {
     /* Construct a new empty map */
     fn new() -> SingleRoundMap {
-        SingleRoundMap{ map: HashMap::new(), size: 0 }
+        SingleRoundMap{ map: HashMap::new() }
     }
 
     /* Inserts a new single round approximation into the map. 
@@ -64,17 +28,11 @@ impl SingleRoundMap {
     fn insert(&mut self, approximation: Approximation) {
         let entry = self.map.entry(approximation.alpha).or_insert(vec![]);
         (*entry).push((approximation.beta, approximation.value));
-        self.size += 1;
     }
 
     /* Reimplementation of HashMap::get */
     fn get(&self, alpha: &u64) -> Option<&Vec<(u64, f64)>> {
         self.map.get(alpha)
-    }
-
-    /* Reimplementation of HashMap::len */
-    fn len(&self) -> usize {
-        self.size
     }
 }
 
@@ -87,7 +45,7 @@ impl SingleRoundMap {
  * map      The mapping from approximation to an edge 
  */
 pub struct EdgeMap {
-    pub map: HashMap<Approximation, Edge>
+    pub map: HashMap<Approximation, (usize, f64)>
 }
 
 impl EdgeMap {
@@ -97,8 +55,8 @@ impl EdgeMap {
     }
 
     /* Reimplementation of HashMap::insert */
-    fn insert(&mut self, approximation: Approximation, edge: Edge) {
-        self.map.insert(approximation, edge);
+    fn insert(&mut self, approximation: Approximation, num_paths: usize, value: f64) {
+        self.map.insert(approximation, (num_paths, value));
     }
 
     /* Construct an edge map mapping from alpha to all betas in a single round map.
@@ -106,22 +64,28 @@ impl EdgeMap {
      * single_round_map     A single round map.
      * alpha                The desired start mask.
      */
-    fn from_single_round_map(single_round_map: &SingleRoundMap) -> EdgeMap {
-        let mut edge_map = EdgeMap::new();
+    fn from_single_round_map(single_round_map: &SingleRoundMap, alpha: u64) -> EdgeMap {
+        match single_round_map.get(&alpha) {
+            Some(betas) => {
+                // If alpha was in the single round map, add all approximations starting
+                // with alpha to the edge map
+                let mut edge_map = EdgeMap::new();
+                
+                for &(beta, value) in betas {
+                    let approximation = Approximation::new(alpha, beta, Some(value));
+                    edge_map.insert(approximation, 1, value);
+                }
 
-        for (&alpha, betas) in &single_round_map.map {              
-            for &(beta, value) in betas {
-                let approximation = Approximation::new(alpha, beta, Some(value));
-                let edge = Edge::new(&approximation);
-                edge_map.insert(approximation, edge);
+                return edge_map;
+            },
+            None => {
+                return EdgeMap::new();
             }
-        }
-
-        edge_map
-    }
+        };
+}
 
     /* Reimplementation of HashMap::get_mut */
-    fn get_mut(&mut self, approximation: &Approximation) -> Option<&mut Edge> {
+    fn get_mut(&mut self, approximation: &Approximation) -> Option<&mut (usize, f64)> {
         self.map.get_mut(approximation)
     }
 
@@ -170,9 +134,11 @@ fn create_alpha_filter<T: Cipher + Clone>(cipher: &T, pattern_limit: usize, fals
  * cipher               The cipher of interest.
  * rounds               Number of rounds.
  * pattern_limit        The number of patterns to use when generating approximations.
+ * false_positive       The false positive rate to use for Bloom filters
  */
 pub fn generate_single_round_map<T: Cipher + Clone> 
-    (cipher: &T, rounds: usize, pattern_limit: usize, false_positive: f64) -> SingleRoundMap {
+    (cipher: &T, rounds: usize, pattern_limit: usize, false_positive: f64) -> 
+    (SingleRoundMap, Vec<u64>) {
     let mut alpha_filters = vec![];
     let mut approximations = vec![];
 
@@ -190,6 +156,7 @@ pub fn generate_single_round_map<T: Cipher + Clone>
 
     print!("\nProgressively narrowing alpha filter:");
 
+    // We create new alpha filters by filtering based on the inputs to the next round
     for r in 1..rounds {
         println!("\nRound {} ({} approximations, {} inputs)", r, approximations[r-1].len()
                                                                , approximations[r-1].len_alpha());
@@ -201,12 +168,14 @@ pub fn generate_single_round_map<T: Cipher + Clone>
         let copy = approximations[r-1].clone();
         approximations.push(copy);
 
+        // Keep track a which patterns we need to keep for the next round
         let mut kept_patterns = vec![false; approximations[r-1].sorted_sbox_patterns.len()];
         let mut progress_bar = ProgressBar::new(approximations[r-1].len());
 
         loop {
             match approximations[r-1].next_with_pattern() {
                 Some((approximation, pattern)) => {
+                    // If an output was an input in the next round, keep its corresponding input
                     if alpha_filters[r].lookup(approximation.beta) {
                         kept_patterns[pattern] = true;
                         alpha_filters[r+1].insert(approximation.alpha);
@@ -228,15 +197,18 @@ pub fn generate_single_round_map<T: Cipher + Clone>
         approximations[r].sorted_sbox_patterns = retained_patterns; 
     }
     
+    // Reset the iteration of all approximations
     for p in approximations.iter_mut() {
         p.reset();
     }
 
     let mut hull_approximations = HashSet::new();
+    let mut input_masks = HashSet::new();
     let mut current_beta_filter = alpha_filters[rounds].clone();
 
     print!("\n\nCreating beta filters:");
 
+    // We maintain two beta filters corresponding to input and output in this round
     for r in 0..rounds {
         println!("\nRound {} ({} approximations)", r, approximations[rounds-r-1].len());
 
@@ -250,8 +222,14 @@ pub fn generate_single_round_map<T: Cipher + Clone>
         loop {
             match approximations[rounds-r-1].next() {
                 Some(approximation) => {
+                    // If an approximation exists in the input filter and the alpha
+                    // filter of the next round, keep it and save that approximation
                     if current_beta_filter.lookup(approximation.alpha) &&
                        alpha_filters[rounds-r-1].lookup(approximation.beta) {
+                        if r == 0 {
+                            input_masks.insert(approximation.alpha);
+                        }
+
                         new_beta_filter.insert(approximation.beta);
                         hull_approximations.insert(approximation);
                     }
@@ -282,7 +260,9 @@ pub fn generate_single_round_map<T: Cipher + Clone>
         progress_bar.increment();
     }
 
-    single_round_map
+    let input_masks: Vec<u64> = input_masks.iter().map(|x| *x).collect();
+
+    (single_round_map, input_masks)
 }
 
 
@@ -291,23 +271,17 @@ pub fn generate_single_round_map<T: Cipher + Clone>
  *
  * single_round_map     A map that describes the single round approximations included in the hull.
  * rounds               The number of rounds to consider.
- * alpha                The parity to start from. 
  */
-pub fn find_paths(single_round_map: &SingleRoundMap, rounds: usize) -> EdgeMap {
+pub fn find_paths(single_round_map: &SingleRoundMap, rounds: usize, alpha: u64) -> EdgeMap {
     // Set up one round edge map
-    let mut edge_map = EdgeMap::from_single_round_map(&single_round_map);
-
-    print!("\nFinding linear hulls:");
+    let mut edge_map = EdgeMap::from_single_round_map(&single_round_map, alpha);
 
     // Extend edge map the desired number of rounds
-    for r in 1..rounds {
-        println!("\nRound {} ({} approximations)", r, edge_map.map.len());
-        let mut progress_bar = ProgressBar::new(edge_map.map.len());
-
+    for _ in 1..rounds {
         let mut new_edge_map = EdgeMap::new();
 
         // Go through all edges (i.e. approximations (alpha, beta)) in the current map
-        for (approximation, edge) in &edge_map.map {
+        for (approximation, &(num_paths, value)) in &edge_map.map {
             let alpha = approximation.alpha;
             let beta = approximation.beta;
             
@@ -315,36 +289,25 @@ pub fn find_paths(single_round_map: &SingleRoundMap, rounds: usize) -> EdgeMap {
             match single_round_map.get(&beta) {
                 Some(gammas) => {
                     // For each approximation of the type (beta, gamma)
-                    for &(gamma, value) in gammas {
-                        let new_approximation = Approximation::new(alpha, gamma, Some(value));
+                    for &(gamma, new_value) in gammas {
+                        let new_approximation = Approximation::new(alpha, gamma, Some(new_value));
 
                         // Check of the approximation (alpha, gamma) is already in the new map
                         if new_edge_map.contains_key(&new_approximation) {
                             let existing_edge = new_edge_map.get_mut(&new_approximation)
                                                             .unwrap();
                             
-                            // Add the one round masks to the existing set
-                            /*existing_edge.masks = existing_edge.masks.union(&edge.masks)
-                                                                     .cloned()
-                                                                     .collect();*/
-                            
                             // Update number of trails found and the squared correlation
-                            existing_edge.num_paths += edge.num_paths;
-                            existing_edge.approximation.value += edge.approximation.value * value;
+                            existing_edge.0 += num_paths;
+                            existing_edge.1 += value * new_value;
                         } else {
                             // Otherwise, extend the (alpha, beta) with (beta, gamma)
-                            let mut new_edge = (*edge).clone();
-                            new_edge.approximation = new_approximation.clone();
-                            // new_edge.insert(gamma);
-                            new_edge.approximation.value = edge.approximation.value * value;
-                            new_edge_map.insert(new_approximation, new_edge);
+                            new_edge_map.insert(new_approximation, num_paths, value * new_value);
                         }
                     }
                 },
                 None => {}
             };
-
-            progress_bar.increment();
         }
 
         edge_map = new_edge_map;

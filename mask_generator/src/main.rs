@@ -17,6 +17,7 @@ use structopt::StructOpt;
 use std::io::Write;
 use std::fs::OpenOptions;
 use std::collections::HashSet;
+use utility::ProgressBar;
 
 /* Lists the number ranges of patterns with different correlation values. 
  *
@@ -48,36 +49,39 @@ fn run_search<T: Cipher + Clone>
     println!("\tGenerating at most {} S-box patterns.\n", pattern_limit);
 
     let start = time::precise_time_s();
-    let single_round_map = find_paths::generate_single_round_map(&cipher, rounds, pattern_limit, false_positive);
-    let edge_map = find_paths::find_paths(&single_round_map, rounds);
+    let (single_round_map, input_masks) 
+        = find_paths::generate_single_round_map(&cipher, rounds, pattern_limit, false_positive);
+    let mut result = vec![];
+    
+    println!("\nFinding linear hulls ({} input masks):", input_masks.len());
+    let mut progress_bar = ProgressBar::new(input_masks.len());
+
+    for alpha in input_masks {
+        let edge_map = find_paths::find_paths(&single_round_map, rounds, alpha);
+
+        for (a, b) in edge_map.map {
+            result.push((a, b.0, b.1));
+        }
+
+        progress_bar.increment();
+    }
     let stop = time::precise_time_s();
 
-    let mut result: Vec<_> = edge_map.map.iter().collect();
-    result.sort_by(|a, b| b.1.approximation.value.partial_cmp(&a.1.approximation.value).unwrap());
+    result.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
     result.remove(0);
 
     println!("\n\nSearch finished. [{} s]", stop-start);
-    println!("Found {} approximations.", edge_map.map.len());
-    println!("Smallest squared correlation: {}", result[result.len()-1].1.approximation.value.log2());
-    println!("Largest squared correlation:  {}\n", result[0].1.approximation.value.log2());
+    println!("Found {} approximations.", result.len());
+    println!("Smallest squared correlation: {}", result[result.len()-1].2.log2());
+    println!("Largest squared correlation:  {}\n", result[0].2.log2());
 
-
-    for &(approximation, edge) in result.iter().take(100) {
+    for &(ref approximation, num_paths, value) in result.iter().take(100) {
         if approximation.alpha == 0 && approximation.beta == 0 {
             continue
         }
 
-        println!("Approximation:   {:?}", approximation);
-        /*print!("Linear hull set: {{");
-
-        let mut sorted_set: Vec<u64> = edge.masks.iter().map(|x| *x).collect();
-        sorted_set.sort();
-        
-        for &mask in &sorted_set {
-            print!("{:016x} ", mask);
-        }
-        println!("}} [{}, {}]\n", edge.num_paths, edge.approximation.value.log2());*/
-        println!("[{}, {}]\n", edge.num_paths, edge.approximation.value.log2());
+        print!("Approximation:   {:?} ", approximation);
+        println!("[{}, {}]\n", num_paths, value.log2());
     }
 
     // Dump union of all hull sets if path is specified
