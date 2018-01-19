@@ -6,8 +6,8 @@ use std::collections::{HashMap, BinaryHeap};
 /* A structure that represents the LAT of an S-box as map from correlations to approximations.
  *
  * map          The mapping from the counter bias (abs(#pairs that hold - 2^(n-1))) to
-                a vector of approximations that have that bias. 
- * alpha_map    Same as map, but where only the input of the approximations are kept. 
+                a vector of approximations that have that bias.
+ * alpha_map    Same as map, but where only the input of the approximations are kept.
  */
 #[derive(Clone)]
 pub struct LatMap {
@@ -17,13 +17,13 @@ pub struct LatMap {
 
 impl LatMap {
     /* Generate a new LAT map from an S-box.
-     * 
+     *
      * sbox     The S-box used as the generator.
      */
     fn new(sbox: &Sbox) -> LatMap {
         let mut map = HashMap::new();
         let mut alpha_map = HashMap::new();
-        
+
         // The number of pairs the hold for a balanced approximation (i.e. 2^(n-1))
         let balance = (1 << (sbox.size - 1)) as i16;
 
@@ -32,7 +32,7 @@ impl LatMap {
                 // If the approximation is not balanced, we add it to the map
                 if *element as i16 != balance {
                     let abs_counter_bias = ((*element as i16) - balance).abs();
-                    
+
                     let entry = map.entry(abs_counter_bias).or_insert(vec![]);
                     entry.push(Approximation::new(alpha as u64, beta as u64, None));
 
@@ -61,7 +61,7 @@ impl LatMap {
     }
 
     /* Gets the number of approximations that has a certain counter bias.
-     * 
+     *
      * value    The target counter bias.
      */
     pub fn len_of(&self, value: i16) -> usize {
@@ -69,7 +69,7 @@ impl LatMap {
     }
 
     /* Gets the number of input masks that has a certain counter bias.
-     * 
+     *
      * value    The target counter bias.
      */
     fn len_of_alpha(&self, value: i16) -> usize {
@@ -80,7 +80,7 @@ impl LatMap {
 /***********************************************************************************************/
 
 
-/* An internal representation of a partial S-box pattern. An S-box pattern describes a 
+/* An internal representation of a partial S-box pattern. An S-box pattern describes a
  * truncated approximation, but where the counter bias is specified for each S-box.
  *
  * pattern              The partial pattern. Any S-box that has not been specified yet is None.
@@ -91,7 +91,7 @@ impl LatMap {
 struct InternalSboxPattern {
     pattern: Vec<Option<i16>>,
     determined_length: usize,
-    value: f64 
+    value: f64
 }
 
 impl InternalSboxPattern {
@@ -101,10 +101,10 @@ impl InternalSboxPattern {
     }
 
     /* Extends the current pattern to at most two "neighbouring" patterns
-     * corr_values      A list counter biases for the S-box in descending order. 
+     * corr_values      A list counter biases for the S-box in descending order.
                         Is assumed to contain the bias of the trivial approximation.
      */
-    fn extend(&self, corr_values: &Vec<i16>) -> 
+    fn extend(&self, corr_values: &Vec<i16>) ->
         (Option<InternalSboxPattern>, Option<InternalSboxPattern>) {
         // Counter bias of the trivial approximation
         let balance = corr_values[0] as f64;
@@ -122,13 +122,13 @@ impl InternalSboxPattern {
             extended_patterns.0 = Some(new_pattern);
         }
 
-        // The second pattern replaces the last determined counter bias with the 
-        // next bias in the list 
+        // The second pattern replaces the last determined counter bias with the
+        // next bias in the list
         let mut new_pattern = self.clone();
         let current_value = self.pattern[self.determined_length - 1].unwrap();
         // This is kinda stupid. Could probably be improved?
         let corr_idx = corr_values.binary_search_by(|a| a.cmp(&current_value).reverse());
-        
+
         // This check fails if the current bias was the last on the list
         // In this case, this pattern isn't generated
         match corr_idx {
@@ -151,7 +151,7 @@ impl InternalSboxPattern {
 impl Ord for InternalSboxPattern {
     fn cmp(&self, other: &InternalSboxPattern) -> Ordering {
         // This is bad - only works because we never compare equal patters
-        if self.value.log2() == other.value.log2() && 
+        if self.value.log2() == other.value.log2() &&
            self.determined_length == other.determined_length {
             Ordering::Less
         } else if self.value.log2() != other.value.log2() {
@@ -165,7 +165,7 @@ impl Ord for InternalSboxPattern {
 impl PartialOrd for InternalSboxPattern {
     fn partial_cmp(&self, other: &InternalSboxPattern) -> Option<Ordering> {
         // This is bad - only works because we never compare equal patters
-        if self.value.log2() == other.value.log2() && 
+        if self.value.log2() == other.value.log2() &&
            self.determined_length == other.determined_length {
             Some(Ordering::Less)
         } else if self.value.log2() != other.value.log2(){
@@ -190,7 +190,7 @@ impl Eq for InternalSboxPattern {}
 
 
 /* An external interface to InternalSboxPattern. These patterns are always complete.
- * 
+ *
  * Pattern      A vector describing the counter bias of each S-box.
  * Value        Squared correlation of the pattern.
  */
@@ -202,7 +202,7 @@ pub struct SboxPattern {
 
 impl SboxPattern {
     /* Converts an InternalSboxPattern to an SboxPattern.
-     * 
+     *
      * internal_sbox_pattern    A complete internal S-box pattern.
      */
     fn new(internal_sbox_pattern: &InternalSboxPattern) -> SboxPattern {
@@ -218,9 +218,9 @@ impl SboxPattern {
 /***********************************************************************************************/
 
 
-/* A struct that represents a list of single round approximations of a cipher, sorted in 
- * ascending order of their absolute correlation. The actual approximations are lazily 
- * generated using the Iterator trait. 
+/* A struct that represents a list of single round approximations of a cipher, sorted in
+ * ascending order of their absolute correlation. The actual approximations are lazily
+ * generated using the Iterator trait.
  *
  * cipher                   The cipher whose round function we are considering.
  * lat_map                  The LAT map for the cipher's S-box.
@@ -244,13 +244,13 @@ pub struct SortedApproximations<T: Cipher + Clone> {
 
 impl<T: Cipher + Clone> SortedApproximations<T> {
     /* Returns a new SortedApproximations struct ready to be used as an iterator.
-     * The function basically generates the patterns in sorted_sbox_patterns, 
+     * The function basically generates the patterns in sorted_sbox_patterns,
      * using an approach inspired by the paper
      * "Efficient Algorithms for Extracting the K Most Critical Paths in Timing Analysis"
-     * by Yen, Du, and Ghanta. 
+     * by Yen, Du, and Ghanta.
      *
-     * cipher           The cipher whose round function we are considering. 
-     * pattern_limit    The number of patterns we want to generate. 
+     * cipher           The cipher whose round function we are considering.
+     * pattern_limit    The number of patterns we want to generate.
      */
     pub fn new(cipher: T, pattern_limit: usize, alpha: bool) -> SortedApproximations<T> {
         // Generate LAT map and get S-box counter bias values
@@ -289,7 +289,7 @@ impl<T: Cipher + Clone> SortedApproximations<T> {
         while sorted_sbox_patterns.len() < pattern_limit {
             // We ran out of patterns, so we return what we have so far
             if heap.is_empty() {
-                let sorted_sbox_patterns: Vec<SboxPattern> 
+                let sorted_sbox_patterns: Vec<SboxPattern>
                     = sorted_sbox_patterns.iter()
                                           .map(|x| SboxPattern::new(x))
                                           .collect();
@@ -324,7 +324,7 @@ impl<T: Cipher + Clone> SortedApproximations<T> {
                 },
                 None => ()
             };
-            
+
             // Add current pattern if it was complete
             if current_pattern.is_complete() {
                 let new_corr = current_pattern.value.to_bits();
@@ -341,7 +341,7 @@ impl<T: Cipher + Clone> SortedApproximations<T> {
             }
         }
 
-        let sorted_sbox_patterns: Vec<SboxPattern> 
+        let sorted_sbox_patterns: Vec<SboxPattern>
             = sorted_sbox_patterns.iter()
                                   .map(|x| SboxPattern::new(x))
                                   .collect();
@@ -454,7 +454,7 @@ impl<T: Cipher + Clone> SortedApproximations<T> {
 
 impl<T: Cipher + Clone> Iterator for SortedApproximations<T> {
     type Item = Approximation;
-    
+
     /* Returns the next approximation in the sorted order */
     fn next(&mut self) -> Option<Approximation> {
         // Stop if we have generated all possible approximations

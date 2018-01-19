@@ -8,3 +8,7 @@ time = "*"
 structopt = "*"
 structopt-derive = "*"
 bloom_filter = { path = "../bloom_filter" }
+
+[[bin]]
+name = "generate"
+path = "src/bin_generate.rs"
