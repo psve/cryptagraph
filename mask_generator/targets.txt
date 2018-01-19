@@ -1,14 +1,17 @@
+Implemented:
 TWINE
-KLEIN
-LED
-PRINTCipher
 PRESENT
 GIFT
-Skinny
 Midori
-LowMC
-PRINCE
-RECTANGLE
-Khazad
-PRIDE
+Skinny
 PUFFIN
+LED
+RECTANGLE
+
+Not implemented:
+PRINCE - Annoying huge matrix multiplication
+KLEIN - GF16 multiplication
+Khazad - GF256 multiplication
+PRIDE - Annoying huge matrix multiplication
+LowMC - Randomised linear layer
+PRINTCipher - Key dependent permutation

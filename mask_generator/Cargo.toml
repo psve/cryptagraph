@@ -7,8 +7,7 @@ authors = ["psve <psve@dtu.dk>"]
 time = "*"
 structopt = "*"
 structopt-derive = "*"
-bloom = "*"
-bloom_filter = "*"
+bloom_filter = { path = "../bloom_filter" }
 
 [[bin]]
 name = "generate"
