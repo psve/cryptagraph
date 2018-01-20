@@ -35,10 +35,10 @@ impl Sbox {
 
             for alpha in 0..lat_size {
                 for beta in 0..lat_size {
-                    let parity = utility::parity(plaintext as u64,
-                                                 ciphertext as u64,
-                                                 alpha as u64,
-                                                 beta as u64);
+                    let parity = utility::parity_masks(plaintext as u64,
+                                                       ciphertext as u64,
+                                                       alpha as u64,
+                                                       beta as u64);
 
                     lat[alpha as usize][beta as usize] += (1 - parity) as usize;
                 }

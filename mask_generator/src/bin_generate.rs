@@ -51,39 +51,7 @@ fn run_search<T: Cipher + Clone>
     let start = time::precise_time_s();
     let (single_round_map, input_masks) 
         = find_paths::generate_single_round_map(&cipher, rounds, pattern_limit, false_positive);
-    let mut result = vec![];
     
-    println!("\nFinding linear hulls ({} input masks):", input_masks.len());
-    let mut progress_bar = ProgressBar::new(input_masks.len());
-
-    for alpha in input_masks {
-        let edge_map = find_paths::find_paths(&single_round_map, rounds, alpha);
-
-        for (a, b) in edge_map.map {
-            result.push((a, b.0, b.1));
-        }
-
-        progress_bar.increment();
-    }
-    let stop = time::precise_time_s();
-
-    result.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
-    result.remove(0);
-
-    println!("\n\nSearch finished. [{} s]", stop-start);
-    println!("Found {} approximations.", result.len());
-    println!("Smallest squared correlation: {}", result[result.len()-1].2.log2());
-    println!("Largest squared correlation:  {}\n", result[0].2.log2());
-
-    for &(ref approximation, num_paths, value) in result.iter().take(100) {
-        if approximation.alpha == 0 && approximation.beta == 0 {
-            continue
-        }
-
-        print!("Approximation:   {:?} ", approximation);
-        println!("[{}, {}]\n", num_paths, value.log2());
-    }
-
     // Dump union of all hull sets if path is specified
     match file_name {
         Some(path) => {
@@ -109,6 +77,46 @@ fn run_search<T: Cipher + Clone>
             }
         },
         None => { }
+    }
+    
+    let mut result = vec![];
+    let num_keep = 100;
+    let mut min_correlation = 1.0_f64;
+    let mut num_found = 0;
+    
+    println!("\nFinding linear hulls ({} input masks):", input_masks.len());
+    let mut progress_bar = ProgressBar::new(input_masks.len());
+
+    for alpha in input_masks {
+        let edge_map = find_paths::find_paths(&single_round_map, rounds, alpha);
+        num_found += edge_map.map.len();
+
+        for (a, b) in edge_map.map {
+            result.push((a, b.0, b.1));
+        }
+
+        result.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
+        min_correlation = min_correlation.min(result[result.len()-1].2);
+        result.truncate(num_keep);
+
+        progress_bar.increment();
+    }
+    let stop = time::precise_time_s();
+
+    result.remove(0);
+
+    println!("\n\nSearch finished. [{} s]", stop-start);
+    println!("Found {} approximations.", num_found);
+    println!("Smallest squared correlation: {}", min_correlation.log2());
+    println!("Largest squared correlation:  {}\n", result[0].2.log2());
+
+    for &(ref approximation, num_paths, value) in &result {
+        if approximation.alpha == 0 && approximation.beta == 0 {
+            continue
+        }
+
+        print!("Approximation:   {:?} ", approximation);
+        println!("[{}, {}]\n", num_paths, value.log2());
     }
 }
 

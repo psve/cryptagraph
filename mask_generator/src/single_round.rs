@@ -20,7 +20,7 @@ impl LatMap {
      *
      * sbox     The S-box used as the generator.
      */
-    fn new(sbox: &Sbox) -> LatMap {
+    pub fn new(sbox: &Sbox) -> LatMap {
         let mut map = HashMap::new();
         let mut alpha_map = HashMap::new();
 
