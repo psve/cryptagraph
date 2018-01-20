@@ -5,9 +5,9 @@ authors = ["psve <psve@dtu.dk>"]
 
 [dependencies]
 time = "*"
+rand = "*"
 structopt = "*"
 structopt-derive = "*"
-bloom_filter = { path = "../bloom_filter" }
 
 [[bin]]
 name = "generate"

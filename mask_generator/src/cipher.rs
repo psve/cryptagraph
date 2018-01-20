@@ -89,6 +89,20 @@ pub trait Cipher {
     fn name(&self) -> String;
 }
 
+pub fn name_to_cipher(name : &str) -> Option<Box<Cipher>> {
+    match name {
+        "present"   => Some(Box::new(Present::new())),
+        "gift"      => Some(Box::new(Gift::new())),
+        "twine"     => Some(Box::new(Twine::new())),
+        "puffin"    => Some(Box::new(Puffin::new())),
+        "skinny"    => Some(Box::new(Skinny::new())),
+        "midori"    => Some(Box::new(Midori::new())),
+        "led"       => Some(Box::new(Led::new())),
+        "rectangle" => Some(Box::new(Rectangle::new())),
+        _ => None
+    }
+}
+
 /*****************************************************************
                             PRESENT
 ******************************************************************/
@@ -697,19 +711,5 @@ impl Cipher for Rectangle {
     /* Returns the string "RECTANGLE". */
     fn name(&self) -> String {
         String::from("RECTANGLE")
-    }
-}
-
-pub fn name_to_cipher(name : &str) -> Option<Box<Cipher>> {
-    match name {
-        "present"   => Some(Box::new(Present::new())),
-        "gift"      => Some(Box::new(Gift::new())),
-        "twine"     => Some(Box::new(Twine::new())),
-        "puffin"    => Some(Box::new(Puffin::new())),
-        "skinny"    => Some(Box::new(Skinny::new())),
-        "midori"    => Some(Box::new(Midori::new())),
-        "led"       => Some(Box::new(Led::new())),
-        "rectangle" => Some(Box::new(Rectangle::new())),
-        _ => None
     }
 }
