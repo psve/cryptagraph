@@ -1,10 +1,10 @@
 use approximation::{Approximation};
-use bloom_filter::{BloomBuilder, Bloom};
 use cipher::Cipher;
 use single_round::{SortedApproximations};
 use std::collections::{HashMap,HashSet};
 use time;
 use utility::ProgressBar;
+use bloom::BloomFilter;
 
 /* A struct representing a set of single round approximations.
  *
@@ -102,7 +102,7 @@ impl EdgeMap {
  * cipher           The cipher of interest.
  * pattern_limit    The maximum number of patterns to generate.
  */
-fn create_alpha_filter<T: Cipher + Clone>(cipher: &T, pattern_limit: usize, false_positive: f64) -> Bloom<u64> {
+fn create_alpha_filter(cipher: &Cipher, pattern_limit: usize, false_positive: f64) -> BloomFilter {
     let mut start = time::precise_time_s();
 
     // Generate alpha bloom filter
@@ -114,7 +114,7 @@ fn create_alpha_filter<T: Cipher + Clone>(cipher: &T, pattern_limit: usize, fals
     println!("There are {} possible alpha values.\n", sorted_alphas.len());
 
     start = time::precise_time_s();
-    let mut alpha_filter = BloomBuilder::new(num_alphas as u64).with_fpr(false_positive).finish().unwrap();
+    let mut alpha_filter = BloomFilter::new(num_alphas, false_positive);
     let mut progress_bar = ProgressBar::new(num_alphas);
 
     for approximation in sorted_alphas {
@@ -136,14 +136,13 @@ fn create_alpha_filter<T: Cipher + Clone>(cipher: &T, pattern_limit: usize, fals
  * pattern_limit        The number of patterns to use when generating approximations.
  * false_positive       The false positive rate to use for Bloom filters
  */
-pub fn generate_single_round_map<T: Cipher + Clone> 
-    (cipher: &T, rounds: usize, pattern_limit: usize, false_positive: f64) -> 
+pub fn generate_single_round_map(cipher: &Cipher, rounds: usize, pattern_limit: usize, false_positive: f64) -> 
     (SingleRoundMap, Vec<u64>) {
     let mut alpha_filters = vec![];
     let mut approximations = vec![];
 
     // The first alpha filter allows everything: false positive rate is 1
-    let alpha_filter = BloomBuilder::new(1).with_fpr(1.0).finish().unwrap();
+    let alpha_filter = BloomFilter::new(1, 1.0);
     alpha_filters.push(alpha_filter);
 
     // The next alpha filter is just all input masks in the last round
@@ -161,10 +160,7 @@ pub fn generate_single_round_map<T: Cipher + Clone>
         println!("\nRound {} ({} approximations, {} inputs)", r, approximations[r-1].len()
                                                                , approximations[r-1].len_alpha());
 
-        alpha_filters.push(BloomBuilder::new(approximations[r-1].len_alpha() as u64)
-                                        .with_fpr(false_positive)
-                                        .finish()
-                                        .unwrap());
+        alpha_filters.push(BloomFilter::new(approximations[r-1].len_alpha(), false_positive));
         let copy = approximations[r-1].clone();
         approximations.push(copy);
 
@@ -176,7 +172,7 @@ pub fn generate_single_round_map<T: Cipher + Clone>
             match approximations[r-1].next_with_pattern() {
                 Some((approximation, pattern)) => {
                     // If an output was an input in the next round, keep its corresponding input
-                    if alpha_filters[r].lookup(approximation.beta) {
+                    if alpha_filters[r].contains(approximation.beta) {
                         kept_patterns[pattern] = true;
                         alpha_filters[r+1].insert(approximation.alpha);
                     }
@@ -212,10 +208,7 @@ pub fn generate_single_round_map<T: Cipher + Clone>
     for r in 0..rounds {
         println!("\nRound {} ({} approximations)", r, approximations[rounds-r-1].len());
 
-        let mut new_beta_filter = BloomBuilder::new(approximations[rounds-r-1].len() as u64)
-                                               .with_fpr(false_positive)
-                                               .finish()
-                                               .unwrap();
+        let mut new_beta_filter = BloomFilter::new(approximations[rounds-r-1].len(), false_positive);
 
         let mut progress_bar = ProgressBar::new(approximations[rounds-r-1].len());
 
@@ -224,8 +217,8 @@ pub fn generate_single_round_map<T: Cipher + Clone>
                 Some(approximation) => {
                     // If an approximation exists in the input filter and the alpha
                     // filter of the next round, keep it and save that approximation
-                    if current_beta_filter.lookup(approximation.alpha) &&
-                       alpha_filters[rounds-r-1].lookup(approximation.beta) {
+                    if current_beta_filter.contains(approximation.alpha) &&
+                       alpha_filters[rounds-r-1].contains(approximation.beta) {
                         if r == 0 {
                             input_masks.insert(approximation.alpha);
                         }

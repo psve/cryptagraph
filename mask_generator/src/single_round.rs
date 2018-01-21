@@ -231,8 +231,8 @@ impl SboxPattern {
  * alpha                    Wether the iterator only generates the input masks.
  */
 #[derive(Clone)]
-pub struct SortedApproximations<T: Cipher + Clone> {
-    pub cipher: T,
+pub struct SortedApproximations<'a> {
+    pub cipher: &'a Cipher,
     pub lat_map: LatMap,
     pub sorted_sbox_patterns: Vec<SboxPattern>,
     pub current_approximation: Approximation,
@@ -242,7 +242,7 @@ pub struct SortedApproximations<T: Cipher + Clone> {
     alpha: bool,
 }
 
-impl<T: Cipher + Clone> SortedApproximations<T> {
+impl<'a> SortedApproximations<'a> {
     /* Returns a new SortedApproximations struct ready to be used as an iterator.
      * The function basically generates the patterns in sorted_sbox_patterns,
      * using an approach inspired by the paper
@@ -252,7 +252,7 @@ impl<T: Cipher + Clone> SortedApproximations<T> {
      * cipher           The cipher whose round function we are considering.
      * pattern_limit    The number of patterns we want to generate.
      */
-    pub fn new(cipher: T, pattern_limit: usize, alpha: bool) -> SortedApproximations<T> {
+    pub fn new(cipher: &Cipher, pattern_limit: usize, alpha: bool) -> SortedApproximations {
         // Generate LAT map and get S-box counter bias values
         let lat_map = LatMap::new(cipher.sbox());
 
@@ -452,7 +452,7 @@ impl<T: Cipher + Clone> SortedApproximations<T> {
     }
 }
 
-impl<T: Cipher + Clone> Iterator for SortedApproximations<T> {
+impl<'a> Iterator for SortedApproximations<'a> {
     type Item = Approximation;
 
     /* Returns the next approximation in the sorted order */

@@ -1,6 +1,7 @@
 use cipher::{Cipher};
 use single_round::{LatMap};
 use std::collections::{HashMap, HashSet};
+use utility::parity;
 
 #[derive(Clone)]
 pub struct MaskPool {
@@ -90,16 +91,6 @@ impl MaskPool {
     fn clear(&mut self) {
         self.masks.clear();
     }
-}
-
-fn parity(x : u64) -> u64 {
-    let x = x ^ (x >> 32);
-    let x = x ^ (x >> 16);
-    let x = x ^ (x >> 8);
-    let x = x ^ (x >> 4);
-    let x = x ^ (x >> 2);
-    let x = x ^ (x >> 1);
-    x & 1
 }
 
 pub fn step(

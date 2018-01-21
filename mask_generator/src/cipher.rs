@@ -35,10 +35,10 @@ impl Sbox {
 
             for alpha in 0..lat_size {
                 for beta in 0..lat_size {
-                    let parity = utility::parity(plaintext as u64,
-                                                 ciphertext as u64,
-                                                 alpha as u64,
-                                                 beta as u64);
+                    let parity = utility::parity_masks(plaintext as u64,
+                                                       ciphertext as u64,
+                                                       alpha as u64,
+                                                       beta as u64);
 
                     lat[alpha as usize][beta as usize] += (1 - parity) as usize;
                 }
@@ -87,6 +87,20 @@ pub trait Cipher {
 
     /* Returns the name of the cipher. */
     fn name(&self) -> String;
+}
+
+pub fn name_to_cipher(name : &str) -> Option<Box<Cipher>> {
+    match name {
+        "present"   => Some(Box::new(Present::new())),
+        "gift"      => Some(Box::new(Gift::new())),
+        "twine"     => Some(Box::new(Twine::new())),
+        "puffin"    => Some(Box::new(Puffin::new())),
+        "skinny"    => Some(Box::new(Skinny::new())),
+        "midori"    => Some(Box::new(Midori::new())),
+        "led"       => Some(Box::new(Led::new())),
+        "rectangle" => Some(Box::new(Rectangle::new())),
+        _ => None
+    }
 }
 
 /*****************************************************************
@@ -697,19 +711,5 @@ impl Cipher for Rectangle {
     /* Returns the string "RECTANGLE". */
     fn name(&self) -> String {
         String::from("RECTANGLE")
-    }
-}
-
-pub fn name_to_cipher(name : &str) -> Option<Box<Cipher>> {
-    match name {
-        "present"   => Some(Box::new(Present::new())),
-        "gift"      => Some(Box::new(Gift::new())),
-        "twine"     => Some(Box::new(Twine::new())),
-        "puffin"    => Some(Box::new(Puffin::new())),
-        "skinny"    => Some(Box::new(Skinny::new())),
-        "midori"    => Some(Box::new(Midori::new())),
-        "led"       => Some(Box::new(Led::new())),
-        "rectangle" => Some(Box::new(Rectangle::new())),
-        _ => None
     }
 }
