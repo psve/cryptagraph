@@ -15,7 +15,7 @@ use std::collections::HashSet;
 use structopt::StructOpt;
 
 use cipher::*;
-use pool::MaskPool;
+use pool::{MaskPool, MaskNode};
 
 #[derive(Clone, StructOpt)]
 #[structopt(name = "Hull Enumeration")]
@@ -61,12 +61,20 @@ fn main() {
         masks.insert(mask);
     }
 
+
     let alpha  = u64::from_str_radix(&options.input, 16).unwrap();
     let beta   = u64::from_str_radix(&options.output, 16).unwrap();
 
     let cipher = match name_to_cipher(options.cipher.as_ref()) {
         Some(c) => c,
         None    => panic!("unsupported cipher")
+    };
+
+    let fanout   = 1 << cipher.sbox().size;
+    let mut tree = MaskNode::new(fanout);
+
+    for mask in &masks {
+        tree.add(*mask);
     };
 
     let lat = single_round::LatMap::new(cipher.sbox());

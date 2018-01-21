@@ -7,6 +7,70 @@ pub struct MaskPool {
     masks: HashMap<u64, f64>,
 }
 
+// rust has surprisingly weak generics
+
+#[derive(Clone)]
+pub struct MaskNode {
+    mask     : u64,
+    offset   : u64,
+    bits     : u64,
+    children : Vec<Option<Box<MaskNode>>>
+}
+
+impl MaskNode {
+    pub fn new(bits : u64) -> MaskNode {
+        MaskNode::new_with_offset(bits, 0)
+    }
+
+    fn new_with_offset(bits : u64, offset : u64) -> MaskNode {
+        let fanout   = 1 << bits;
+        let mut node = MaskNode{
+            mask     : (1 << bits) - 1,
+            bits     : bits,
+            offset   : offset,
+            children : Vec::new()
+        };
+        for _i in 0..fanout {
+            node.children.push(None);
+        };
+        node
+    }
+
+    pub fn step(&self, value : u64) -> Option<&MaskNode> {
+        if self.offset == 64 { return None; }
+
+        let v = (value >> self.offset) & self.mask;
+
+        match self.children.get(v as usize).unwrap() {
+            &None => None,
+            &Some(ref node) => Some(node)
+        }
+    }
+
+    pub fn add(&mut self, value : u64) {
+        if self.offset == 64 { return; }
+
+        let v = (value >> self.offset) & self.mask;
+        let child = self.children.get_mut(v as usize).unwrap();
+
+        match child {
+            &mut None => {
+                let mut node = Box::new(
+                    MaskNode::new_with_offset(
+                        self.bits,
+                        self.offset + self.bits,
+                    )
+                );
+                node.add(value);
+                *child = Some(node);
+            },
+            &mut Some(ref mut node) => {
+                node.add(value);
+            }
+        };
+    }
+}
+
 impl MaskPool {
     pub fn new() -> MaskPool {
         MaskPool{

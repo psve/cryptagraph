@@ -20,7 +20,7 @@ impl LatMap {
      *
      * sbox     The S-box used as the generator.
      */
-    fn new(sbox: &Sbox) -> LatMap {
+    pub fn new(sbox: &Sbox) -> LatMap {
         let mut map = HashMap::new();
         let mut alpha_map = HashMap::new();
 
@@ -378,7 +378,7 @@ impl<T: Cipher + Clone> SortedApproximations<T> {
     pub fn len_alpha(&self) -> usize {
         let mut len = 0;
 
-        for pattern in &self.sorted_sbox_patterns {    
+        for pattern in &self.sorted_sbox_patterns {
             len += pattern.pattern.iter().fold(1, |acc, &x| acc * self.lat_map.len_of_alpha(x));
         }
 
@@ -433,7 +433,7 @@ impl<T: Cipher + Clone> SortedApproximations<T> {
 
         new_approximation.beta = self.cipher.linear_layer(new_approximation.beta);
         self.current_approximation = new_approximation;
-        
+
         let result = Some((self.current_approximation.clone(), self.current_pattern));
 
         // Reset current approximation index if we reached a new pattern
