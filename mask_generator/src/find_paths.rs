@@ -5,12 +5,16 @@ use std::collections::{HashMap,HashSet};
 use time;
 use utility::ProgressBar;
 use bloom::BloomFilter;
+use crossbeam_utils::scoped;
+use std::sync::mpsc;
+use num_cpus;
 
 /* A struct representing a set of single round approximations.
  *
  * map      The map from alpha to a number of pairs (beta, squared correlation).
  * size     Number of approximations described by the map.
  */
+#[derive(Clone)]
 pub struct SingleRoundMap {
     pub map: HashMap<u64, Vec<(u64, f64)>>,
 }
@@ -106,7 +110,7 @@ fn create_alpha_filter(cipher: &Cipher, pattern_limit: usize, false_positive: f6
     let mut start = time::precise_time_s();
 
     // Generate alpha bloom filter
-    let sorted_alphas = SortedApproximations::new(cipher.clone(), pattern_limit, true);
+    let mut sorted_alphas = SortedApproximations::new(cipher, pattern_limit, true);
     let num_alphas = sorted_alphas.len();
     
     let mut stop = time::precise_time_s();
@@ -117,11 +121,18 @@ fn create_alpha_filter(cipher: &Cipher, pattern_limit: usize, false_positive: f6
     let mut alpha_filter = BloomFilter::new(num_alphas, false_positive);
     let mut progress_bar = ProgressBar::new(num_alphas);
 
-    for approximation in sorted_alphas {
-        alpha_filter.insert(approximation.alpha);
-        progress_bar.increment();
+    loop {
+        match sorted_alphas.next_with_pattern() {
+            Some((approximation, _)) => {
+                alpha_filter.insert(approximation.alpha);
+                progress_bar.increment();
+            }, 
+            None => {
+                break;
+            }
+        }
     }
-    
+
     stop = time::precise_time_s();
     println!("\nAlpha filter generated. [{} s]", stop-start);
 
@@ -131,6 +142,9 @@ fn create_alpha_filter(cipher: &Cipher, pattern_limit: usize, false_positive: f6
 fn create_backward_filters
     (cipher: &Cipher, rounds: usize, pattern_limit: usize, false_positive: f64) -> 
     (Vec<BloomFilter>, Vec<SortedApproximations>){
+    let num_threads = num_cpus::get();
+    let (result_tx, result_rx) = mpsc::channel();
+
     let mut alpha_filters = vec![];
     let mut approximations = vec![];
 
@@ -143,7 +157,7 @@ fn create_backward_filters
     alpha_filters.push(alpha_filter);
 
     // The approximations in the last round are all approximations
-    let approximation = SortedApproximations::new(cipher.clone(), pattern_limit, false);
+    let approximation = SortedApproximations::new(cipher, pattern_limit, false);
     approximations.push(approximation);
 
     print!("\nProgressively narrowing alpha filter:");
@@ -153,37 +167,74 @@ fn create_backward_filters
         println!("\nRound {} ({} approximations, {} inputs)", r, approximations[r-1].len()
                                                                , approximations[r-1].len_alpha());
 
-        alpha_filters.push(BloomFilter::new(approximations[r-1].len_alpha(), false_positive));
         let copy = approximations[r-1].clone();
         approximations.push(copy);
 
-        // Keep track a which patterns we need to keep for the next round
-        let mut kept_patterns = vec![false; approximations[r-1].sorted_sbox_patterns.len()];
-        let mut progress_bar = ProgressBar::new(approximations[r-1].len());
+        // Use scope since cipher contains a reference
+        scoped::scope(|scope| {
+            for t in 0..num_threads {
+                let mut thread_approximations = approximations[r-1].clone();
+                let mut thread_current_filter = alpha_filters[r].clone();
+                let result_tx = result_tx.clone();
 
-        loop {
-            match approximations[r-1].next_with_pattern() {
-                Some((approximation, pattern)) => {
-                    // If an output was an input in the next round, keep its corresponding input
-                    if alpha_filters[r].contains(approximation.beta) {
-                        kept_patterns[pattern] = true;
-                        alpha_filters[r+1].insert(approximation.alpha);
+                scope.spawn(move || {
+                    let mut thread_new_filter = 
+                        BloomFilter::new(thread_approximations.len_alpha(), false_positive);
+                    let mut thread_kept_patterns = 
+                        vec![false; thread_approximations.sorted_sbox_patterns.len()];
+
+                    let mut progress_bar = ProgressBar::new(thread_approximations.len());
+
+                    thread_approximations.skip(t);
+
+                    loop {
+                        match thread_approximations.next_with_pattern() {
+                            Some((approximation, pattern)) => {
+                                // If an output was an input in the next round, keep its corresponding input
+                                if thread_current_filter.contains(approximation.beta) {
+                                    thread_kept_patterns[pattern] = true;
+                                    thread_new_filter.insert(approximation.alpha);
+                                }
+
+                                progress_bar.increment();
+                            }, 
+                            None => {
+                                break;
+                            }
+                        }
+
+                        thread_approximations.skip(num_threads-1);
                     }
 
-                    progress_bar.increment();
-                }, 
-                None => {
-                    break;
-                }
+                    result_tx.send((thread_new_filter, thread_kept_patterns))
+                             .expect("Thread could not send result");
+                });
+            }
+        });
+
+
+        let mut new_filter = BloomFilter::new(approximations[r-1].len_alpha(), false_positive);
+        let mut kept_patterns = vec![false; approximations[r-1].sorted_sbox_patterns.len()];
+
+        for _ in 0..num_threads {
+            let thread_result = result_rx.recv().expect("Main could not receive result");
+            
+            // Find union of thread local filters and kept patterns
+            new_filter.union(&thread_result.0);
+
+            for i in 0..kept_patterns.len() {
+                kept_patterns[i] |= thread_result.1[i];
             }
         }
+
+        alpha_filters.push(new_filter);
 
         let retained_patterns = kept_patterns.iter()
                                              .zip(approximations[r-1].sorted_sbox_patterns.iter())
                                              .filter(|&(keep, _)| *keep)
                                              .map(|(_, pattern)| pattern.clone())
                                              .collect();
-        approximations[r].sorted_sbox_patterns = retained_patterns; 
+        approximations[r].sorted_sbox_patterns = retained_patterns;
     }
     
     // Reset the iteration of all approximations
@@ -198,6 +249,9 @@ fn create_hull_set
     (rounds: usize, false_positive: f64, 
      alpha_filters: &mut Vec<BloomFilter>, approximations: &mut Vec<SortedApproximations>) -> 
     (HashSet<Approximation>, HashSet<u64>) {
+    let num_threads = num_cpus::get();
+    let (result_tx, result_rx) = mpsc::channel();
+
     let mut hull_approximations = HashSet::new();
     let mut input_masks = HashSet::new();
     let mut current_beta_filter = alpha_filters[rounds].clone();
@@ -208,30 +262,66 @@ fn create_hull_set
     for r in 0..rounds {
         println!("\nRound {} ({} approximations)", r, approximations[rounds-r-1].len());
 
-        let mut new_beta_filter = BloomFilter::new(approximations[rounds-r-1].len(), false_positive);
+        // Use scope since cipher contains a reference
+        scoped::scope(|scope| {
+            for t in 0..num_threads {
+                let mut thread_approximations = approximations[rounds-r-1].clone();
+                let thread_alpha_filters = alpha_filters[rounds-r-1].clone();
+                let thread_current_beta_filters = current_beta_filter.clone();
+                let result_tx = result_tx.clone();
 
-        let mut progress_bar = ProgressBar::new(approximations[rounds-r-1].len());
+                scope.spawn(move || {
+                    let mut thread_new_beta_filter = 
+                        BloomFilter::new(thread_approximations.len(), false_positive);
+                    let mut progress_bar = ProgressBar::new(thread_approximations.len());
+                    let mut thread_hull_approximations = HashSet::new();
+                    let mut thread_input_masks = HashSet::new();
 
-        loop {
-            match approximations[rounds-r-1].next() {
-                Some(approximation) => {
-                    // If an approximation exists in the input filter and the alpha
-                    // filter of the next round, keep it and save that approximation
-                    if current_beta_filter.contains(approximation.alpha) &&
-                       alpha_filters[rounds-r-1].contains(approximation.beta) {
-                        if r == 0 {
-                            input_masks.insert(approximation.alpha);
+                    thread_approximations.skip(t);
+
+                    loop {
+                        match thread_approximations.next_with_pattern() {
+                            Some((approximation, _)) => {
+                                // If an approximation exists in the input filter and the alpha
+                                // filter of the next round, keep it and save that approximation
+                                if thread_current_beta_filters.contains(approximation.alpha) &&
+                                   thread_alpha_filters.contains(approximation.beta) {
+                                    if r == 0 {
+                                        thread_input_masks.insert(approximation.alpha);
+                                    }
+
+                                    thread_new_beta_filter.insert(approximation.beta);
+                                    thread_hull_approximations.insert(approximation);
+                                }
+
+                                progress_bar.increment();
+                            }, 
+                            None => {
+                                break;
+                            }
                         }
 
-                        new_beta_filter.insert(approximation.beta);
-                        hull_approximations.insert(approximation);
+                        thread_approximations.skip(num_threads-1);
                     }
 
-                    progress_bar.increment();
-                }, 
-                None => {
-                    break;
-                }
+                    result_tx.send((thread_new_beta_filter, thread_hull_approximations, thread_input_masks))
+                              .expect("Thread could not send result");
+                });
+            }
+        });
+
+        let mut new_beta_filter = BloomFilter::new(approximations[rounds-r-1].len(), false_positive);
+
+        for _ in 0..num_threads {
+            let thread_result = result_rx.recv().expect("Main could not receive result");
+            
+            // Find union of thread local filters and approximations
+            new_beta_filter.union(&thread_result.0);
+
+            hull_approximations = hull_approximations.union(&thread_result.1).map(|x| x.clone()).collect();
+
+            if r == 0 {
+                input_masks = input_masks.union(&thread_result.2).map(|x| *x).collect();
             }
         }
 

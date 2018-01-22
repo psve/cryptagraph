@@ -69,7 +69,7 @@ impl Sbox {
 }
 
 /* A trait defining an SPN cipher */
-pub trait Cipher {
+pub trait Cipher: Send + Sync {
     /* Returns the size of the cipher input in bits. */
     fn size(&self) -> usize;
 
@@ -89,7 +89,7 @@ pub trait Cipher {
     fn name(&self) -> String;
 }
 
-pub fn name_to_cipher(name : &str) -> Option<Box<Cipher>> {
+pub fn name_to_cipher(name : &str) -> Option<Box<(Cipher + Sync)>> {
     match name {
         "present"   => Some(Box::new(Present::new())),
         "gift"      => Some(Box::new(Gift::new())),

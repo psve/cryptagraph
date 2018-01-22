@@ -398,7 +398,6 @@ impl<'a> SortedApproximations<'a> {
         let mut new_pattern = true;
 
         for i in 0..self.current_app_index.len() {
-        // for (i, &app_index) in self.current_app_index.iter().enumerate() {
             // Counter bias of the current S-box
             let value = pattern[i];
 
@@ -445,71 +444,51 @@ impl<'a> SortedApproximations<'a> {
         result
     }
 
+    /* Resets the struct so that it enumerates approximations from the start */
     pub fn reset(&mut self) {
         self.current_approximation = Approximation::new(0, 0, None);
         self.current_pattern = 0;
         self.current_app_index = vec![0;  self.cipher.num_sboxes()];
     }
-}
 
-impl<'a> Iterator for SortedApproximations<'a> {
-    type Item = Approximation;
+    /* Skips a number of approximations. 
+     *
+     * num      Number of approximations to skip.
+     */
+    pub fn skip(&mut self, num: usize) {
+        for _ in 0..num {
+            if self.current_pattern >= self.sorted_sbox_patterns.len() {
+                return;
+            }
 
-    /* Returns the next approximation in the sorted order */
-    fn next(&mut self) -> Option<Approximation> {
-        // Stop if we have generated all possible approximations
-        if self.current_pattern >= self.sorted_sbox_patterns.len() {
-            return None;
-        }
+            let pattern = &self.sorted_sbox_patterns[self.current_pattern].pattern;
+            let mut new_pattern = true;
 
-        // Generate next approximation from the current S-box pattern and the LAT map
-        let mut new_approximation = Approximation::new(0, 0, Some(self.sorted_sbox_patterns[self.current_pattern].value));
-        let pattern = &self.sorted_sbox_patterns[self.current_pattern].pattern;
-        let mut new_pattern = true;
+            for i in 0..self.current_app_index.len() {
+                let value = pattern[i];
 
-        for i in 0..self.current_app_index.len() {
-        // for (i, &app_index) in self.current_app_index.iter().enumerate() {
-            // Counter bias of the current S-box
-            let value = pattern[i];
+                 // Advance approximation index
+                if new_pattern {
+                    let max_len = if self.alpha {
+                        self.lat_map.len_of_alpha(value)
+                    } else {
+                        self.lat_map.len_of(value)
+                    };
 
-            // Get the current S-box approximation corresponding to the bias
-            // This unwrap should never fail
-            let sbox_app = if self.alpha {
-                &(*self.lat_map.get_alpha(&value).unwrap())[self.current_app_index[i]]
-            } else {
-                &(*self.lat_map.get(&value).unwrap())[self.current_app_index[i]]
-            };
-
-            // Stitch together the full round approximation
-            new_approximation.alpha ^= sbox_app.alpha << (self.cipher.sbox().size * i);
-            new_approximation.beta ^= sbox_app.beta << (self.cipher.sbox().size * i);
-
-            // Advance approximation index
-            if new_pattern {
-                let max_len = if self.alpha {
-                    self.lat_map.len_of_alpha(value)
-                } else {
-                    self.lat_map.len_of(value)
-                };
-
-                if self.current_app_index[i]+1 < max_len {
-                    self.current_app_index[i] += 1;
-                    new_pattern = false;
-                } else {
-                    self.current_app_index[i] = 0;
+                    if self.current_app_index[i]+1 < max_len {
+                        self.current_app_index[i] += 1;
+                        new_pattern = false;
+                    } else {
+                        self.current_app_index[i] = 0;
+                    }
                 }
             }
+
+            // Reset current approximation index if we reached a new pattern
+            if new_pattern {
+                self.current_pattern += 1;
+                self.current_app_index = vec![0; self.current_app_index.len()];
+            }
         }
-
-        // Reset current approximation index if we reached a new pattern
-        if new_pattern {
-            self.current_pattern += 1;
-            self.current_app_index = vec![0; self.current_app_index.len()];
-        }
-
-        new_approximation.beta = self.cipher.linear_layer(new_approximation.beta);
-        self.current_approximation = new_approximation;
-
-        Some(self.current_approximation.clone())
     }
 }
