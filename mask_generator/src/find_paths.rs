@@ -128,16 +128,9 @@ fn create_alpha_filter(cipher: &Cipher, pattern_limit: usize, false_positive: f6
     alpha_filter
 }
 
-
-/* Generates a single round map for a given cipher.  
- * 
- * cipher               The cipher of interest.
- * rounds               Number of rounds.
- * pattern_limit        The number of patterns to use when generating approximations.
- * false_positive       The false positive rate to use for Bloom filters
- */
-pub fn generate_single_round_map(cipher: &Cipher, rounds: usize, pattern_limit: usize, false_positive: f64) -> 
-    (SingleRoundMap, Vec<u64>) {
+fn create_backward_filters
+    (cipher: &Cipher, rounds: usize, pattern_limit: usize, false_positive: f64) -> 
+    (Vec<BloomFilter>, Vec<SortedApproximations>){
     let mut alpha_filters = vec![];
     let mut approximations = vec![];
 
@@ -198,6 +191,13 @@ pub fn generate_single_round_map(cipher: &Cipher, rounds: usize, pattern_limit: 
         p.reset();
     }
 
+    (alpha_filters, approximations)
+}
+
+fn create_hull_set
+    (rounds: usize, false_positive: f64, 
+     alpha_filters: &mut Vec<BloomFilter>, approximations: &mut Vec<SortedApproximations>) -> 
+    (HashSet<Approximation>, HashSet<u64>) {
     let mut hull_approximations = HashSet::new();
     let mut input_masks = HashSet::new();
     let mut current_beta_filter = alpha_filters[rounds].clone();
@@ -242,6 +242,25 @@ pub fn generate_single_round_map(cipher: &Cipher, rounds: usize, pattern_limit: 
 
         println!("\nCollected {} approximations.", hull_approximations.len());
     }
+
+    (hull_approximations, input_masks)
+}
+
+/* Generates a single round map for a given cipher.  
+ * 
+ * cipher               The cipher of interest.
+ * rounds               Number of rounds.
+ * pattern_limit        The number of patterns to use when generating approximations.
+ * false_positive       The false positive rate to use for Bloom filters
+ */
+pub fn generate_single_round_map
+    (cipher: &Cipher, rounds: usize, pattern_limit: usize, false_positive: f64) -> 
+    (SingleRoundMap, Vec<u64>) {
+    let (mut alpha_filters, mut approximations) = 
+        create_backward_filters(cipher, rounds, pattern_limit, false_positive);
+
+    let (hull_approximations, input_masks) = 
+        create_hull_set(rounds, false_positive, &mut alpha_filters, &mut approximations);
 
     println!("\n\nCreating single round map:");
 
