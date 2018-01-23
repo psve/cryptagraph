@@ -61,7 +61,6 @@ fn main() {
         masks.insert(mask);
     }
 
-
     let alpha  = u64::from_str_radix(&options.input, 16).unwrap();
     let beta   = u64::from_str_radix(&options.output, 16).unwrap();
 
@@ -70,12 +69,15 @@ fn main() {
         None    => panic!("unsupported cipher")
     };
 
-    let fanout   = 1 << cipher.sbox().size;
-    let mut tree = MaskNode::new(fanout);
+    println!("> creating B-tree over mask set");
 
+    let mut tree = MaskNode::new(cipher.sbox().size as u64);
     for mask in &masks {
-        tree.add(*mask);
+        tree.add(cipher.linear_layer_inv(*mask));
+        assert!(cipher.linear_layer_inv(cipher.linear_layer(*mask)) == *mask);
     };
+
+    println!("> calculating approximation table");
 
     let lat = single_round::LatMap::new(cipher.sbox());
 
@@ -86,8 +88,8 @@ fn main() {
 
     pool_old.init(&masks, alpha);
 
-    for _r in 0..options.rounds {
-        println!("a");
+    for r in 0..options.rounds {
+        println!("> [round {:}]", r);
         pool::step(cipher.as_ref(), &lat, &masks, &mut pool_new, &pool_old, 0);
     }
 
