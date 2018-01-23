@@ -260,7 +260,8 @@ fn create_hull_set
 
     // We maintain two beta filters corresponding to input and output in this round
     for r in 0..rounds {
-        println!("\nRound {} ({} approximations)", r, approximations[rounds-r-1].len());
+        println!("\nRound {} ({} approximations, {} outputs)", r, approximations[rounds-r-1].len()
+                                                                , approximations[rounds-r-1].len_beta());
 
         // Use scope since cipher contains a reference
         scoped::scope(|scope| {
@@ -272,7 +273,7 @@ fn create_hull_set
 
                 scope.spawn(move || {
                     let mut thread_new_beta_filter = 
-                        BloomFilter::new(thread_approximations.len(), false_positive);
+                        BloomFilter::new(thread_approximations.len_beta(), false_positive);
                     let mut progress_bar = ProgressBar::new(thread_approximations.len());
                     let mut thread_hull_approximations = HashSet::new();
                     let mut thread_input_masks = HashSet::new();
@@ -310,7 +311,7 @@ fn create_hull_set
             }
         });
 
-        let mut new_beta_filter = BloomFilter::new(approximations[rounds-r-1].len(), false_positive);
+        let mut new_beta_filter = BloomFilter::new(approximations[rounds-r-1].len_beta(), false_positive);
 
         for _ in 0..num_threads {
             let thread_result = result_rx.recv().expect("Main could not receive result");

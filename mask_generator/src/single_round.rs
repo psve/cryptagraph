@@ -13,6 +13,7 @@ use std::collections::{HashMap, BinaryHeap};
 pub struct LatMap {
     map: HashMap<i16, Vec<Approximation>>,
     alpha_map: HashMap<i16, Vec<Approximation>>,
+    beta_map: HashMap<i16, Vec<Approximation>>,
 }
 
 impl LatMap {
@@ -23,6 +24,7 @@ impl LatMap {
     pub fn new(sbox: &Sbox) -> LatMap {
         let mut map = HashMap::new();
         let mut alpha_map = HashMap::new();
+        let mut beta_map = HashMap::new();
 
         // The number of pairs the hold for a balanced approximation (i.e. 2^(n-1))
         let balance = (1 << (sbox.size - 1)) as i16;
@@ -38,6 +40,9 @@ impl LatMap {
 
                     let entry = alpha_map.entry(abs_counter_bias).or_insert(vec![]);
                     entry.push(Approximation::new(alpha as u64, 0, None));
+
+                    let entry = beta_map.entry(abs_counter_bias).or_insert(vec![]);
+                    entry.push(Approximation::new(0, beta as u64, None));
                 }
             }
         }
@@ -47,7 +52,12 @@ impl LatMap {
             alphas.dedup();
         }
 
-        LatMap{map: map, alpha_map: alpha_map}
+        for betas in beta_map.values_mut() {
+            betas.sort();
+            betas.dedup();
+        }
+
+        LatMap{map: map, alpha_map: alpha_map, beta_map: beta_map}
     }
 
     /* Getter to avoid unecessary syntax. Simply reimplements HashMap::get */
@@ -58,6 +68,11 @@ impl LatMap {
     /* Getter for the alpha map */
     pub fn get_alpha(&self, k: &i16) -> Option<&Vec<Approximation>> {
         self.alpha_map.get(k)
+    }
+
+    /* Getter for the beta map */
+    pub fn get_beta(&self, k: &i16) -> Option<&Vec<Approximation>> {
+        self.beta_map.get(k)
     }
 
     /* Gets the number of approximations that has a certain counter bias.
@@ -74,6 +89,14 @@ impl LatMap {
      */
     fn len_of_alpha(&self, value: i16) -> usize {
         self.get_alpha(&value).unwrap().len()
+    }
+
+    /* Gets the number of output masks that has a certain counter bias.
+     *
+     * value    The target counter bias.
+     */
+    fn len_of_beta(&self, value: i16) -> usize {
+        self.get_beta(&value).unwrap().len()
     }
 }
 
@@ -380,6 +403,17 @@ impl<'a> SortedApproximations<'a> {
 
         for pattern in &self.sorted_sbox_patterns {
             len += pattern.pattern.iter().fold(1, |acc, &x| acc * self.lat_map.len_of_alpha(x));
+        }
+
+        len
+    }
+
+    /* Returns the number of output masks which can be generated from the patterns. */
+    pub fn len_beta(&self) -> usize {
+        let mut len = 0;
+
+        for pattern in &self.sorted_sbox_patterns {
+            len += pattern.pattern.iter().fold(1, |acc, &x| acc * self.lat_map.len_of_beta(x));
         }
 
         len
