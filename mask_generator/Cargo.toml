@@ -8,6 +8,8 @@ time = "*"
 rand = "*"
 structopt = "*"
 structopt-derive = "*"
+num_cpus = "*"
+crossbeam-utils = "*"
 
 [[bin]]
 name = "generate"

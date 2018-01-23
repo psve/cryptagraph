@@ -1,5 +1,3 @@
-use rand::{self, Rng};
-
 /* Hash function specifically for 64 bit integers. Taken from: 
  * https://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key#12996028
  *
@@ -39,8 +37,8 @@ impl BloomFilter {
      * false_positive_rate  The desired false positive rate of the filter.
      */
     pub fn new(num_elements: usize, false_positive_rate: f64) -> BloomFilter {
-        let mut rng = rand::thread_rng();
-        let rand = (rng.gen::<u64>(), rng.gen::<u64>());
+        // "Random" number to create independent hash functions
+        let rand = (0x78d587f621a5748c, 0xd3690e3bb8718031);
         let k = (-false_positive_rate.log2()).ceil() as usize;
         let size = (-1.44*false_positive_rate.log2() * (num_elements as f64)).ceil() as usize;
         let state_size = ((size as f64) / 64.0).ceil() as usize;
@@ -84,5 +82,15 @@ impl BloomFilter {
         }
 
         result
+    }
+
+    /* Finds the union of two Bloom filters. 
+     * 
+     * other    Bloom filter to unionise with self.
+     */
+    pub fn union(&mut self, other: &BloomFilter) {
+        for i in 0..self.state.len() {
+            self.state[i] |= other.state[i];
+        }
     }
 }

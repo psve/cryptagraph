@@ -1,7 +1,11 @@
+#![feature(iterator_step_by)]
+
 extern crate time;
 extern crate structopt;
 #[macro_use] extern crate structopt_derive;
 extern crate rand;
+extern crate num_cpus;
+extern crate crossbeam_utils;
 
 mod cipher;
 mod utility;
@@ -19,12 +23,14 @@ use std::io::Write;
 use std::fs::OpenOptions;
 use std::collections::HashSet;
 use utility::ProgressBar;
+use std::thread;
+use std::sync::mpsc;
 
 /* Lists the number ranges of patterns with different correlation values. 
  *
  * cipher   The cipher to investigate.
  */
-fn list_pattern_ranges(cipher: &Cipher) {
+fn list_pattern_ranges(cipher: &(Cipher + Sync)) {
     let patterns = SortedApproximations::new(cipher.clone(), usize::max_value(), false);
     let mut output: Vec<(f64, (usize, usize))> = patterns.range_map.iter()
                                        .map(|(&k, &v)| (f64::from_bits(k).log2(), v))
@@ -42,11 +48,14 @@ fn list_pattern_ranges(cipher: &Cipher) {
  * rounds                   The number of rounds.
  * pattern_limit            The maximum number of single round S-box patterns to generate.
  */
-fn run_search(cipher: &Cipher, rounds: usize, pattern_limit: usize, false_positive: f64, file_name: Option<String>) {
+fn run_search(cipher: &(Cipher + Sync), rounds: usize, pattern_limit: usize, false_positive: f64, file_name: Option<String>) {
     println!("Searching through hulls with varying input mask.");
     println!("\tCipher: {}.", cipher.name());
     println!("\tRounds: {}.", rounds);
     println!("\tGenerating at most {} S-box patterns.\n", pattern_limit);
+
+    let num_threads = num_cpus::get();
+    let (result_tx, result_rx) = mpsc::channel();
 
     let start = time::precise_time_s();
     let (single_round_map, input_masks) 
@@ -85,25 +94,48 @@ fn run_search(cipher: &Cipher, rounds: usize, pattern_limit: usize, false_positi
     let mut num_found = 0;
     
     println!("\nFinding linear hulls ({} input masks):", input_masks.len());
-    let mut progress_bar = ProgressBar::new(input_masks.len());
 
-    for alpha in input_masks {
-        let edge_map = find_paths::find_paths(&single_round_map, rounds, alpha);
-        num_found += edge_map.map.len();
+    for t in 0..num_threads {
+        let input_masks = input_masks.clone();
+        let single_round_map = single_round_map.clone();
+        let result_tx = result_tx.clone();
 
-        for (a, b) in edge_map.map {
-            result.push((a, b.0, b.1));
-        }
+        thread::spawn(move || {
+            let mut result = vec![];
+            let mut progress_bar = ProgressBar::new(input_masks.len());
 
-        result.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
-        min_correlation = min_correlation.min(result[result.len()-1].2);
-        result.truncate(num_keep);
+            for &alpha in input_masks.iter().skip(t).step_by(num_threads) {
+                let edge_map = find_paths::find_paths(&single_round_map, rounds, alpha);
+                num_found += edge_map.map.len();
 
-        progress_bar.increment();
+                for (a, b) in edge_map.map {
+                    result.push((a, b.0, b.1));
+                }
+
+                result.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
+                min_correlation = min_correlation.min(result[result.len()-1].2);
+                result.truncate(num_keep);
+
+                progress_bar.increment();
+            }
+
+            result_tx.send((result, min_correlation, num_found)).expect("Thread could not send result");
+        });
     }
-    let stop = time::precise_time_s();
 
+    for _ in 0..num_threads {
+        let mut thread_result = result_rx.recv().expect("Main could not receive result");
+        
+        result.append(&mut thread_result.0);
+        min_correlation = min_correlation.min(thread_result.1);
+        num_found += thread_result.2;
+    }
+
+    result.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
+    result.truncate(num_keep);
     result.remove(0);
+
+    let stop = time::precise_time_s();
 
     println!("\n\nSearch finished. [{} s]", stop-start);
     println!("Found {} approximations.", num_found);
