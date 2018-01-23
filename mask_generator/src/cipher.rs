@@ -85,6 +85,12 @@ pub trait Cipher {
      */
     fn linear_layer(&self, input: u64) -> u64;
 
+    /* Applies the inverse linear layer, st.
+     *
+     * I = linear_layer_inv o linear_layer
+     */
+    fn linear_layer_inv(&self, input: u64) -> u64;
+
     /* Returns the name of the cipher. */
     fn name(&self) -> String;
 }
@@ -168,6 +174,11 @@ impl Cipher for Present {
         output
     }
 
+    fn linear_layer_inv(&self, input: u64) -> u64 {
+        panic!("not implemented");
+        0
+    }
+
     /* Returns the string "PRESENT". */
     fn name(&self) -> String {
         String::from("PRESENT")
@@ -238,6 +249,11 @@ impl Cipher for Gift {
         }
 
         output
+    }
+
+    fn linear_layer_inv(&self, input: u64) -> u64 {
+        panic!("not implemented");
+        0
     }
 
     /* Returns the string "GIFT". */
@@ -322,6 +338,11 @@ impl Cipher for Twine {
         output
     }
 
+    fn linear_layer_inv(&self, input: u64) -> u64 {
+        panic!("not implemented");
+        0
+    }
+
     /* Returns the string "TWINE". */
     fn name(&self) -> String {
         String::from("TWINE")
@@ -395,6 +416,11 @@ impl Cipher for Puffin {
         output
     }
 
+    fn linear_layer_inv(&self, input: u64) -> u64 {
+        panic!("not implemented");
+        0
+    }
+
     /* Returns the string "PUFFIN". */
     fn name(&self) -> String {
         String::from("PUFFIN")
@@ -464,6 +490,11 @@ impl Cipher for Skinny {
         output = (output << 16) ^ (output >> 48);
 
         output
+    }
+
+    fn linear_layer_inv(&self, input: u64) -> u64 {
+        panic!("not implemented");
+        0
     }
 
     /* Returns the string "SKINNY". */
@@ -550,6 +581,11 @@ impl Cipher for Midori {
         output
     }
 
+    fn linear_layer_inv(&self, input: u64) -> u64 {
+        panic!("not implemented");
+        0
+    }
+
     /* Returns the string "Midori". */
     fn name(&self) -> String {
         String::from("Midori")
@@ -626,6 +662,11 @@ impl Cipher for Led {
         }
 
         x
+    }
+
+    fn linear_layer_inv(&self, input: u64) -> u64 {
+        panic!("not implemented");
+        0
     }
 
     /* Returns the string "LED". */
@@ -706,6 +747,11 @@ impl Cipher for Rectangle {
         }
 
         output
+    }
+
+    fn linear_layer_inv(&self, input: u64) -> u64 {
+        panic!("not implemented");
+        0
     }
 
     /* Returns the string "RECTANGLE". */
