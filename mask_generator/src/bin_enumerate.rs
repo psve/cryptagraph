@@ -4,6 +4,7 @@ extern crate structopt;
 mod pool;
 mod cipher;
 mod utility;
+mod analysis;
 mod approximation;
 mod single_round;
 
@@ -15,7 +16,7 @@ use std::collections::HashSet;
 use structopt::StructOpt;
 
 use cipher::*;
-use pool::{MaskPool, MaskNode};
+use pool::{MaskPool, MaskTree};
 
 #[derive(Clone, StructOpt)]
 #[structopt(name = "Hull Enumeration")]
@@ -71,15 +72,18 @@ fn main() {
 
     println!("> creating B-tree over mask set");
 
-    let mut tree = MaskNode::new(cipher.sbox().size as u64);
+    let mut tree = MaskTree::new(cipher.sbox().size as u64);
     for mask in &masks {
-        tree.add(cipher.linear_layer_inv(*mask));
-        assert!(cipher.linear_layer_inv(cipher.linear_layer(*mask)) == *mask);
+        let m = cipher.linear_layer_inv(*mask);
+        tree.add(m);
+        assert!(cipher.linear_layer(m) == *mask);
     };
+
+    assert!(tree.len() == masks.len());
 
     println!("> calculating approximation table");
 
-    let lat = single_round::LatMap::new(cipher.sbox());
+    let lat = analysis::LAT::new(cipher.sbox());
 
     // construct pools
 
@@ -90,12 +94,29 @@ fn main() {
 
     for r in 0..options.rounds {
         println!("> [round {:}]", r);
-        pool::step(cipher.as_ref(), &lat, &masks, &mut pool_new, &pool_old, 0);
+
+        // "clock" all patterns one round
+
+        pool::step(cipher.as_ref(), &lat, &tree, &mut pool_new, &pool_old, 0);
+
+        // swap pools
+
+        {
+            let tmp = pool_old;
+            pool_old = pool_new;
+            pool_new = tmp;
+        }
+
+        // check for early termination
+
+        if pool_old.masks.len() == 0 {
+            println!("pool empty :(");
+            return;
+        }
     }
 
-
-
-
-
+    for (k, v) in pool_old.masks.iter() {
+        println!("{:} {:}", k, v);
+    }
 
 }
