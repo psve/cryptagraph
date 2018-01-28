@@ -8,6 +8,7 @@ use std::collections::{HashMap, BinaryHeap};
  * map          The mapping from the counter bias (abs(#pairs that hold - 2^(n-1))) to
                 a vector of approximations that have that bias.
  * alpha_map    Same as map, but where only the input of the approximations are kept.
+ * alpha_map    Same as map, but where only the output of the approximations are kept.
  */
 #[derive(Clone)]
 pub struct LatMap {

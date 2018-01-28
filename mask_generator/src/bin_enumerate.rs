@@ -4,6 +4,7 @@ extern crate structopt;
 mod pool;
 mod cipher;
 mod utility;
+mod analysis;
 mod approximation;
 mod single_round;
 
@@ -15,7 +16,7 @@ use std::collections::HashSet;
 use structopt::StructOpt;
 
 use cipher::*;
-use pool::{MaskPool, MaskNode};
+use pool::{MaskPool, MaskTree};
 
 #[derive(Clone, StructOpt)]
 #[structopt(name = "Hull Enumeration")]
@@ -61,7 +62,6 @@ fn main() {
         masks.insert(mask);
     }
 
-
     let alpha  = u64::from_str_radix(&options.input, 16).unwrap();
     let beta   = u64::from_str_radix(&options.output, 16).unwrap();
 
@@ -70,14 +70,20 @@ fn main() {
         None    => panic!("unsupported cipher")
     };
 
-    let fanout   = 1 << cipher.sbox().size;
-    let mut tree = MaskNode::new(fanout);
+    println!("> creating B-tree over mask set");
 
+    let mut tree = MaskTree::new(cipher.sbox().size as u64);
     for mask in &masks {
-        tree.add(*mask);
+        let m = cipher.linear_layer_inv(*mask);
+        tree.add(m);
+        assert!(cipher.linear_layer(m) == *mask);
     };
 
-    let lat = single_round::LatMap::new(cipher.sbox());
+    assert!(tree.len() == masks.len());
+
+    println!("> calculating approximation table");
+
+    let lat = analysis::LAT::new(cipher.sbox());
 
     // construct pools
 
@@ -86,14 +92,31 @@ fn main() {
 
     pool_old.init(&masks, alpha);
 
-    for _r in 0..options.rounds {
-        println!("a");
-        pool::step(cipher.as_ref(), &lat, &masks, &mut pool_new, &pool_old, 0);
+    for r in 0..options.rounds {
+        println!("> [round {:}]", r);
+
+        // "clock" all patterns one round
+
+        pool::step(cipher.as_ref(), &lat, &tree, &mut pool_new, &pool_old, 0);
+
+        // swap pools
+
+        {
+            let tmp = pool_old;
+            pool_old = pool_new;
+            pool_new = tmp;
+        }
+
+        // check for early termination
+
+        if pool_old.masks.len() == 0 {
+            println!("pool empty :(");
+            return;
+        }
     }
 
-
-
-
-
+    for (k, v) in pool_old.masks.iter() {
+        println!("{:} {:}", k, v);
+    }
 
 }

@@ -1,25 +1,47 @@
+use analysis::{LAT};
 use cipher::{Cipher};
-use single_round::{LatMap};
 use std::collections::{HashMap, HashSet};
 use utility::parity;
 
 #[derive(Clone)]
 pub struct MaskPool {
-    masks: HashMap<u64, f64>,
+    pub masks: HashMap<u64, f64>,
 }
 
-// rust has surprisingly weak generics
+#[derive(Clone)]
+pub struct MaskTree {
+    size : usize,
+    root : MaskNode
+}
 
 #[derive(Clone)]
-pub struct MaskNode {
+struct MaskNode {
     mask     : u64,
     offset   : u64,
     bits     : u64,
     children : Vec<Option<Box<MaskNode>>>
 }
 
+impl MaskTree {
+    pub fn new(bits : u64) -> MaskTree {
+        MaskTree {
+            size : 0,
+            root : MaskNode::new_with_offset(bits, 0)
+        }
+    }
+
+    pub fn add(&mut self, value : u64) {
+        self.root.add(value);
+        self.size += 1;
+    }
+
+    pub fn len(&mut self) -> usize {
+        self.size
+    }
+}
+
 impl MaskNode {
-    pub fn new(bits : u64) -> MaskNode {
+    fn new(bits : u64) -> MaskNode {
         MaskNode::new_with_offset(bits, 0)
     }
 
@@ -37,7 +59,7 @@ impl MaskNode {
         node
     }
 
-    pub fn step(&self, value : u64) -> Option<&MaskNode> {
+    fn step(&self, value : u64) -> Option<&MaskNode> {
         if self.offset == 64 { return None; }
 
         let v = (value >> self.offset) & self.mask;
@@ -48,7 +70,7 @@ impl MaskNode {
         }
     }
 
-    pub fn add(&mut self, value : u64) {
+    fn add(&mut self, value : u64) {
         if self.offset == 64 { return; }
 
         let v = (value >> self.offset) & self.mask;
@@ -95,8 +117,8 @@ impl MaskPool {
 
 pub fn step(
     cipher   : &Cipher,
-    lat      : &LatMap,
-    hull     : &HashSet<u64>,
+    lat      : &LAT,
+    hull     : &MaskTree,
     pool_new : &mut MaskPool,
     pool_old : &MaskPool,
     key      : u64,
@@ -117,8 +139,8 @@ pub fn step(
 
 fn step_mask(
     cipher : &Cipher,
-    lat    : &LatMap,
-    hull   : &HashSet<u64>,
+    lat    : &LAT,
+    hull   : &MaskTree,
     pool   : &mut MaskPool,
     key    : u64,
     alpha  : u64,
@@ -126,8 +148,8 @@ fn step_mask(
 ) {
     fn fill(
         cipher : &Cipher,
-        lat    : &LatMap,
-        hull   : &HashSet<u64>,
+        lat    : &LAT,
+        node   : &MaskNode,
         pool   : &mut MaskPool,
         key    : u64,
         alpha  : u64,
@@ -136,6 +158,8 @@ fn step_mask(
         index  : usize
     ) {
 
+        let mut node = node;
+
         // prepare sbox domain mask
 
         let w = cipher.sbox().size;
@@ -143,30 +167,36 @@ fn step_mask(
 
         for i in index..cipher.num_sboxes() {
 
-            let shift = i * 4;
+            let shift = i * w;
 
             // fetch input parity of sbox
 
-            let a = ((alpha >> shift) & m) as i16;
-            if  a == 0 { continue }
+            let a = (alpha >> shift) & m;
+            if  a == 0 {
+                match node.step(0) {
+                    None    => { return; }
+                    Some(n) => { node = n; }
+                }
+            }
 
             // enumerate possible output parities
 
-            match lat.get(&a) {
-                None => {return ();}
-                Some(approximations) => {
-                    for approx in approximations {
+            for approx in lat.lookup_alpha(a) {
+                assert!(approx.alpha == a as u64);
+                match node.step(approx.beta) {
+                    None => { continue; }
+                    Some(node) => {
                         fill(
                             cipher,
                             lat,
-                            hull,
+                            node,
                             pool,
                             key,
                             alpha,
                             beta | approx.beta << shift,
                             corr * approx.value,
                             i + 1
-                        )
+                        );
                     }
                 }
             }
@@ -174,15 +204,9 @@ fn step_mask(
             return;
         }
 
-        println!("{:x}", beta);
-
         // apply permutation
 
         let beta_p = cipher.linear_layer(beta);
-
-        // check mask-set membership
-
-        if !hull.contains(&beta_p) { return; }
 
         // key approximation / correlation
 
@@ -201,5 +225,5 @@ fn step_mask(
         );
     }
 
-    fill(cipher, lat, hull, pool, key, alpha, 0, corr, 0)
+    fill(cipher, lat, &hull.root, pool, key, alpha, 0, corr, 0)
 }
