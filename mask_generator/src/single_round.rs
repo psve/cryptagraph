@@ -8,6 +8,7 @@ use std::collections::{HashMap, BinaryHeap};
  * map          The mapping from the counter bias (abs(#pairs that hold - 2^(n-1))) to
                 a vector of approximations that have that bias.
  * alpha_map    Same as map, but where only the input of the approximations are kept.
+ * alpha_map    Same as map, but where only the output of the approximations are kept.
  */
 #[derive(Clone)]
 pub struct LatMap {
@@ -464,7 +465,11 @@ impl<'a> SortedApproximations<'a> {
             }
         }
 
-        new_approximation.beta = self.cipher.linear_layer(new_approximation.beta);
+        let (alpha, beta) = self.cipher.sbox_mask_transform(new_approximation.alpha, new_approximation.beta);
+        new_approximation.alpha = alpha; 
+        new_approximation.beta = beta;
+            
+        // new_approximation.beta = self.cipher.linear_layer(new_approximation.beta);
         self.current_approximation = new_approximation;
 
         let result = Some((self.current_approximation.clone(), self.current_pattern));

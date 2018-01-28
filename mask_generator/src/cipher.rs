@@ -85,6 +85,14 @@ pub trait Cipher: Send + Sync {
      */
     fn linear_layer(&self, input: u64) -> u64;
 
+    /* Transforms the input and output mask of the S-box layer to an 
+     * input and output mask of a round.
+     *
+     * input    Input mask to the S-box layer.
+     * output   Output mask to the S-box layer.
+     */
+    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64);
+
     /* Applies the inverse linear layer, st.
      *
      * I = linear_layer_inv o linear_layer
@@ -105,6 +113,7 @@ pub fn name_to_cipher(name : &str) -> Option<Box<(Cipher + Sync)>> {
         "midori"    => Some(Box::new(Midori::new())),
         "led"       => Some(Box::new(Led::new())),
         "rectangle" => Some(Box::new(Rectangle::new())),
+        "mibs"      => Some(Box::new(Mibs::new())),
         _ => None
     }
 }
@@ -174,6 +183,16 @@ impl Cipher for Present {
             output ^= Present::PERMUTATION_INV[i][((input >> (i*8)) & 0xff) as usize];
         }
         output
+    }
+
+    /* Transforms the input and output mask of the S-box layer to an 
+     * input and output mask of a round.
+     *
+     * input    Input mask to the S-box layer.
+     * output   Output mask to the S-box layer.
+     */
+    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
+        (input, self.linear_layer(output))
     }
 
     /* Returns the string "PRESENT". */
@@ -248,6 +267,16 @@ impl Cipher for Gift {
         output
     }
 
+    /* Transforms the input and output mask of the S-box layer to an 
+     * input and output mask of a round.
+     *
+     * input    Input mask to the S-box layer.
+     * output   Output mask to the S-box layer.
+     */
+    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
+        (input, self.linear_layer(output))
+    }
+
     fn linear_layer_inv(&self, input: u64) -> u64 {
         panic!("not implemented");
     }
@@ -264,7 +293,8 @@ impl Cipher for Gift {
                             TWINE
 ******************************************************************/
 
-/* A structure representing the TWINE cipher.
+/* A structure representing the TWINE cipher. Due to the Feistel structure, one round is actually
+ * two rounds of TWINE. 
  *
  * size         Size of the cipher in bits. This is fixed to 64.
  * sbox         The Feistel function of TWINE represented as an S-box. Key addition ignored.
@@ -275,32 +305,32 @@ pub struct Twine {
     size: usize,
     sbox: Sbox,
     permutation: [u64; 16],
+    inverse: [u64; 16],
 }
 
 impl Twine {
     /* Generates a new instance of the TWINE cipher */
     pub fn new() -> Twine {
-        let table = vec![
-            0x0c, 0x0d, 0x0e, 0x0f, 0x08, 0x09, 0x0a, 0x0b, 0x04, 0x05, 0x06, 0x07, 0x00, 0x01, 0x02, 0x03,
-            0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-            0x2f, 0x2e, 0x2d, 0x2c, 0x2b, 0x2a, 0x29, 0x28, 0x27, 0x26, 0x25, 0x24, 0x23, 0x22, 0x21, 0x20,
-            0x3a, 0x3b, 0x38, 0x39, 0x3e, 0x3f, 0x3c, 0x3d, 0x32, 0x33, 0x30, 0x31, 0x36, 0x37, 0x34, 0x35,
-            0x42, 0x43, 0x40, 0x41, 0x46, 0x47, 0x44, 0x45, 0x4a, 0x4b, 0x48, 0x49, 0x4e, 0x4f, 0x4c, 0x4d,
-            0x5b, 0x5a, 0x59, 0x58, 0x5f, 0x5e, 0x5d, 0x5c, 0x53, 0x52, 0x51, 0x50, 0x57, 0x56, 0x55, 0x54,
-            0x69, 0x68, 0x6b, 0x6a, 0x6d, 0x6c, 0x6f, 0x6e, 0x61, 0x60, 0x63, 0x62, 0x65, 0x64, 0x67, 0x66,
-            0x75, 0x74, 0x77, 0x76, 0x71, 0x70, 0x73, 0x72, 0x7d, 0x7c, 0x7f, 0x7e, 0x79, 0x78, 0x7b, 0x7a,
-            0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f, 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87,
-            0x93, 0x92, 0x91, 0x90, 0x97, 0x96, 0x95, 0x94, 0x9b, 0x9a, 0x99, 0x98, 0x9f, 0x9e, 0x9d, 0x9c,
-            0xad, 0xac, 0xaf, 0xae, 0xa9, 0xa8, 0xab, 0xaa, 0xa5, 0xa4, 0xa7, 0xa6, 0xa1, 0xa0, 0xa3, 0xa2,
-            0xb7, 0xb6, 0xb5, 0xb4, 0xb3, 0xb2, 0xb1, 0xb0, 0xbf, 0xbe, 0xbd, 0xbc, 0xbb, 0xba, 0xb9, 0xb8,
-            0xc1, 0xc0, 0xc3, 0xc2, 0xc5, 0xc4, 0xc7, 0xc6, 0xc9, 0xc8, 0xcb, 0xca, 0xcd, 0xcc, 0xcf, 0xce,
-            0xde, 0xdf, 0xdc, 0xdd, 0xda, 0xdb, 0xd8, 0xd9, 0xd6, 0xd7, 0xd4, 0xd5, 0xd2, 0xd3, 0xd0, 0xd1,
-            0xe6, 0xe7, 0xe4, 0xe5, 0xe2, 0xe3, 0xe0, 0xe1, 0xee, 0xef, 0xec, 0xed, 0xea, 0xeb, 0xe8, 0xe9,
-            0xf4, 0xf5, 0xf6, 0xf7, 0xf0, 0xf1, 0xf2, 0xf3, 0xfc, 0xfd, 0xfe, 0xff, 0xf8, 0xf9, 0xfa, 0xfb];
+        let table = vec![0xc, 0x0, 0xf, 0xa, 0x2, 0xb, 0x9, 0x5, 0x8, 0x3, 0xd, 0x7, 0x1, 0xe, 0x6, 0x4];
 
         let permutation = [1, 4, 5, 0, 13, 6, 9, 2, 7, 12, 3, 8, 11, 14, 15, 10];
+        let inverse     = [3, 0, 7, 10, 1, 2, 5, 8, 11, 6, 15, 12, 9, 4, 13, 14];
 
-        Twine{size: 64, sbox: Sbox::new(8, table), permutation: permutation}
+        Twine{size: 64, sbox: Sbox::new(4, table), permutation: permutation, inverse: inverse}
+    }
+
+    /* Applies the inverse nibble permutation of TWINE to the input.
+     *
+     * input    Input to be permuted.
+     */
+    fn linear_layer_inverse(&self, input: u64) -> u64{
+        let mut output = 0;
+
+        for i in 0..16 {
+            output ^= ((input >> (i*4)) & 0xf) << (self.inverse[i]*4);
+        }
+
+        output
     }
 }
 
@@ -332,6 +362,62 @@ impl Cipher for Twine {
         }
 
         output
+    }
+
+    /* Transforms the input and output mask of the S-box layer to an 
+     * input and output mask of a round.
+     *
+     * input    Input mask to the S-box layer.
+     * output   Output mask to the S-box layer.
+     */
+    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
+        let mut alpha = 0;
+
+        alpha ^= (input & 0xf) << 4;
+        alpha ^= (input & 0xf0) << 8;
+        alpha ^= (input & 0xf00) << 12;
+        alpha ^= (input & 0xf000) << 16;
+        alpha ^= (input & 0xf0000) << 20;
+        alpha ^= (input & 0xf00000) << 24;
+        alpha ^= (input & 0xf000000) << 28;
+        alpha ^= (input & 0xf0000000) << 32;
+
+        alpha ^= (output & 0xf) << 0;
+        alpha ^= (output & 0xf0) << 4;
+        alpha ^= (output & 0xf00) << 8;
+        alpha ^= (output & 0xf000) << 12;
+        alpha ^= (output & 0xf0000) << 16;
+        alpha ^= (output & 0xf00000) << 20;
+        alpha ^= (output & 0xf000000) << 24;
+        alpha ^= (output & 0xf0000000) << 28;
+
+        let mut beta = 0;
+
+        beta ^= ((input & 0xf00000000) >> 32) << 4;
+        beta ^= ((input & 0xf000000000) >> 32) << 8;
+        beta ^= ((input & 0xf0000000000) >> 32) << 12;
+        beta ^= ((input & 0xf00000000000) >> 32) << 16;
+        beta ^= ((input & 0xf000000000000) >> 32) << 20;
+        beta ^= ((input & 0xf0000000000000) >> 32) << 24;
+        beta ^= ((input & 0xf00000000000000) >> 32) << 28;
+        beta ^= ((input & 0xf000000000000000) >> 32) << 32;
+
+        alpha ^= self.linear_layer_inverse(beta);
+
+        beta ^= ((output & 0xf00000000) >> 32) << 0;
+        beta ^= ((output & 0xf000000000) >> 32) << 4;
+        beta ^= ((output & 0xf0000000000) >> 32) << 8;
+        beta ^= ((output & 0xf00000000000) >> 32) << 12;
+        beta ^= ((output & 0xf000000000000) >> 32) << 16;
+        beta ^= ((output & 0xf0000000000000) >> 32) << 20;
+        beta ^= ((output & 0xf00000000000000) >> 32) << 24;
+        beta ^= ((output & 0xf000000000000000) >> 32) << 28;
+
+        beta ^= self.linear_layer(alpha & 0xf0f0f0f0f0f0f0f0);
+
+        beta = self.linear_layer(beta);
+
+        (alpha, beta)
     }
 
     fn linear_layer_inv(&self, input: u64) -> u64 {
@@ -411,6 +497,16 @@ impl Cipher for Puffin {
         output
     }
 
+    /* Transforms the input and output mask of the S-box layer to an 
+     * input and output mask of a round.
+     *
+     * input    Input mask to the S-box layer.
+     * output   Output mask to the S-box layer.
+     */
+    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
+        (input, self.linear_layer(output))
+    }
+
     fn linear_layer_inv(&self, input: u64) -> u64 {
         panic!("not implemented");
     }
@@ -484,6 +580,16 @@ impl Cipher for Skinny {
         output = (output << 16) ^ (output >> 48);
 
         output
+    }
+
+    /* Transforms the input and output mask of the S-box layer to an 
+     * input and output mask of a round.
+     *
+     * input    Input mask to the S-box layer.
+     * output   Output mask to the S-box layer.
+     */
+    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
+        (input, self.linear_layer(output))
     }
 
     fn linear_layer_inv(&self, input: u64) -> u64 {
@@ -574,6 +680,16 @@ impl Cipher for Midori {
         output
     }
 
+    /* Transforms the input and output mask of the S-box layer to an 
+     * input and output mask of a round.
+     *
+     * input    Input mask to the S-box layer.
+     * output   Output mask to the S-box layer.
+     */
+    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
+        (input, self.linear_layer(output))
+    }
+
     fn linear_layer_inv(&self, input: u64) -> u64 {
         panic!("not implemented");
     }
@@ -654,6 +770,16 @@ impl Cipher for Led {
         }
 
         x
+    }
+
+    /* Transforms the input and output mask of the S-box layer to an 
+     * input and output mask of a round.
+     *
+     * input    Input mask to the S-box layer.
+     * output   Output mask to the S-box layer.
+     */
+    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
+        (input, self.linear_layer(output))
     }
 
     fn linear_layer_inv(&self, input: u64) -> u64 {
@@ -740,6 +866,16 @@ impl Cipher for Rectangle {
         output
     }
 
+    /* Transforms the input and output mask of the S-box layer to an 
+     * input and output mask of a round.
+     *
+     * input    Input mask to the S-box layer.
+     * output   Output mask to the S-box layer.
+     */
+    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
+        (input, self.linear_layer(output))
+    }
+
     fn linear_layer_inv(&self, input: u64) -> u64 {
         panic!("not implemented");
     }
@@ -747,5 +883,117 @@ impl Cipher for Rectangle {
     /* Returns the string "RECTANGLE". */
     fn name(&self) -> String {
         String::from("RECTANGLE")
+    }
+}
+
+
+/*****************************************************************
+                            MIBS
+******************************************************************/
+
+/* A structure representing the MIBS cipher.
+ *
+ * size         Size of the cipher in bits. This is fixed to 64.
+ * sbox         The MIBS S-box.
+ * permutation  The MIBS bit permutation.
+ */
+#[derive(Clone)]
+pub struct Mibs {
+    size: usize,
+    sbox: Sbox,
+    permutation: [u64; 8]
+}
+
+impl Mibs {
+    /* Generates a new instance of the MIBS cipher */
+    pub fn new() -> Mibs {
+        let table = vec![4, 15, 3, 8, 13, 10, 12, 0, 11, 5, 7, 14, 2, 6, 1, 9];
+
+        let permutation = [1, 7, 0, 2, 5, 6, 3, 4];
+
+        Mibs{size: 64, sbox: Sbox::new(4, table), permutation: permutation}
+    }
+}
+
+impl Cipher for Mibs {
+    /* Returns the size of the input to MIBS. This is always 64 bits. */
+    fn size(&self) -> usize {
+        self.size
+    }
+
+    /* Returns the number of S-boxes in MIBS. This is always 16. */
+    fn num_sboxes(&self) -> usize {
+        self.size / self.sbox.size
+    }
+
+    /* Returns the MIBS S-box */
+    fn sbox(&self) -> &Sbox {
+        &self.sbox
+    }
+
+    /* Applies the bit permutation of MIBS to the input.
+     *
+     * input    Input to be permuted.
+     */
+    fn linear_layer(&self, input: u64) -> u64{
+        let mut x = input;
+
+        x ^= (x & (0xf << 12)) << 16;
+        x ^= (x & (0xf << 8)) << 16;
+        x ^= (x & (0xf << 4)) << 16;
+        x ^= (x & (0xf << 0)) << 16;
+        x ^= (x & (0xf << 28)) >> 24;
+        x ^= (x & (0xf << 24)) >> 24;
+        x ^= (x & (0xf << 20)) >> 8;
+        x ^= (x & (0xf << 16)) >> 8;
+        x ^= (x & (0xf << 12)) << 4;
+        x ^= (x & (0xf << 8)) << 20;
+        x ^= (x & (0xf << 4)) << 20;
+        x ^= (x & (0xf << 0)) << 20;
+        x ^= (x & (0xf << 28)) >> 16;
+        x ^= (x & (0xf << 24)) >> 16;
+        x ^= (x & (0xf << 20)) >> 16;
+        x ^= (x & (0xf << 16)) >> 16;
+
+        let mut output = 0;
+
+        for i in 0..8 {
+            output ^= ((x >> (4*i)) & 0xf) << (self.permutation[i] * 4);
+        }
+
+        output
+    }
+
+    /* Transforms the input and output mask of the S-box layer to an 
+     * input and output mask of a round.
+     *
+     * input    Input mask to the S-box layer.
+     * output   Output mask to the S-box layer.
+     */
+    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
+        let output = self.linear_layer(output & 0xffffffff) 
+                   ^ (self.linear_layer(output >> 32) << 32);
+        let mut alpha = 0;
+
+        alpha ^= input << 32;
+        alpha ^= output & 0xffffffff;
+        alpha ^= input >> 32;
+
+        let mut beta = 0;
+
+        beta ^= input >> 32;
+        beta ^= output & 0xffffffff00000000;
+        beta ^= input << 32;
+
+        (alpha, beta)
+    }
+
+    fn linear_layer_inv(&self, input: u64) -> u64 {
+        panic!("not implemented");
+    }
+
+    /* Returns the string "MIBS". */
+    fn name(&self) -> String {
+        String::from("MIBS")
     }
 }

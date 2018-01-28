@@ -7,6 +7,7 @@ Skinny
 PUFFIN
 LED
 RECTANGLE
+MIBS
 
 Not implemented:
 PRINCE - Annoying huge matrix multiplication
@@ -15,3 +16,6 @@ Khazad - GF256 multiplication
 PRIDE - Annoying huge matrix multiplication
 LowMC - Randomised linear layer
 PRINTCipher - Key dependent permutation
+LBlock - Different S-boxes
+KATAN - How to handle AND as S-boxes
+Simon - How to handle AND as S-boxes

@@ -1,7 +1,7 @@
 #[derive(Clone, StructOpt)]
 #[structopt(name = "CLI arguments")]
 pub struct CliArgs {
-    #[structopt(short = "c", long = "cipher", help = "Name of the cipher to analyse. Current available ciphers:\n\tpresent\n\tgift\n\ttwine\n\tpuffin\n\tskinny\n\tmidori\n\tled\n\trectangle")]
+    #[structopt(short = "c", long = "cipher", help = "Name of the cipher to analyse. Current available ciphers:\n\tpresent\n\tgift\n\ttwine\n\tpuffin\n\tskinny\n\tmidori\n\tled\n\trectangle\n\tmibs")]
     pub cipher: String,
 
     #[structopt(short = "m", long = "mode", help = "Which mode to run. Current available modes:\n\tsearch\n\tprobe")]
