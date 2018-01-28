@@ -203,7 +203,7 @@ fn create_backward_filters
         scoped::scope(|scope| {
             for t in 0..num_threads {
                 let mut thread_approximations = approximations[r-1].clone();
-                let mut thread_current_filter = alpha_filters[r].clone();
+                let thread_current_filter = &alpha_filters[r];
                 let result_tx = result_tx.clone();
 
                 scope.spawn(move || {
@@ -300,8 +300,8 @@ fn create_hull_set
         scoped::scope(|scope| {
             for t in 0..num_threads {
                 let mut thread_approximations = approximations[rounds-r-1].clone();
-                let thread_alpha_filters = alpha_filters[rounds-r-1].clone();
-                let thread_current_beta_filters = current_beta_filter.clone();
+                let thread_alpha_filters = &alpha_filters[rounds-r-1];
+                let thread_current_beta_filters = &current_beta_filter;
                 let result_tx = result_tx.clone();
 
                 scope.spawn(move || {
