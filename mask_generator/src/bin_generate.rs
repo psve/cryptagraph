@@ -64,6 +64,18 @@ fn run_search(cipher: &(Cipher + Sync), rounds: usize, pattern_limit: usize, fal
     // Dump union of all hull sets if path is specified
     match file_name {
         Some(path) => {
+            let mut file_app_path = path.clone();
+            file_app_path.push_str(".app");
+            let mut file_set_path = path.clone();
+            file_set_path.push_str(".set");
+
+            let mut file = OpenOptions::new()
+                                       .write(true)
+                                       .append(false)
+                                       .create(true)
+                                       .open(file_app_path)
+                                       .expect("Could not open file.");
+
             let mut total_set = HashSet::new();
 
             for (alpha, betas) in &single_round_map.map {
@@ -71,6 +83,8 @@ fn run_search(cipher: &(Cipher + Sync), rounds: usize, pattern_limit: usize, fal
 
                 for &(beta, _) in betas {
                     total_set.insert(beta);
+
+                    write!(file, "{:016x}, {:016x}\n", alpha, beta).expect("Could not write to file.");
                 }
             }
 
@@ -78,7 +92,7 @@ fn run_search(cipher: &(Cipher + Sync), rounds: usize, pattern_limit: usize, fal
                                        .write(true)
                                        .append(false)
                                        .create(true)
-                                       .open(path)
+                                       .open(file_set_path)
                                        .expect("Could not open file.");
             
             for mask in &total_set {
@@ -105,16 +119,22 @@ fn run_search(cipher: &(Cipher + Sync), rounds: usize, pattern_limit: usize, fal
             let mut progress_bar = ProgressBar::new(input_masks.len());
 
             for &alpha in input_masks.iter().skip(t).step_by(num_threads) {
+                // let start = time::precise_time_s();
                 let edge_map = find_paths::find_paths(&single_round_map, rounds, alpha);
                 num_found += edge_map.map.len();
 
-                for (a, b) in edge_map.map {
-                    result.push((a, b.0, b.1));
+                for (a, b) in &edge_map.map {
+                    result.push((a.clone(), b.0, b.1));
                 }
 
                 result.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
-                min_correlation = min_correlation.min(result[result.len()-1].2);
+                if result.len() > 0 {
+                    min_correlation = min_correlation.min(result[result.len()-1].2);
+                }
                 result.truncate(num_keep);
+                // let stop = time::precise_time_s();
+
+                // println!("Found {} [{} s]", edge_map.map.len(), stop-start);
 
                 progress_bar.increment();
             }
@@ -159,7 +179,7 @@ fn main() {
         "probe" => {
             let cipher = match name_to_cipher(options.cipher.as_ref()) {
                 Some(c) => c,
-                None    => panic!("Cipher must be one of: present, gift, twine, puffin, skinny, midori, led, rectangle")
+                None    => panic!("Cipher must be one of: present, gift, twine, puffin, skinny, midori, led, rectangle, mibs")
             };
 
             list_pattern_ranges(cipher.as_ref());
@@ -172,7 +192,7 @@ fn main() {
 
             let cipher = match name_to_cipher(options.cipher.as_ref()) {
                 Some(c) => c,
-                None    => panic!("Cipher must be one of: present, gift, twine, puffin, skinny, midori, led, rectangle")
+                None    => panic!("Cipher must be one of: present, gift, twine, puffin, skinny, midori, led, rectangle, mibs")
             };
 
             run_search(cipher.as_ref(), rounds, pattern_limit, false_positive, file_name);

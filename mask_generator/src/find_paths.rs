@@ -107,10 +107,13 @@ impl EdgeMap {
  * pattern_limit    The maximum number of patterns to generate.
  */
 fn create_alpha_filter(cipher: &Cipher, pattern_limit: usize, false_positive: f64) -> BloomFilter {
+    let num_threads = num_cpus::get();
+    let (result_tx, result_rx) = mpsc::channel();
+
     let mut start = time::precise_time_s();
 
     // Generate alpha bloom filter
-    let mut sorted_alphas = SortedApproximations::new(cipher, pattern_limit, true);
+    let sorted_alphas = SortedApproximations::new(cipher, pattern_limit, true);
     let num_alphas = sorted_alphas.len();
     
     let mut stop = time::precise_time_s();
@@ -118,19 +121,44 @@ fn create_alpha_filter(cipher: &Cipher, pattern_limit: usize, false_positive: f6
     println!("There are {} possible alpha values.\n", sorted_alphas.len());
 
     start = time::precise_time_s();
-    let mut alpha_filter = BloomFilter::new(num_alphas, false_positive);
-    let mut progress_bar = ProgressBar::new(num_alphas);
 
-    loop {
-        match sorted_alphas.next_with_pattern() {
-            Some((approximation, _)) => {
-                alpha_filter.insert(approximation.alpha);
-                progress_bar.increment();
-            }, 
-            None => {
-                break;
-            }
+    scoped::scope(|scope| {
+        for t in 0..num_threads {
+            let mut thread_sorted_alphas = sorted_alphas.clone();
+            let result_tx = result_tx.clone();
+
+            scope.spawn(move || {
+                let mut thread_alpha_filter = BloomFilter::new(num_alphas, false_positive);
+                let mut progress_bar = ProgressBar::new(num_alphas);
+
+                thread_sorted_alphas.skip(t);
+
+                loop {
+                    match thread_sorted_alphas.next_with_pattern() {
+                        Some((approximation, _)) => {
+                            thread_alpha_filter.insert(approximation.alpha);
+                            progress_bar.increment();
+                        }, 
+                        None => {
+                            break;
+                        }
+                    }
+
+                    thread_sorted_alphas.skip(num_threads-1);
+                }
+
+                result_tx.send(thread_alpha_filter).expect("Thread could not send result");
+            });
         }
+    });
+
+    let mut alpha_filter = BloomFilter::new(num_alphas, false_positive);
+
+    for _ in 0..num_threads {
+        let thread_result = result_rx.recv().expect("Main could not receive result");
+        
+        // Find union of thread local filters and kept patterns
+        alpha_filter.union(&thread_result);
     }
 
     stop = time::precise_time_s();
@@ -164,6 +192,7 @@ fn create_backward_filters
 
     // We create new alpha filters by filtering based on the inputs to the next round
     for r in 1..rounds {
+        let mut start = time::precise_time_s();
         println!("\nRound {} ({} approximations, {} inputs)", r, approximations[r-1].len()
                                                                , approximations[r-1].len_alpha());
 
@@ -235,6 +264,9 @@ fn create_backward_filters
                                              .map(|(_, pattern)| pattern.clone())
                                              .collect();
         approximations[r].sorted_sbox_patterns = retained_patterns;
+
+        let mut stop = time::precise_time_s();
+        println!("\n[{} s]", stop-start);
     }
     
     // Reset the iteration of all approximations
@@ -260,6 +292,7 @@ fn create_hull_set
 
     // We maintain two beta filters corresponding to input and output in this round
     for r in 0..rounds {
+        let mut start = time::precise_time_s();
         println!("\nRound {} ({} approximations, {} outputs)", r, approximations[rounds-r-1].len()
                                                                 , approximations[rounds-r-1].len_beta());
 
@@ -331,7 +364,8 @@ fn create_hull_set
         // Remove old alpha filter
         alpha_filters.remove(rounds-r-1);
 
-        println!("\nCollected {} approximations.", hull_approximations.len());
+        let mut stop = time::precise_time_s();
+        println!("\nCollected {} approximations. [{} s]", hull_approximations.len(), stop-start);
     }
 
     (hull_approximations, input_masks)
