@@ -22,6 +22,96 @@ struct MaskNode {
     children : Vec<Option<Box<MaskNode>>>
 }
 
+#[derive(Clone)]
+struct MaskApproximation {
+    corr  : f64,
+    alpha : u64,
+    beta  : u64
+}
+
+#[derive(Clone)]
+struct MaskLAT {
+    map_alpha: HashMap<u64, Vec<MaskApproximation>>,
+}
+
+impl MaskLAT {
+
+    fn correlation(
+        cipher : &Cipher,
+        lat    : &LAT,
+        alpha  : u64,
+        beta   : u64
+    ) -> Option<f64> {
+        let mut corr : f64 = 1.0;
+        let mut alpha      = alpha;
+        let mut beta       = beta;
+
+        let w = cipher.sbox().size;
+        let m = (1 << w) - 1;
+
+        for i in 0..cipher.num_sboxes() {
+
+            match lat.lookup(alpha & m, beta & m) {
+                None    => { return None; }
+                Some(c) => {
+                    corr *= c;
+                }
+            }
+
+            beta  >>= w;
+            alpha >>= w;
+        }
+
+        assert!(beta == 0);
+        assert!(alpha == 0);
+
+        return Some(corr);
+    }
+
+    pub fn new(cipher : &Cipher, alphas : Vec<u64>) -> MaskLAT {
+
+        // construct lat for single sbox instance
+
+        let lat = LAT::new(cipher.sbox());
+
+        // compute possible "betas" for alpha set
+
+        let mut betas = vec![];
+
+        for alpha in alphas.iter() {
+            betas.push(cipher.linear_layer_inv(*alpha));
+        }
+
+        // construct full mask lat
+
+        let mut mlat = MaskLAT {
+            map_alpha : HashMap::new(),
+        };
+
+        for alpha in alphas.iter() {
+            mlat.map_alpha.insert(*alpha, vec![]);
+        }
+
+        for alpha in alphas.iter() {
+            for beta in betas.iter() {
+                match MaskLAT::correlation(cipher, &lat, *alpha, *beta) {
+                    None => (),
+                    Some(corr) => {
+                        let vector = mlat.map_alpha.get_mut(alpha).unwrap();
+                        vector.push(MaskApproximation{
+                            alpha : *alpha,
+                            beta  : *beta,
+                            corr  : corr
+                        });
+                    }
+                }
+            }
+        }
+
+        mlat
+    }
+}
+
 impl MaskTree {
     pub fn new(bits : u64) -> MaskTree {
         MaskTree {
@@ -37,6 +127,23 @@ impl MaskTree {
 
     pub fn len(&mut self) -> usize {
         self.size
+    }
+
+    pub fn contains(&self, value : u64) -> bool {
+        let mut node = &self.root;
+        let mut step = 0;
+        while step < 64 {
+            step = step + node.bits;
+            node = match node.step(value) {
+                None    => { return false; },
+                Some(n) => n
+            };
+        }
+        assert!(match node.step(value) {
+            None    => true,
+            Some(_) => false
+        });
+        return true;
     }
 }
 
@@ -115,6 +222,8 @@ impl MaskPool {
     }
 }
 
+
+
 pub fn step(
     cipher   : &Cipher,
     lat      : &LAT,
@@ -146,6 +255,7 @@ fn step_mask(
     alpha  : u64,
     corr   : f64
 ) {
+    println!("{:x}", alpha);
     fn fill(
         cipher : &Cipher,
         lat    : &LAT,
@@ -177,6 +287,7 @@ fn step_mask(
                     None    => { return; }
                     Some(n) => { node = n; }
                 }
+                continue;
             }
 
             // enumerate possible output parities

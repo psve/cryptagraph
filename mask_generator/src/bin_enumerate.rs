@@ -77,6 +77,7 @@ fn main() {
         let m = cipher.linear_layer_inv(*mask);
         tree.add(m);
         assert!(cipher.linear_layer(m) == *mask);
+        assert!(tree.contains(m));
     };
 
     assert!(tree.len() == masks.len());

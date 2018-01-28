@@ -6,6 +6,7 @@ use cipher::{Cipher, Sbox};
 use approximation::{Approximation};
 
 pub struct LAT {
+    lat       : Vec<Vec<Option<f64>>>,
     map_alpha : Vec<Vec<Approximation>>,
     map_beta  : Vec<Vec<Approximation>>
 }
@@ -14,6 +15,7 @@ impl LAT {
     pub fn new(sbox: &Sbox) -> LAT {
 
         let mut lat = LAT {
+            lat       : vec![],
             map_alpha : vec![],
             map_beta  : vec![]
         };
@@ -24,11 +26,24 @@ impl LAT {
         for _i in 0..values {
             lat.map_alpha.push(vec![]);
             lat.map_beta.push(vec![]);
+            lat.lat.push(vec![]);
         }
 
         for (alpha, row) in sbox.lat.iter().enumerate() {
             for (beta, hits) in row.iter().enumerate() {
-                if *hits == balance { continue; }
+
+                // handle balanced
+
+                let corr = 2.0 * ((*hits as f64) / (values as f64)) - 1.0;
+
+                {
+                    let entry = lat.lat.get_mut(alpha).unwrap();
+                    if *hits == balance {
+                        entry.push(None);
+                        continue;
+                    }
+                    entry.push(Some(corr));
+                }
 
                 // add to alpha map
 
@@ -44,8 +59,27 @@ impl LAT {
                     entry.push(Approximation::new(alpha as u64, beta as u64, None));
                 }
             }
+
+            // assert lat filled
+
+            assert!({
+                let entry = lat.lat.get_mut(alpha).unwrap();
+                entry.len() == values
+            })
         }
         lat
+    }
+
+    pub fn lookup(&self, a : u64, b : u64) -> Option<f64> {
+        match self.lat.get(a as usize) {
+            None      => None,
+            Some(vec) => {
+                match vec.get(b as usize) {
+                    None    => None,
+                    Some(f) => *f
+                }
+            }
+        }
     }
 
     pub fn lookup_alpha(&self, a : u64) -> &Vec<Approximation> {
