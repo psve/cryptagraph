@@ -14,14 +14,9 @@ impl MaskPool {
         }
     }
 
-    pub fn init(&mut self, masks: &Vec<u64>, input: u64) {
+    pub fn init(&mut self, alpha: u64) {
         self.masks.clear();
-        for alpha in masks {
-            self.masks.insert(
-                *alpha,
-                if *alpha == input { 1.0 } else { 0.0 }
-            );
-        }
+        self.masks.insert(alpha, 1.0);
     }
 
     fn clear(&mut self) {
@@ -40,8 +35,8 @@ pub fn step(
         for approx in lat.lookup_alpha(*alpha).iter() {
             assert!(approx.alpha == *alpha);
 
-            let keyed = if parity(*alpha ^ key) == 1 { - approx.corr } else { approx.corr };
-            let delta = corr * keyed;
+            let sign  = if parity(*alpha ^ key) == 1 { -1.0 } else { 1.0 };
+            let delta = corr * sign * approx.corr;
 
             // add relation to accumulator
 

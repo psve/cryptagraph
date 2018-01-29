@@ -1,4 +1,5 @@
 extern crate structopt;
+extern crate rand;
 #[macro_use] extern crate structopt_derive;
 
 mod pool;
@@ -8,6 +9,7 @@ mod analysis;
 mod approximation;
 mod single_round;
 
+use rand::{OsRng, Rng};
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -68,6 +70,7 @@ fn main() {
         None    => panic!("unsupported cipher")
     };
 
+    println!("{:x} {:x}", alpha, beta);
     println!("> calculating approximation table");
 
     let lat = analysis::MaskLAT::new(cipher.as_ref(), &masks);
@@ -79,22 +82,30 @@ fn main() {
 
     println!("> enumerating keys");
 
+    let mut rng = OsRng::new().unwrap();
+    let mut key = vec![0; cipher.key_size() / 8];
+
     for k in 0..options.keys {
 
-        println!("> {:}", k);
+        // generate rounds keys
 
-        pool_old.init(&masks, alpha);
+        rng.fill_bytes(&mut key);
+        let keys = cipher.key_schedule(options.rounds, &key);
 
-        for r in 0..options.rounds {
+        // initalize pool with chosen alpha
+
+        pool_old.init(alpha);
+
+        for rkey in keys.iter() {
 
             // "clock" all patterns one round
 
-            pool::step(&lat, &mut pool_new, &pool_old, 0);
+            pool::step(&lat, &mut pool_new, &pool_old, *rkey);
 
             // swap pools
 
             {
-                let tmp = pool_old;
+                let tmp  = pool_old;
                 pool_old = pool_new;
                 pool_new = tmp;
             }
@@ -106,10 +117,16 @@ fn main() {
                 return;
             }
         }
+
+        println!("{:}", match pool_old.masks.get(&beta) {
+            Some(c) => *c,
+            None    => 0.0
+        });
     }
 
+    /*
     for (k, v) in pool_old.masks.iter() {
-        println!("{:} {:}", k, v);
+        println!("{:x} {:}", k, v);
     }
-
+    */
 }
