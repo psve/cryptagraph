@@ -11,12 +11,11 @@ mod single_round;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::collections::HashSet;
 
 use structopt::StructOpt;
 
 use cipher::*;
-use pool::{MaskPool, MaskTree};
+use pool::MaskPool;
 
 #[derive(Clone, StructOpt)]
 #[structopt(name = "Hull Enumeration")]
@@ -50,7 +49,7 @@ fn main() {
 
     let file      = File::open(options.masks).unwrap();
     let reader    = BufReader::new(&file);
-    let mut masks = HashSet::new();
+    let mut masks = vec![];
 
     for line in reader.lines() {
         let line = line.unwrap();
@@ -58,8 +57,7 @@ fn main() {
             Ok(m)  => m,
             Err(e) => panic!("failed to parse mask")
         };
-        assert!(!masks.contains(&mask));
-        masks.insert(mask);
+        masks.push(mask);
     }
 
     let alpha  = u64::from_str_radix(&options.input, 16).unwrap();
@@ -70,49 +68,43 @@ fn main() {
         None    => panic!("unsupported cipher")
     };
 
-    println!("> creating B-tree over mask set");
-
-    let mut tree = MaskTree::new(cipher.sbox().size as u64);
-    for mask in &masks {
-        let m = cipher.linear_layer_inv(*mask);
-        tree.add(m);
-        assert!(cipher.linear_layer(m) == *mask);
-        assert!(tree.contains(m));
-    };
-
-    assert!(tree.len() == masks.len());
-
     println!("> calculating approximation table");
 
-    let lat = analysis::LAT::new(cipher.sbox());
+    let lat = analysis::MaskLAT::new(cipher.as_ref(), &masks);
 
     // construct pools
 
     let mut pool_old = MaskPool::new();
     let mut pool_new = MaskPool::new();
 
-    pool_old.init(&masks, alpha);
+    println!("> enumerating keys");
 
-    for r in 0..options.rounds {
-        println!("> [round {:}]", r);
+    for k in 0..options.keys {
 
-        // "clock" all patterns one round
+        println!("> {:}", k);
 
-        pool::step(cipher.as_ref(), &lat, &tree, &mut pool_new, &pool_old, 0);
+        pool_old.init(&masks, alpha);
 
-        // swap pools
+        for r in 0..options.rounds {
 
-        {
-            let tmp = pool_old;
-            pool_old = pool_new;
-            pool_new = tmp;
-        }
+            // "clock" all patterns one round
 
-        // check for early termination
+            pool::step(&lat, &mut pool_new, &pool_old, 0);
 
-        if pool_old.masks.len() == 0 {
-            println!("pool empty :(");
-            return;
+            // swap pools
+
+            {
+                let tmp = pool_old;
+                pool_old = pool_new;
+                pool_new = tmp;
+            }
+
+            // check for early termination
+
+            if pool_old.masks.len() == 0 {
+                println!("pool empty :(");
+                return;
+            }
         }
     }
 
