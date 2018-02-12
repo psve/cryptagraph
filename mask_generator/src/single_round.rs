@@ -2,6 +2,7 @@ use approximation::{Approximation};
 use cipher::{Cipher, Sbox};
 use std::cmp::Ordering;
 use std::collections::{HashMap, BinaryHeap};
+use std::hash::{Hash, Hasher};
 
 /* A structure that represents the LAT of an S-box as map from correlations to approximations.
  *
@@ -252,6 +253,12 @@ impl PartialEq for SboxPattern {
 }
 
 impl Eq for SboxPattern {}
+
+impl Hash for SboxPattern {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.pattern.hash(state);
+    }
+}
 
 /***********************************************************************************************/
 
