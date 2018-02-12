@@ -239,6 +239,20 @@ impl SboxPattern {
     }
 }
 
+impl PartialEq for SboxPattern {
+    fn eq(&self, other: &SboxPattern) -> bool {
+        for i in 0..self.pattern.len() {
+            if self.pattern[i] != other.pattern[i] {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+impl Eq for SboxPattern {}
+
 /***********************************************************************************************/
 
 
