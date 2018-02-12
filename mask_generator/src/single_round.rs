@@ -420,6 +420,11 @@ impl<'a> SortedApproximations<'a> {
         len
     }
 
+    /* Sets the alpha field */
+    pub fn set_alpha(&mut self, value: bool) {
+        self.alpha = value;
+    }
+
     /* Returns the next approximation in the sorted order */
     pub fn next_with_pattern(&mut self) -> Option<(Approximation, usize)> {
         // Stop if we have generated all possible approximations
