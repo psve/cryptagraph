@@ -1,3 +1,5 @@
+use rand::{Rng, thread_rng};
+
 /* Hash function specifically for 64 bit integers. Taken from: 
  * https://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key#12996028
  *
@@ -13,6 +15,10 @@ fn hash(input: u64, key: u64) -> u64 {
     output = output ^ (output >> 31);
 
     output
+}
+
+pub fn get_bloom_rand() -> (u64, u64) {
+    (thread_rng().gen::<u64>(), thread_rng().gen::<u64>())
 }
 
 /* Simple Bloom filter using double hashing.
@@ -36,9 +42,13 @@ impl BloomFilter {
      * num_elements         Number of elements to be inserted.
      * false_positive_rate  The desired false positive rate of the filter.
      */
-    pub fn new(num_elements: usize, false_positive_rate: f64) -> BloomFilter {
-        // "Random" number to create independent hash functions
-        let rand = (0x78d587f621a5748c, 0xd3690e3bb8718031);
+    pub fn new(num_elements: usize, false_positive_rate: f64, 
+               rand: Option<(u64, u64)>) -> BloomFilter {
+        let rand = match rand {
+            Some(x) => x,
+            // "Random" number to create independent hash functions
+            None => (0x78d587f621a5748c, 0xd3690e3bb8718031)
+        };
         let k = (-false_positive_rate.log2()).ceil() as usize;
         let size = (-1.44*false_positive_rate.log2() * (num_elements as f64)).ceil() as usize;
         let state_size = ((size as f64) / 64.0).ceil() as usize;

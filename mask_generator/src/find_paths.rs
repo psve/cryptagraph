@@ -4,7 +4,7 @@ use single_round::{SortedApproximations};
 use std::collections::{HashMap,HashSet};
 use time;
 use utility::ProgressBar;
-use bloom::BloomFilter;
+use bloom::{BloomFilter, get_bloom_rand};
 use crossbeam_utils::scoped;
 use std::sync::mpsc;
 use num_cpus;
@@ -115,6 +115,7 @@ fn create_alpha_filter(cipher: &Cipher, pattern_limit: usize, false_positive: f6
     // Generate alpha bloom filter
     let sorted_alphas = SortedApproximations::new(cipher, pattern_limit, true);
     let num_alphas = sorted_alphas.len();
+    let bloom_rand = Some(get_bloom_rand());
     
     let mut stop = time::precise_time_s();
     println!("Alpha patterns generated. [{} s]", stop-start);
@@ -126,9 +127,11 @@ fn create_alpha_filter(cipher: &Cipher, pattern_limit: usize, false_positive: f6
         for t in 0..num_threads {
             let mut thread_sorted_alphas = sorted_alphas.clone();
             let result_tx = result_tx.clone();
+            let bloom_rand = bloom_rand.clone();
 
             scope.spawn(move || {
-                let mut thread_alpha_filter = BloomFilter::new(num_alphas, false_positive);
+                let mut thread_alpha_filter = 
+                    BloomFilter::new(num_alphas, false_positive, bloom_rand);
                 let mut progress_bar = ProgressBar::new(num_alphas);
 
                 thread_sorted_alphas.skip(t);
@@ -152,7 +155,7 @@ fn create_alpha_filter(cipher: &Cipher, pattern_limit: usize, false_positive: f6
         }
     });
 
-    let mut alpha_filter = BloomFilter::new(num_alphas, false_positive);
+    let mut alpha_filter = BloomFilter::new(num_alphas, false_positive, bloom_rand);
 
     for _ in 0..num_threads {
         let thread_result = result_rx.recv().expect("Main could not receive result");
@@ -177,7 +180,7 @@ fn create_backward_filters
     let mut approximations = vec![];
 
     // The first alpha filter allows everything: false positive rate is 1
-    let alpha_filter = BloomFilter::new(1, 1.0);
+    let alpha_filter = BloomFilter::new(1, 1.0, None);
     alpha_filters.push(alpha_filter);
 
     // The next alpha filter is just all input masks in the last round
@@ -198,6 +201,7 @@ fn create_backward_filters
 
         let copy = approximations[r-1].clone();
         approximations.push(copy);
+        let bloom_rand = Some(get_bloom_rand());
 
         // Use scope since cipher contains a reference
         scoped::scope(|scope| {
@@ -205,10 +209,12 @@ fn create_backward_filters
                 let mut thread_approximations = approximations[r-1].clone();
                 let thread_current_filter = &alpha_filters[r];
                 let result_tx = result_tx.clone();
+                let bloom_rand = bloom_rand.clone();
 
                 scope.spawn(move || {
                     let mut thread_new_filter = 
-                        BloomFilter::new(thread_approximations.len_alpha(), false_positive);
+                        BloomFilter::new(thread_approximations.len_alpha(), 
+                                         false_positive, bloom_rand);
                     let mut thread_kept_patterns = 
                         vec![false; thread_approximations.sorted_sbox_patterns.len()];
 
@@ -219,7 +225,8 @@ fn create_backward_filters
                     loop {
                         match thread_approximations.next_with_pattern() {
                             Some((approximation, pattern)) => {
-                                // If an output was an input in the next round, keep its corresponding input
+                                // If an output was an input in the next round, 
+                                // keep its corresponding input
                                 if thread_current_filter.contains(approximation.beta) {
                                     thread_kept_patterns[pattern] = true;
                                     thread_new_filter.insert(approximation.alpha);
@@ -241,8 +248,8 @@ fn create_backward_filters
             }
         });
 
-
-        let mut new_filter = BloomFilter::new(approximations[r-1].len_alpha(), false_positive);
+        let mut new_filter = 
+            BloomFilter::new(approximations[r-1].len_alpha(), false_positive, bloom_rand);
         let mut kept_patterns = vec![false; approximations[r-1].sorted_sbox_patterns.len()];
 
         for _ in 0..num_threads {
@@ -296,6 +303,8 @@ fn create_hull_set
         println!("\nRound {} ({} approximations, {} outputs)", r, approximations[rounds-r-1].len()
                                                                 , approximations[rounds-r-1].len_beta());
 
+        let bloom_rand = Some(get_bloom_rand());
+
         // Use scope since cipher contains a reference
         scoped::scope(|scope| {
             for t in 0..num_threads {
@@ -303,10 +312,12 @@ fn create_hull_set
                 let thread_alpha_filters = &alpha_filters[rounds-r-1];
                 let thread_current_beta_filters = &current_beta_filter;
                 let result_tx = result_tx.clone();
+                let bloom_rand = bloom_rand.clone();
 
                 scope.spawn(move || {
                     let mut thread_new_beta_filter = 
-                        BloomFilter::new(thread_approximations.len_beta(), false_positive);
+                        BloomFilter::new(thread_approximations.len_beta(), 
+                                         false_positive, bloom_rand);
                     let mut progress_bar = ProgressBar::new(thread_approximations.len());
                     let mut thread_hull_approximations = HashSet::new();
                     let mut thread_input_masks = HashSet::new();
@@ -344,7 +355,8 @@ fn create_hull_set
             }
         });
 
-        let mut new_beta_filter = BloomFilter::new(approximations[rounds-r-1].len_beta(), false_positive);
+        let mut new_beta_filter = 
+            BloomFilter::new(approximations[rounds-r-1].len_beta(), false_positive, bloom_rand);
 
         for _ in 0..num_threads {
             let thread_result = result_rx.recv().expect("Main could not receive result");
