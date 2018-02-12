@@ -46,7 +46,7 @@ impl Ord for Approximation {
 impl PartialOrd for Approximation {
     fn partial_cmp(&self, other: &Approximation) -> Option<Ordering> {
         Some(self.cmp(other))
-    }   
+    }
 }
 
 impl PartialEq for Approximation {

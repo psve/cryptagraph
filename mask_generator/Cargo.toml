@@ -11,6 +11,13 @@ structopt-derive = "*"
 num_cpus = "*"
 crossbeam-utils = "*"
 
+[dev-dependencies]
+quickcheck = "0.6"
+quickcheck_macros = "0.6"
+
+#![cfg_attr(test, feature(plugin))]
+#![cfg_attr(test, plugin(quickcheck_macros))]
+
 [[bin]]
 name = "generate"
 path = "src/bin_generate.rs"

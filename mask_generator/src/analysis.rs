@@ -100,6 +100,9 @@ impl LAT {
 
 impl MaskLAT {
 
+    /* Takes a LAT of a compontent function and
+     * computes the correlation of parities over the bricklayer function.
+     */
     fn correlation(
         cipher : &Cipher,
         lat    : &LAT,
@@ -132,18 +135,23 @@ impl MaskLAT {
         return Some(corr);
     }
 
+    /* Constructs a LAT over the bricklayer function
+     * for the particular set of parities
+     */
     pub fn new(cipher : &Cipher, alphas : &Vec<u64>) -> MaskLAT {
 
         // construct lat for single sbox instance
 
         let lat = LAT::new(cipher.sbox());
 
-        // compute possible "betas" for alpha set
+        // assuming SPN; compute possible "betas" for alpha set
 
         let mut betas = vec![];
 
         for alpha in alphas.iter() {
-            betas.push(cipher.linear_layer_inv(*alpha));
+            let beta = cipher.linear_layer_inv(*alpha);
+            assert!(cipher.linear_layer(beta) == *alpha);
+            betas.push(beta);
         }
 
         // construct full mask lat
@@ -159,7 +167,7 @@ impl MaskLAT {
         for alpha in alphas.iter() {
             for beta in betas.iter() {
                 match MaskLAT::correlation(cipher, &lat, *alpha, *beta) {
-                    None => (),
+                    None       => (), // zero correlation
                     Some(corr) => {
                         let vector = mlat.map_alpha.get_mut(alpha).unwrap();
                         vector.push(MaskApproximation{
