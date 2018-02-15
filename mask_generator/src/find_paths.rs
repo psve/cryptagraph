@@ -1,6 +1,6 @@
 use approximation::{Approximation};
 use cipher::Cipher;
-use single_round::{SortedApproximations};
+use single_round::{SortedApproximations, AppType};
 use std::collections::{HashMap,HashSet};
 use time;
 use utility::ProgressBar;
@@ -188,7 +188,7 @@ fn create_backward_filters
     approximations.push(approximation);
 
     // The next alpha filter is just all input masks in the last round
-    sorted_alphas.set_alpha(true);
+    sorted_alphas.set_type_alpha();
     let alpha_filter = create_alpha_filter(&sorted_alphas, false_positive);
     alpha_filters.push(alpha_filter);
 
@@ -394,7 +394,7 @@ fn create_hull_set
 pub fn generate_single_round_map
     (cipher: &Cipher, rounds: usize, pattern_limit: usize, false_positive: f64) -> 
     (SingleRoundMap, Vec<u64>) {
-    let approximation = SortedApproximations::new(cipher, pattern_limit, false);
+    let approximation = SortedApproximations::new(cipher, pattern_limit, AppType::All);
     
     let (mut alpha_filters, mut approximations) = 
         create_backward_filters(rounds, approximation, false_positive);

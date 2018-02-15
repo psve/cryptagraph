@@ -6,6 +6,7 @@ extern crate structopt;
 extern crate rand;
 extern crate num_cpus;
 extern crate crossbeam_utils;
+extern crate min_max_heap;
 
 mod cipher;
 mod utility;
@@ -16,7 +17,7 @@ mod options;
 mod bloom;
 
 use cipher::*;
-use single_round::SortedApproximations;
+use single_round::{SortedApproximations, AppType};
 use options::CliArgs;
 use structopt::StructOpt;
 use std::io::Write;
@@ -31,7 +32,7 @@ use std::sync::mpsc;
  * cipher   The cipher to investigate.
  */
 fn list_pattern_ranges(cipher: &(Cipher + Sync)) {
-    let patterns = SortedApproximations::new(cipher.clone(), usize::max_value(), false);
+    let patterns = SortedApproximations::new(cipher.clone(), usize::max_value(), AppType::All);
     let mut output: Vec<(f64, (usize, usize))> = patterns.range_map.iter()
                                        .map(|(&k, &v)| (f64::from_bits(k).log2(), v))
                                        .collect();

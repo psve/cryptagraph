@@ -1,7 +1,7 @@
 use approximation::{Approximation};
 use cipher::{Cipher, Sbox};
 use std::cmp::Ordering;
-use std::collections::{HashMap, BinaryHeap};
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use min_max_heap::MinMaxHeap;
 
