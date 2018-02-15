@@ -3,6 +3,7 @@ use cipher::{Cipher, Sbox};
 use std::cmp::Ordering;
 use std::collections::{HashMap, BinaryHeap};
 use std::hash::{Hash, Hasher};
+use min_max_heap::MinMaxHeap;
 
 /* A structure that represents the LAT of an S-box as map from correlations to approximations.
  *
@@ -262,6 +263,12 @@ impl Hash for SboxPattern {
 
 /***********************************************************************************************/
 
+#[derive(Clone)]
+pub enum AppType {
+    All,
+    Alpha,
+    Beta
+}
 
 /* A struct that represents a list of single round approximations of a cipher, sorted in
  * ascending order of their absolute correlation. The actual approximations are lazily
@@ -284,7 +291,7 @@ pub struct SortedApproximations<'a> {
     pub current_pattern: usize,
     pub range_map: HashMap<u64, (usize, usize)>,
     current_app_index: Vec<usize>,
-    alpha: bool,
+    app_type: AppType,
 }
 
 impl<'a> SortedApproximations<'a> {
@@ -297,7 +304,7 @@ impl<'a> SortedApproximations<'a> {
      * cipher           The cipher whose round function we are considering.
      * pattern_limit    The number of patterns we want to generate.
      */
-    pub fn new(cipher: &Cipher, pattern_limit: usize, alpha: bool) -> SortedApproximations {
+    pub fn new(cipher: &Cipher, pattern_limit: usize, app_type: AppType) -> SortedApproximations {
         // Generate LAT map and get S-box counter bias values
         let lat_map = LatMap::new(cipher.sbox());
 
@@ -322,7 +329,7 @@ impl<'a> SortedApproximations<'a> {
 
         // We maintain a heap of partial patterns sorted by their correlation value
         let mut sorted_sbox_patterns = vec![];
-        let mut heap = BinaryHeap::new();
+        let mut heap = MinMaxHeap::new();
         heap.push(current_pattern);
 
         // Keep track of current correlation and location in heap
@@ -347,11 +354,11 @@ impl<'a> SortedApproximations<'a> {
                                             current_pattern: 0,
                                             range_map: range_map,
                                             current_app_index: vec![0; cipher.num_sboxes()],
-                                            alpha: alpha}
+                                            app_type: app_type}
             }
 
             // Extract the current best pattern
-            let current_pattern = heap.pop().unwrap();
+            let current_pattern = heap.pop_max().unwrap();
 
             // Extend best pattern and add the result to the heap
             let (pattern_1, pattern_2) = current_pattern.extend(&corr_values);
@@ -369,6 +376,11 @@ impl<'a> SortedApproximations<'a> {
                 },
                 None => ()
             };
+
+            // Limit size of heap
+            while heap.len() > (pattern_limit - sorted_sbox_patterns.len()) {
+                heap.pop_min();
+            }
 
             // Add current pattern if it was complete
             if current_pattern.is_complete() {
@@ -399,7 +411,7 @@ impl<'a> SortedApproximations<'a> {
                                     current_pattern: 0,
                                     range_map: range_map,
                                     current_app_index: vec![0;  cipher.num_sboxes()],
-                                    alpha: alpha}
+                                    app_type: app_type}
     }
 
     /* Returns the number of approximations which can be generated from the patterns. */
@@ -407,10 +419,10 @@ impl<'a> SortedApproximations<'a> {
         let mut len = 0;
 
         for pattern in &self.sorted_sbox_patterns {
-            let combinations = if self.alpha {
-                pattern.pattern.iter().fold(1, |acc, &x| acc * self.lat_map.len_of_alpha(x))
-            } else {
-                pattern.pattern.iter().fold(1, |acc, &x| acc * self.lat_map.len_of(x))
+            let combinations = match self.app_type {
+                AppType::All   => pattern.pattern.iter().fold(1, |acc, &x| acc * self.lat_map.len_of(x)),
+                AppType::Alpha => pattern.pattern.iter().fold(1, |acc, &x| acc * self.lat_map.len_of_alpha(x)),
+                AppType::Beta  => pattern.pattern.iter().fold(1, |acc, &x| acc * self.lat_map.len_of_beta(x)),
             };
 
             len += combinations;
@@ -441,9 +453,19 @@ impl<'a> SortedApproximations<'a> {
         len
     }
 
-    /* Sets the alpha field */
-    pub fn set_alpha(&mut self, value: bool) {
-        self.alpha = value;
+    /* Sets the type field to all */
+    pub fn set_type_all(&mut self) {
+        self.app_type = AppType::All;
+    }
+
+    /* Sets the type field to alpha */
+    pub fn set_type_alpha(&mut self) {
+        self.app_type = AppType::Alpha;
+    }
+
+    /* Sets the type field to beta */
+    pub fn set_type_beta(&mut self) {
+        self.app_type = AppType::Beta;
     }
 
     /* Returns the next approximation in the sorted order */
@@ -464,10 +486,10 @@ impl<'a> SortedApproximations<'a> {
 
             // Get the current S-box approximation corresponding to the bias
             // This unwrap should never fail
-            let sbox_app = if self.alpha {
-                &(*self.lat_map.get_alpha(&value).unwrap())[self.current_app_index[i]]
-            } else {
-                &(*self.lat_map.get(&value).unwrap())[self.current_app_index[i]]
+            let sbox_app = match self.app_type {
+                AppType::All   => &(*self.lat_map.get(&value).unwrap())[self.current_app_index[i]],
+                AppType::Alpha => &(*self.lat_map.get_alpha(&value).unwrap())[self.current_app_index[i]],
+                AppType::Beta  => &(*self.lat_map.get_beta(&value).unwrap())[self.current_app_index[i]]
             };
 
             // Stitch together the full round approximation
@@ -476,10 +498,10 @@ impl<'a> SortedApproximations<'a> {
 
             // Advance approximation index
             if new_pattern {
-                let max_len = if self.alpha {
-                    self.lat_map.len_of_alpha(value)
-                } else {
-                    self.lat_map.len_of(value)
+                let max_len = match self.app_type {
+                    AppType::All   => self.lat_map.len_of(value),
+                    AppType::Alpha => self.lat_map.len_of_alpha(value),
+                    AppType::Beta  => self.lat_map.len_of_beta(value)
                 };
 
                 if self.current_app_index[i]+1 < max_len {
@@ -534,10 +556,10 @@ impl<'a> SortedApproximations<'a> {
 
                  // Advance approximation index
                 if new_pattern {
-                    let max_len = if self.alpha {
-                        self.lat_map.len_of_alpha(value)
-                    } else {
-                        self.lat_map.len_of(value)
+                    let max_len = match self.app_type {
+                        AppType::All   => self.lat_map.len_of(value),
+                        AppType::Alpha => self.lat_map.len_of_alpha(value),
+                        AppType::Beta  => self.lat_map.len_of_beta(value)
                     };
 
                     if self.current_app_index[i]+1 < max_len {
