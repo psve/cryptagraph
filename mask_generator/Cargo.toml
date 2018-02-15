@@ -10,6 +10,7 @@ structopt = "*"
 structopt-derive = "*"
 num_cpus = "*"
 crossbeam-utils = "*"
+min-max-heap = "*"
 
 [[bin]]
 name = "generate"

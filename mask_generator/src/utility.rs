@@ -34,9 +34,10 @@ impl ProgressBar {
     }
 
     pub fn increment(&mut self) {
+        let width = 80;
         self.progress += 1;
 
-        if self.progress > (self.num_items / 100 * self.percentage) {
+        if self.progress > (self.num_items / width * self.percentage) {
             print!("=");
             io::stdout().flush().ok().expect("Could not flush stdout");
             self.percentage += 1;
