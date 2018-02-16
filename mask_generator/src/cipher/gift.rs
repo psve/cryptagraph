@@ -8,7 +8,8 @@ pub struct Gift {
 }
 
 impl Gift {
-    const PERMUTATION : [[u64 ; 0x100] ; 8] = include!("gift.perm");
+    const PERMUTATION     : [[u64 ; 0x100] ; 8] = include!("gift.perm");
+    const PERMUTATION_INV : [[u64 ; 0x100] ; 8] = include!("gift.perm.inv");
 }
 
 pub fn new() -> Gift {
@@ -43,11 +44,9 @@ impl Cipher for Gift {
      */
     fn linear_layer(&self, input: u64) -> u64{
         let mut output = 0;
-
         for i in 0..8 {
             output ^= Gift::PERMUTATION[i][((input >> (i*8)) & 0xff) as usize];
         }
-
         output
     }
 
@@ -62,7 +61,11 @@ impl Cipher for Gift {
     }
 
     fn linear_layer_inv(&self, input: u64) -> u64 {
-        panic!("not implemented");
+        let mut output = 0;
+        for i in 0..8 {
+            output ^= Gift::PERMUTATION_INV[i][((input >> (i*8)) & 0xff) as usize];
+        }
+        output
     }
 
     fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u64> {
@@ -75,7 +78,5 @@ impl Cipher for Gift {
     }
 
 }
-
-
 
 
