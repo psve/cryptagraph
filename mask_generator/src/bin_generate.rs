@@ -47,20 +47,28 @@ fn list_pattern_ranges(cipher: &(Cipher + Sync)) {
  *
  * cipher                   The cipher to investigate.
  * rounds                   The number of rounds.
- * pattern_limit            The maximum number of single round S-box patterns to generate.
+ * pattern_add              The number of single round S-box patterns to add in each pruning round.
+ * pruning_rounds           Number of rounds to perform pruning. 
+ * false_positive           The false positive rate to use for Bloom filters.
+ * file_name                File name prefix to use for output. 
  */
-fn run_search(cipher: &(Cipher + Sync), rounds: usize, pattern_limit: usize, false_positive: f64, file_name: Option<String>) {
+fn run_search
+    (cipher: &(Cipher + Sync), rounds: usize, pattern_add: usize, pruning_rounds: usize,
+     false_positive: f64, file_name: Option<String>) {
     println!("Searching through hulls with varying input mask.");
     println!("\tCipher: {}.", cipher.name());
     println!("\tRounds: {}.", rounds);
-    println!("\tGenerating at most {} S-box patterns.\n", pattern_limit);
+    println!("\tAdding at most {} S-box patterns.", pattern_add);
+    println!("\tPruning over {} rounds.", pruning_rounds);
+    println!("\tUsing {} false positive rate.", false_positive);
 
     let num_threads = num_cpus::get();
     let (result_tx, result_rx) = mpsc::channel();
 
     let start = time::precise_time_s();
-    let (single_round_map, input_masks) 
-        = find_paths::generate_single_round_map(cipher, rounds, pattern_limit, false_positive);
+    let (single_round_map, input_masks) = 
+        find_paths::generate_single_round_map(cipher, rounds, pattern_add, 
+                                              pruning_rounds, false_positive);
     
     // Dump union of all hull sets if path is specified
     match file_name {
@@ -120,7 +128,6 @@ fn run_search(cipher: &(Cipher + Sync), rounds: usize, pattern_limit: usize, fal
             let mut progress_bar = ProgressBar::new(input_masks.len());
 
             for &alpha in input_masks.iter().skip(t).step_by(num_threads) {
-                // let start = time::precise_time_s();
                 let edge_map = find_paths::find_paths(&single_round_map, rounds, alpha);
                 num_found += edge_map.map.len();
 
@@ -133,10 +140,6 @@ fn run_search(cipher: &(Cipher + Sync), rounds: usize, pattern_limit: usize, fal
                     min_correlation = min_correlation.min(result[result.len()-1].2);
                 }
                 result.truncate(num_keep);
-                // let stop = time::precise_time_s();
-
-                // println!("Found {} [{} s]", edge_map.map.len(), stop-start);
-
                 progress_bar.increment();
             }
 
@@ -169,7 +172,7 @@ fn run_search(cipher: &(Cipher + Sync), rounds: usize, pattern_limit: usize, fal
         }
 
         print!("Approximation:   {:?} ", approximation);
-        println!("[{}, {}]\n", num_paths, value.log2());
+        println!("[{}, {}]", num_paths, value.log2());
     }
 }
 
@@ -187,7 +190,8 @@ fn main() {
         },
         "search" => {
             let rounds = options.rounds.expect("Number of rounds must be specified in this mode.");
-            let pattern_limit = options.pattern_limit.expect("Pattern limit must be specified in this mode.");
+            let pattern_add = options.pattern_add.expect("Pattern add must be specified in this mode.");
+            let pruning_rounds = options.pruning_rounds.expect("Number of pruning rounds must be specified in this mode.");
             let false_positive = options.false_positive.expect("False positive rate must be specified in this mode.");
             let file_name = options.file_path;
 
@@ -196,7 +200,8 @@ fn main() {
                 None    => panic!("Cipher must be one of: present, gift, twine, puffin, skinny, midori, led, rectangle, mibs")
             };
 
-            run_search(cipher.as_ref(), rounds, pattern_limit, false_positive, file_name);
+            run_search(cipher.as_ref(), rounds, pattern_add, pruning_rounds, 
+                       false_positive, file_name);
         },
         _ => {
             println!("Mode must be one of: search, probe");

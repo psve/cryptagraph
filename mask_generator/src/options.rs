@@ -11,8 +11,11 @@ pub struct CliArgs {
     pub rounds: Option<usize>,
 
     #[structopt(short = "p", long = "patterns", help = "Number of patterns to generate.")]
-    pub pattern_limit: Option<usize>,
+    pub pattern_add: Option<usize>,
 
+    #[structopt(short = "l", long = "pruning", help = "Number of pruning iterations.")]
+    pub pruning_rounds: Option<usize>,
+    
     #[structopt(short = "x", long = "falsepositive", help = "False positive rate used for Bloom filters.")]
     pub false_positive: Option<f64>,
 
