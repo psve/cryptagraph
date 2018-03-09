@@ -1,6 +1,6 @@
 use approximation::{Approximation};
 use cipher::Cipher;
-use single_round::{SortedApproximations, AppType};
+use single_round::{SboxPattern, SortedApproximations, AppType};
 use std::collections::{HashMap,HashSet};
 use time;
 use utility::ProgressBar;
@@ -21,7 +21,7 @@ pub struct SingleRoundMap {
 
 impl SingleRoundMap {
     /* Construct a new empty map */
-    fn new() -> SingleRoundMap {
+    pub fn new() -> SingleRoundMap {
         SingleRoundMap{ map: HashMap::new() }
     }
 
@@ -29,13 +29,13 @@ impl SingleRoundMap {
      *
      * approximation    A single round approximation.
      */
-    fn insert(&mut self, approximation: Approximation) {
+    pub fn insert(&mut self, approximation: Approximation) {
         let entry = self.map.entry(approximation.alpha).or_insert(vec![]);
         (*entry).push((approximation.beta, approximation.value));
     }
 
     /* Reimplementation of HashMap::get */
-    fn get(&self, alpha: &u64) -> Option<&Vec<(u64, f64)>> {
+    pub fn get(&self, alpha: &u64) -> Option<&Vec<(u64, f64)>> {
         self.map.get(alpha)
     }
 }
@@ -48,18 +48,19 @@ impl SingleRoundMap {
  *
  * map      The mapping from approximation to an edge 
  */
+#[derive(Clone)]
 pub struct EdgeMap {
     pub map: HashMap<Approximation, (usize, f64)>
 }
 
 impl EdgeMap {
     /* Construct a new empty map */
-    fn new() -> EdgeMap {
+    pub fn new() -> EdgeMap {
         EdgeMap{ map: HashMap::new() }
     }
 
     /* Reimplementation of HashMap::insert */
-    fn insert(&mut self, approximation: Approximation, num_paths: usize, value: f64) {
+    pub fn insert(&mut self, approximation: Approximation, num_paths: usize, value: f64) {
         self.map.insert(approximation, (num_paths, value));
     }
 
@@ -86,15 +87,15 @@ impl EdgeMap {
                 return EdgeMap::new();
             }
         };
-}
+    }
 
     /* Reimplementation of HashMap::get_mut */
-    fn get_mut(&mut self, approximation: &Approximation) -> Option<&mut (usize, f64)> {
+    pub fn get_mut(&mut self, approximation: &Approximation) -> Option<&mut (usize, f64)> {
         self.map.get_mut(approximation)
     }
 
     /* Reimplementation of HashMap::contains_key */
-    fn contains_key(&self, approximation: &Approximation) -> bool {
+    pub fn contains_key(&self, approximation: &Approximation) -> bool {
         self.map.contains_key(approximation)
     }
 }
@@ -111,17 +112,14 @@ fn create_alpha_filter(sorted_alphas: &SortedApproximations,
     let num_threads = num_cpus::get();
     let (result_tx, result_rx) = mpsc::channel();
 
-    let mut start = time::precise_time_s();
 
     // Generate alpha bloom filter
     let num_alphas = sorted_alphas.len();
     let bloom_rand = Some(get_bloom_rand());
     
-    let mut stop = time::precise_time_s();
-    println!("Alpha patterns generated. [{} s]", stop-start);
-    println!("There are {} possible alpha values.\n", sorted_alphas.len());
-
-    start = time::precise_time_s();
+    println!("    Round 0 ({} inputs)", sorted_alphas.len());
+    print!("    ");
+    let start = time::precise_time_s();
 
     scoped::scope(|scope| {
         for t in 0..num_threads {
@@ -164,8 +162,7 @@ fn create_alpha_filter(sorted_alphas: &SortedApproximations,
         alpha_filter.union(&thread_result);
     }
 
-    stop = time::precise_time_s();
-    println!("\nAlpha filter generated. [{} s]", stop-start);
+    print!("\n    [{} s]", time::precise_time_s()-start);
 
     alpha_filter
 }
@@ -173,6 +170,8 @@ fn create_alpha_filter(sorted_alphas: &SortedApproximations,
 fn create_backward_filters
     (rounds: usize, approximation: SortedApproximations, false_positive: f64) -> 
     (Vec<BloomFilter>, Vec<SortedApproximations>){
+    println!("  Creating alpha filters:");
+
     let num_threads = num_cpus::get();
     let (result_tx, result_rx) = mpsc::channel();
 
@@ -192,13 +191,12 @@ fn create_backward_filters
     let alpha_filter = create_alpha_filter(&sorted_alphas, false_positive);
     alpha_filters.push(alpha_filter);
 
-    print!("\nProgressively narrowing alpha filter:");
-
     // We create new alpha filters by filtering based on the inputs to the next round
     for r in 1..rounds {
         let mut start = time::precise_time_s();
-        println!("\nRound {} ({} approximations, {} inputs)", r, approximations[r-1].len()
+        println!("\n    Round {} ({} approximations, {} inputs)", r, approximations[r-1].len()
                                                                , approximations[r-1].len_alpha());
+        print!("    ");
 
         let copy = approximations[r-1].clone();
         approximations.push(copy);
@@ -273,8 +271,7 @@ fn create_backward_filters
                                              .collect();
         approximations[r].sorted_sbox_patterns = retained_patterns;
 
-        let mut stop = time::precise_time_s();
-        println!("\n[{} s]", stop-start);
+        print!("\n    [{} s]", time::precise_time_s()-start);
     }
     
     // Reset the iteration of all approximations
@@ -286,23 +283,25 @@ fn create_backward_filters
 }
 
 fn create_hull_set
-    (rounds: usize, false_positive: f64, 
+    (rounds: usize, false_positive: f64, output: bool,
      alpha_filters: &mut Vec<BloomFilter>, approximations: &mut Vec<SortedApproximations>) -> 
-    (HashSet<Approximation>, HashSet<u64>) {
+    (HashSet<Approximation>, HashSet<u64>, HashSet<SboxPattern>) {
     let num_threads = num_cpus::get();
     let (result_tx, result_rx) = mpsc::channel();
 
     let mut hull_approximations = HashSet::new();
     let mut input_masks = HashSet::new();
+    let mut used_patterns = HashSet::new();
     let mut current_beta_filter = alpha_filters[rounds].clone();
 
-    print!("\n\nCreating beta filters:");
+    print!("\n  Creating beta filters:");
 
     // We maintain two beta filters corresponding to input and output in this round
     for r in 0..rounds {
         let mut start = time::precise_time_s();
-        println!("\nRound {} ({} approximations, {} outputs)", r, approximations[rounds-r-1].len()
+        println!("\n    Round {} ({} approximations, {} outputs)", r, approximations[rounds-r-1].len()
                                                                 , approximations[rounds-r-1].len_beta());
+        print!("    ");
 
         let bloom_rand = Some(get_bloom_rand());
 
@@ -321,23 +320,29 @@ fn create_hull_set
                                          false_positive, bloom_rand);
                     let mut progress_bar = ProgressBar::new(thread_approximations.len());
                     let mut thread_hull_approximations = HashSet::new();
+                    let mut thread_used_patterns = HashSet::new();
                     let mut thread_input_masks = HashSet::new();
 
                     thread_approximations.skip(t);
 
                     loop {
                         match thread_approximations.next_with_pattern() {
-                            Some((approximation, _)) => {
+                            Some((approximation, pattern)) => {
                                 // If an approximation exists in the input filter and the alpha
                                 // filter of the next round, keep it and save that approximation
                                 if thread_current_beta_filters.contains(approximation.alpha) &&
                                    thread_alpha_filters.contains(approximation.beta) {
-                                    if r == 0 {
-                                        thread_input_masks.insert(approximation.alpha);
-                                    }
-
                                     thread_new_beta_filter.insert(approximation.beta);
-                                    thread_hull_approximations.insert(approximation);
+                                    let used_patter = thread_approximations.sorted_sbox_patterns[pattern].clone();
+                                    thread_used_patterns.insert(used_patter);
+                                    
+                                    if output {
+                                        if r == 0 {
+                                            thread_input_masks.insert(approximation.alpha);
+                                        }
+                                        
+                                        thread_hull_approximations.insert(approximation);
+                                    }
                                 }
 
                                 progress_bar.increment();
@@ -350,7 +355,10 @@ fn create_hull_set
                         thread_approximations.skip(num_threads-1);
                     }
 
-                    result_tx.send((thread_new_beta_filter, thread_hull_approximations, thread_input_masks))
+                    result_tx.send((thread_new_beta_filter, 
+                                    thread_hull_approximations, 
+                                    thread_input_masks, 
+                                    thread_used_patterns))
                               .expect("Thread could not send result");
                 });
             }
@@ -366,43 +374,80 @@ fn create_hull_set
             new_beta_filter.union(&thread_result.0);
 
             hull_approximations = hull_approximations.union(&thread_result.1).map(|x| x.clone()).collect();
+            used_patterns = used_patterns.union(&thread_result.3).map(|x| x.clone()).collect();
 
             if r == 0 {
                 input_masks = input_masks.union(&thread_result.2).map(|x| *x).collect();
             }
         }
-
         current_beta_filter = new_beta_filter;
 
         // Remove old alpha filter
         alpha_filters.remove(rounds-r-1);
 
-        let mut stop = time::precise_time_s();
-        println!("\nCollected {} approximations. [{} s]", hull_approximations.len(), stop-start);
+        print!("\n    Used {} patterns. [{} s]", used_patterns.len(), time::precise_time_s()-start);
     }
 
-    (hull_approximations, input_masks)
+    (hull_approximations, input_masks, used_patterns)
+}
+
+fn add_patterns(current: &mut SortedApproximations, 
+                reserve: &mut SortedApproximations,
+                pattern_add: usize) {
+    for _ in 0..pattern_add {
+        current.sorted_sbox_patterns.push(reserve.sorted_sbox_patterns.remove(0));
+    }
+
+    current.reset();
 }
 
 /* Generates a single round map for a given cipher.  
  * 
  * cipher               The cipher of interest.
  * rounds               Number of rounds.
- * pattern_limit        The number of patterns to use when generating approximations.
- * false_positive       The false positive rate to use for Bloom filters
+ * pattern_add          The number of patterns to add during pruning.
+ * pruning_rounds       Number of rounds to perform pruning. 
+ * false_positive       The false positive rate to use for Bloom filters.
  */
 pub fn generate_single_round_map
-    (cipher: &Cipher, rounds: usize, pattern_limit: usize, false_positive: f64) -> 
+    (cipher: &Cipher, rounds: usize, pattern_add: usize, pruning_rounds: usize, false_positive: f64) -> 
     (SingleRoundMap, Vec<u64>) {
-    let approximation = SortedApproximations::new(cipher, pattern_limit, AppType::All);
+    let mut current_approximations = SortedApproximations::new(cipher, 0, AppType::All);
+    // let mut all_approximations = SortedApproximations::new(cipher, usize::max_value(), false);
+    let mut all_approximations = SortedApproximations::new(cipher, 50000, AppType::All);
+    let mut pattern_pool: HashSet<SboxPattern> = HashSet::new();
+
+    for r in 2..(pruning_rounds+1) {
+        current_approximations.sorted_sbox_patterns = 
+                pattern_pool.iter().map(|x| x.clone()).collect();
+
+        add_patterns(&mut current_approximations, &mut all_approximations, pattern_add);
+        println!("\n\nPruning over {} rounds ({} patterns left in reserve)", 
+                 r, all_approximations.sorted_sbox_patterns.len());
+
+        let (mut alpha_filters, mut approximations) = 
+            create_backward_filters(r, current_approximations.clone(), false_positive);
+
+        let (_, _, used_patterns) = 
+            create_hull_set(r, false_positive, false, &mut alpha_filters, &mut approximations);
+
+        for pattern in &used_patterns {
+            pattern_pool.insert(pattern.clone());
+        }
+    }
+
+    current_approximations.sorted_sbox_patterns = 
+                pattern_pool.iter().map(|x| x.clone()).collect();
     
+    println!("\n\nFinding final set of approximations.");
+
     let (mut alpha_filters, mut approximations) = 
-        create_backward_filters(rounds, approximation, false_positive);
+        create_backward_filters(rounds, current_approximations.clone(), false_positive);
 
-    let (hull_approximations, input_masks) = 
-        create_hull_set(rounds, false_positive, &mut alpha_filters, &mut approximations);
+    let (hull_approximations, input_masks, _) = 
+        create_hull_set(rounds, false_positive, true, &mut alpha_filters, &mut approximations);
 
-    println!("\n\nCreating single round map:");
+    println!("\n\nCreating single round map.");
 
     let mut single_round_map = SingleRoundMap::new();
     let mut progress_bar = ProgressBar::new(hull_approximations.len());
