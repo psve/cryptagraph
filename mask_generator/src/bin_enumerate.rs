@@ -1,6 +1,8 @@
 extern crate structopt;
 extern crate rand;
-#[macro_use] extern crate structopt_derive;
+
+#[macro_use]
+extern crate structopt_derive;
 
 mod pool;
 mod cipher;
