@@ -20,29 +20,23 @@ fn find_trails (
     patterns: usize,
     file_name_graph: Option<String>) 
     -> (SingleRoundMap, HashSet<u64>) {
-    let (mut graph, vertex_maps) = generate_graph(cipher, rounds, patterns);
+    let graph = generate_graph(cipher, rounds, patterns);
     
     match file_name_graph {
         Some(path) => {
-            print_to_graph_tool(&graph, &vertex_maps, &path);
+            print_to_graph_tool(&graph, &path);
         },
         None => {}
     }
     
     let mut single_round_map = SingleRoundMap::new();
-    let input_masks = vertex_maps[0].left_values().cloned().collect();
+    let input_masks = graph.get_stage(0).unwrap().keys().map(|x| *x as u64).collect();
     let stages = graph.stages();
 
     for stage in 0..stages-1 {
-        let stage_len = graph.stage_len(stage);
-
-        for from in 0..stage_len {
-            let vertex_ref = graph.get_vertex(stage, from).unwrap();
-            let alpha = *vertex_maps[stage].get_by_right(&from).unwrap();
-
-            for (to, length) in &vertex_ref.successors {
-                let beta = *vertex_maps[stage+1].get_by_right(&to).unwrap();
-                let app = Approximation::new(alpha, beta, Some(2.0f64.powf(-length)));
+        for (alpha, vertex_ref) in graph.get_stage(stage).unwrap() {
+            for (beta, length) in &vertex_ref.successors {
+                let app = Approximation::new(*alpha as u64, *beta as u64, Some(2.0f64.powf(-length)));
                 single_round_map.insert(app);
             }
         }

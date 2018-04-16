@@ -143,17 +143,17 @@ pub fn find_hulls(single_round_map: &SingleRoundMap, rounds: usize, alpha: u64) 
                         if new_edge_map.contains_key(&new_approximation) {
                             let existing_edge = new_edge_map.get_mut(&new_approximation)
                                                             .unwrap();
-                            let mut new_intermediate = intermediate.clone();
-                            new_intermediate.insert(Approximation::new(beta, gamma, Some(new_value)));
+                            // let mut new_intermediate = intermediate.clone();
+                            // new_intermediate.insert(Approximation::new(beta, gamma, Some(new_value)));
 
                             // Update number of trails fo und and the squared correlation
                             existing_edge.0 += num_paths;
                             existing_edge.1 += value * new_value;
-                            existing_edge.2 = &existing_edge.2 | &new_intermediate;
+                            // existing_edge.2 = &existing_edge.2 | &new_intermediate;
                         } else {
                             // Otherwise, extend the (alpha, beta) with (beta, gamma)
                             let mut new_intermediate = intermediate.clone();
-                            new_intermediate.insert(Approximation::new(beta, gamma, Some(new_value)));
+                            // new_intermediate.insert(Approximation::new(beta, gamma, Some(new_value)));
                             new_edge_map.insert(new_approximation, 
                                                 num_paths, 
                                                 value * new_value,

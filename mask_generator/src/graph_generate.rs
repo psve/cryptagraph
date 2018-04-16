@@ -15,17 +15,12 @@ use graph_search::MultistageGraph;
 use single_round::{SortedApproximations, AppType};
 use utility::ProgressBar;
 
-/* Generates a mapping between the alpha values of an approximation and graph vertex index. 
- *
- * approximations   Approximations to use.
- * rounds           Number of rounds the graph describes.
- * filters          Vector of filters applied to the alpha values.
- */
-fn get_vertex_maps(
+
+fn get_vertices (
     approximations: &mut SortedApproximations, 
     rounds: usize, 
     filters: &Vec<Filter>) 
-    -> Vec<BiMap<u64, usize>> {
+    -> MultistageGraph {
     // Block size is half of that described by current filter
     let block_size = filters[0].block_size() / 2;
     
@@ -107,38 +102,44 @@ fn get_vertex_maps(
     });
     println!("");
 
-    let mut alpha_sets = vec![HashSet::new(); rounds+1];
-    let mut beta_sets = vec![HashSet::new(); rounds+1];
     let mut vertex_sets = vec![HashSet::new(); rounds+1];
+    {
+        let mut alpha_sets = vec![HashSet::new(); rounds+1];
+        let mut beta_sets = vec![HashSet::new(); rounds+1];
 
-    for _ in 0..num_threads {
-        let thread_result = result_rx.recv().expect("Main could not receive result");
-        
-        for (i, set) in thread_result.0.iter().enumerate() {
-            alpha_sets[i] = alpha_sets[i].union(&set).cloned().collect();
+        for _ in 0..num_threads {
+            let thread_result = result_rx.recv().expect("Main could not receive result");
+            
+            for (i, set) in thread_result.0.iter().enumerate() {
+                alpha_sets[i] = alpha_sets[i].union(&set).cloned().collect();
+            }
+
+            for (i, set) in thread_result.1.iter().enumerate() {
+                beta_sets[i] = beta_sets[i].union(&set).cloned().collect();
+            }
         }
 
-        for (i, set) in thread_result.1.iter().enumerate() {
-            beta_sets[i] = beta_sets[i].union(&set).cloned().collect();
+        vertex_sets[0] = alpha_sets[0].clone();
+        vertex_sets[rounds] = beta_sets[rounds-1].clone();
+
+        for i in 1..rounds {
+            vertex_sets[i] = alpha_sets[i].intersection(&beta_sets[i-1]).cloned().collect();
         }
     }
 
-    vertex_sets[0] = alpha_sets[0].clone();
-    vertex_sets[rounds] = beta_sets[rounds-1].clone();
+    // Create graph from vertex sets
+    let mut graph = MultistageGraph::new(rounds+1);
 
-    for i in 1..rounds {
-        vertex_sets[i] = alpha_sets[i].intersection(&beta_sets[i-1]).cloned().collect();
-    }
+    for i in 0..rounds+1 {
+        for &label in &vertex_sets[i] {
+            graph.add_vertex(i, label as usize);
+        }
 
-    // Map mask values to consecutive integers
-    let mut vertex_maps = vec![BiMap::new(); rounds+1];
-
-    for (r, set) in vertex_sets.iter().enumerate() {
-        vertex_maps[r] = set.iter().enumerate().map(|(i, x)| (*x, i)).collect();
+        vertex_sets[i].clear();
     }
 
     approximations.set_type_all();
-    vertex_maps
+    graph
 }
 
 fn add_edges(graph: &mut MultistageGraph, edges: &HashMap<(usize, usize, usize), f64>) {
@@ -147,11 +148,11 @@ fn add_edges(graph: &mut MultistageGraph, edges: &HashMap<(usize, usize, usize),
     }
 }
 
-fn create_middle_graph(
+fn add_middle_edges(
+    graph: &MultistageGraph,
     approximations: &mut SortedApproximations, 
     rounds: usize, 
-    block_size: usize,
-    vertex_maps: &Vec<BiMap<u64, usize>>) 
+    block_size: usize)
     -> MultistageGraph {
     if block_size < approximations.cipher.sbox().size {
         approximations.set_type_all();
@@ -162,6 +163,7 @@ fn create_middle_graph(
     // Collect edges in parallel
     let num_threads = num_cpus::get();
     let (result_tx, result_rx) = mpsc::channel();
+    let mut base_graph = graph.clone();
     
     scoped::scope(|scope| {
         for t in 0..num_threads {
@@ -179,16 +181,14 @@ fn create_middle_graph(
                 let mut edges = HashMap::new();
 
                 for (approximation, _) in thread_approximations.into_iter() {    
-                    let alpha = compress(approximation.alpha, block_size);
-                    let beta = compress(approximation.beta, block_size);
+                    let alpha = compress(approximation.alpha, block_size) as usize;
+                    let beta = compress(approximation.beta, block_size) as usize;
                     let length = -approximation.value.log2();
-
+                    
                     for r in 1..rounds-1 {
-                        let from = vertex_maps[r].get_by_left(&alpha);
-                        let to = vertex_maps[r+1].get_by_left(&beta);
-
-                        if from.is_some() && to.is_some() {
-                            edges.insert((r, *from.unwrap(), *to.unwrap()), length);
+                        if graph.get_vertex(r, alpha).is_some() && 
+                           graph.get_vertex(r+1, beta).is_some() {
+                            edges.insert((r, alpha, beta), length);
                         }
                     }
 
@@ -200,24 +200,13 @@ fn create_middle_graph(
         }
     });
 
-    // Prepare graph
-    let mut graph = MultistageGraph::new(rounds+1);
-    
-    // Add intermediate vertices
-    for i in 0..rounds+1 {
-        for _ in 0..vertex_maps[i].len() {
-            graph.add_vertex(i);
-        }
-    }
-
     for _ in 0..num_threads {
         let thread_result = result_rx.recv().expect("Main could not receive result");
-        add_edges(&mut graph, &thread_result);
+        add_edges(&mut base_graph, &thread_result);
     }
 
     println!("");
-
-    graph
+    base_graph
 }
 
 /* Creates a linear hull graph, compressing the approximations with the specified block_size. 
@@ -227,12 +216,11 @@ fn create_middle_graph(
  * block_size       Block size of the compression.
  * vertex_maps      Map of the allowed mask values.
  */ 
-fn add_outer_graph(
+fn add_outer_edges (
     graph: &MultistageGraph,
     approximations: &mut SortedApproximations, 
     rounds: usize, 
-    block_size: usize,
-    vertex_maps: &Vec<BiMap<u64, usize>>) 
+    block_size: usize) 
     -> MultistageGraph {
     if block_size < approximations.cipher.sbox().size {
         approximations.set_type_all();
@@ -261,33 +249,27 @@ fn add_outer_graph(
                 let mut edges = HashMap::new();
 
                 for (approximation, _) in thread_approximations.into_iter() {    
-                    let alpha = compress(approximation.alpha, block_size);
-                    let beta = compress(approximation.beta, block_size);
+                    let alpha = compress(approximation.alpha, block_size) as usize;
+                    let beta = compress(approximation.beta, block_size) as usize;
                     let length = -approximation.value.log2();
 
-                    // First round
-                    let from = vertex_maps[0].get_by_left(&alpha);
-                    let to = vertex_maps[1].get_by_left(&beta);
-                    
-                    if from.is_some() && to.is_some() {
-                        let vertex_ref = graph.get_vertex(1, *to.unwrap()).unwrap();
+                    // First round                    
+                    if graph.get_vertex(0, alpha).is_some() && 
+                       graph.get_vertex(1, beta).is_some() {
+                        let vertex_ref = graph.get_vertex(1, beta).unwrap();
 
                         if rounds == 2 || vertex_ref.successors.len() != 0 {
-                            edges.insert((0, *from.unwrap(), *to.unwrap()), length);
-                            // thread_graph.add_edge(1, *from.unwrap(), *to.unwrap(), length);
+                            edges.insert((0, alpha, beta), length);
                         }
                     }
 
                     // Last round
-                    let from = vertex_maps[rounds-1].get_by_left(&alpha);
-                    let to = vertex_maps[rounds].get_by_left(&beta);
-
-                    if from.is_some() && to.is_some() {
-                        let vertex_ref = graph.get_vertex(rounds-1, *from.unwrap()).unwrap();
+                    if graph.get_vertex(rounds-1, alpha).is_some() && 
+                       graph.get_vertex(rounds, beta).is_some() {
+                        let vertex_ref = graph.get_vertex(rounds-1, alpha).unwrap();
 
                         if rounds == 2 || vertex_ref.predecessors.len() != 0 {
-                            edges.insert((rounds-1, *from.unwrap(), *to.unwrap()), length);
-                            // thread_graph.add_edge(rounds, *from.unwrap(), *to.unwrap(), length);
+                            edges.insert((rounds-1, alpha, beta), length);
                         }
                     }
 
@@ -313,47 +295,28 @@ fn add_outer_graph(
  * graph    Graph to prune.
  */
 fn prune_graph(graph: &mut MultistageGraph, start: usize, stop: usize) {
-    let stages = graph.stages();
     let mut pruned = true;
 
     while pruned {
         pruned = false;
 
         for stage in start..stop {
-            let stage_len = graph.stage_len(stage);
+            let mut remove = Vec::new();
 
-            for vertex in 0..stage_len {
-                if stage != stop-1 {
-                    let mut predecessors = HashMap::new();
-                    {
-                        let vertex_ref = graph.get_vertex(stage, vertex).unwrap();
-                        
-                        if vertex_ref.successors.len() == 0 {
-                            predecessors = vertex_ref.predecessors.clone();
-                        }
-                    }
-
-                    for (from, _) in predecessors {
-                        graph.remove_edge(stage-1, from, vertex);
-                        pruned = true;
-                    }
+            for (&label, vertex) in graph.get_stage(stage).unwrap() {
+                if stage == start && vertex.successors.len() == 0 {
+                    remove.push(label);
+                } else if stage == stop-1 && vertex.predecessors.len() == 0 {
+                    remove.push(label);
+                } else if (stage != start && stage != stop-1) && (vertex.successors.len() == 0 ||
+                    vertex.predecessors.len() == 0) {
+                    remove.push(label);
                 }
+            }
 
-                if stage != start {
-                    let mut successors = HashMap::new();
-                    {
-                        let vertex_ref = graph.get_vertex(stage, vertex).unwrap();
-                        
-                        if vertex_ref.predecessors.len() == 0 {
-                            successors = vertex_ref.successors.clone();
-                        }
-                    }
-
-                    for (to, _) in successors {
-                        graph.remove_edge(stage, vertex, to);
-                        pruned = true;
-                    }
-                }
+            for label in remove {
+                graph.remove_vertex(stage, label);
+                pruned = true;
             }
         }
     }
@@ -368,8 +331,7 @@ fn prune_graph(graph: &mut MultistageGraph, start: usize, stop: usize) {
  */
 fn update_filters(
     filters: &mut Vec<Filter>, 
-    graph: &MultistageGraph,
-    vertex_maps: &Vec<BiMap<u64, usize>>) 
+    graph: &MultistageGraph) 
     -> usize {
     let stages = graph.stages();
     let mut good_vertices = 0;
@@ -378,12 +340,12 @@ fn update_filters(
         filters[stage].add_layer();
         let stage_len = graph.stage_len(stage);
 
-        for vertex in 0..stage_len {
-            let vertex_ref = graph.get_vertex(stage, vertex).unwrap();
+        for (alpha, vertex_ref) in graph.get_stage(stage).unwrap() {
+            // let vertex_ref = graph.get_vertex(stage, vertex).unwrap();
                     
             if vertex_ref.successors.len() != 0 || vertex_ref.predecessors.len() != 0 {
-                let alpha = *vertex_maps[stage].get_by_right(&vertex).unwrap();
-                filters[stage].add_plain_value(alpha);
+                // let alpha = *vertex_maps[stage].get_by_right(&vertex).unwrap();
+                filters[stage].add_plain_value(*alpha as u64);
                 good_vertices += 1;
             }
         }
@@ -444,68 +406,6 @@ fn remove_dead_patterns(
     approximations.set_type_all();
 }
 
-/* Creates a graph with all dead edges and vertices removed. 
- *
- * graph        Graph to use as basis.
- * vertex_maps  Vertex mappings of the basis graph.
- */
-fn create_final_graph(
-    graph: &MultistageGraph,
-    vertex_maps: &Vec<BiMap<u64, usize>>) 
-    -> (MultistageGraph, Vec<BiMap<u64, usize>>) {
-    let stages = graph.stages();
-    let mut final_vertex_maps = vec![BiMap::new(); vertex_maps.len()];
-    
-    // Keep only vertices with incoming and outgoing edges 
-    for stage in 0..stages {
-        let stage_len = graph.stage_len(stage);
-
-        for vertex in 0..stage_len {
-            let vertex_ref = graph.get_vertex(stage, vertex).unwrap();
-                    
-            if vertex_ref.successors.len() != 0 || vertex_ref.predecessors.len() != 0 {
-                let alpha = *vertex_maps[stage].get_by_right(&vertex).unwrap();
-                let idx = final_vertex_maps[stage].len();
-                final_vertex_maps[stage].insert(alpha, idx);
-            }
-        }
-    }
-
-    let mut final_graph = MultistageGraph::new(stages);
-
-    // Add intermediate vertices
-    for i in 0..stages {
-        for _ in 0..final_vertex_maps[i].len() {
-            final_graph.add_vertex(i);
-        }
-    }
-
-    // Add edges
-    for stage in 0..stages-1 {
-        let stage_len = graph.stage_len(stage);
-
-        for vertex in 0..stage_len {
-            let vertex_ref = graph.get_vertex(stage, vertex).unwrap();
-            let alpha = *vertex_maps[stage].get_by_right(&vertex).unwrap();
-            
-            match final_vertex_maps[stage].get_by_left(&alpha) {
-                Some(&from) => {
-                    for (successor, &length) in &vertex_ref.successors {
-                        let beta = *vertex_maps[stage+1].get_by_right(successor).unwrap();
-                        let to = *final_vertex_maps[stage+1].get_by_left(&beta).unwrap();
-
-                        final_graph.add_edge(stage, from, to, length);
-                    }
-                }, 
-                None => {}
-            }
-        }
-    }
-
-    println!("Graph has {} vertices and {} edges.", final_graph.num_vertices(), final_graph.num_edges());
-    (final_graph, final_vertex_maps)
-}
-
 fn get_graph_stats(graph: &MultistageGraph) {
     let stages = graph.stages();
 
@@ -532,11 +432,10 @@ pub fn generate_graph(
     cipher: &Cipher, 
     rounds: usize, 
     patterns: usize) 
-    -> (MultistageGraph, Vec<BiMap<u64, usize>>) {
+    -> MultistageGraph {
     let mut approximations = SortedApproximations::new(cipher, patterns, AppType::All);
     let start_block_size = 16;
     let mut filters = vec![Filter::new(start_block_size); rounds+1];
-    let mut vertex_maps = Vec::new();
     let mut graph = MultistageGraph::new(0);
     let levels = (start_block_size as f64).log2() as usize; 
 
@@ -554,11 +453,11 @@ pub fn generate_graph(
         println!("Block size: {} bits.", block_size);
 
         let start = time::precise_time_s();
-        vertex_maps = get_vertex_maps(&mut approximations, rounds, &filters);
-        println!("Vertex maps [{} s]", time::precise_time_s()-start);
-        
+        graph = get_vertices(&mut approximations, rounds, &filters);
+        println!("Added vertices [{} s]", time::precise_time_s()-start);
+
         let start = time::precise_time_s();
-        graph = create_middle_graph(&mut approximations, rounds, block_size, &vertex_maps);
+        graph = add_middle_edges(&graph, &mut approximations, rounds, block_size);
         println!("Graph has {} vertices and {} edges [{} s]", 
             graph.num_vertices(), 
             graph.num_edges(),
@@ -567,43 +466,46 @@ pub fn generate_graph(
         // get_graph_stats(&graph);
 
         let start = time::precise_time_s();
-        prune_graph(&mut graph, 1, rounds-1);
+        if rounds > 2 {
+            prune_graph(&mut graph, 1, rounds);
+        }
         println!("Pruned graph has {} vertices and {} edges [{} s]", 
             graph.num_vertices(), 
             graph.num_edges(), 
             time::precise_time_s()-start);
 
-        // get_graph_stats(&graph);
-
-        let start = time::precise_time_s();
-        graph = add_outer_graph(&graph, &mut approximations, rounds, block_size, &vertex_maps);
-        println!("Graph has {} vertices and {} edges [{} s]", 
-            graph.num_vertices(), 
-            graph.num_edges(),
-            time::precise_time_s()-start);
         // get_graph_stats(&graph);
         /*let mut name = String::from("test_before");
         name.push_str(&r.to_string());
-        print_to_graph_tool(&graph, &vertex_maps, &name);*/
+        print_to_graph_tool(&graph, &name);*/
 
         let start = time::precise_time_s();
-        prune_graph(&mut graph, 0, rounds);
+        graph = add_outer_edges(&mut graph, &mut approximations, rounds, block_size);
+        println!("Graph has {} vertices and {} edges [{} s]", 
+            graph.num_vertices(), 
+            graph.num_edges(),
+            time::precise_time_s()-start);
+
+        // get_graph_stats(&graph);
+        /*let mut name = String::from("test_after");
+        name.push_str(&r.to_string());
+        print_to_graph_tool(&graph, &name);*/
+
+        let start = time::precise_time_s();
+        prune_graph(&mut graph, 0, rounds+1);
         println!("Pruned graph has {} vertices and {} edges [{} s]", 
             graph.num_vertices(), 
             graph.num_edges(), 
             time::precise_time_s()-start);
         // get_graph_stats(&graph);
-        /*let mut name = String::from("test_after");
-        name.push_str(&r.to_string());
-        print_to_graph_tool(&graph, &vertex_maps, &name);*/
-
-        let start = time::precise_time_s();
-        let good_vertices = update_filters(&mut filters, &graph, &vertex_maps);
-        println!("Number of good vertices: {} [{} s]", 
-            good_vertices,
-            time::precise_time_s()-start);
 
         if r != levels - 1 {
+            let start = time::precise_time_s();
+            let good_vertices = update_filters(&mut filters, &graph);
+            println!("Number of good vertices: {} [{} s]", 
+                good_vertices,
+                time::precise_time_s()-start);
+
             let start = time::precise_time_s();
             let patterns_before = approximations.len_patterns();
             remove_dead_patterns(&filters, &mut approximations);
@@ -615,14 +517,13 @@ pub fn generate_graph(
 
         println!("");
     }
-
-    create_final_graph(&graph, &vertex_maps)
+    
+    graph
 }
 
 /* Prints a graph for plotting with python graph-tool */
 pub fn print_to_graph_tool(
-    graph: &MultistageGraph, 
-    vertex_maps: &Vec<BiMap<u64, usize>>,
+    graph: &MultistageGraph,
     path: &String) {
     let mut path = path.clone();
     path.push_str(".graph");
@@ -638,17 +539,13 @@ pub fn print_to_graph_tool(
     for i in 0..stages {
         let stage_len = graph.stage_len(i);
 
-        for j in 0..stage_len {
-            write!(file, "{},{},{}\n", i, j, vertex_maps[i].get_by_right(&j).unwrap());
+        for (j, _) in graph.get_stage(i).unwrap() {
+            write!(file, "{},{}\n", i, j);
         }
     }        
 
     for i in 0..stages-1 {
-        let stage_len = graph.stage_len(i);
-
-        for j in 0..stage_len {
-            let vertex_ref = graph.get_vertex(i, j).unwrap();
-
+        for (j, vertex_ref) in graph.get_stage(i).unwrap() {
             for (k, _) in &vertex_ref.successors {
                 write!(file, "{},{},{},{}\n", i, j, i+1, k);       
             }

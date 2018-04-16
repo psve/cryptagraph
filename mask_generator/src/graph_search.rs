@@ -73,23 +73,17 @@ impl Eq for Candidate { }
 */
 /*************************************************************************************************/
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Vertex {
-    // pub stage: usize,
     pub predecessors: HashMap<usize, f64>,
     pub successors: HashMap<usize, f64>,
-    /*paths: Vec<Path>,
-    candidates: BinaryHeap<Candidate>*/
 }
 
 impl Vertex {
     fn new(stage: usize) -> Vertex {
         Vertex {
-            // stage: stage,
             predecessors: HashMap::new(),
             successors: HashMap::new(),
-            /*paths: Vec::new(),
-            candidates: BinaryHeap::new()*/
         }
     }
 
@@ -114,17 +108,15 @@ impl Vertex {
 
 #[derive(Clone)]
 pub struct MultistageGraph {
-    vertices: Vec<Vec<Vertex>>,
-    // pub current_path: usize
+    vertices: Vec<HashMap<usize, Vertex>>,
 }
 
 impl MultistageGraph {
     pub fn new(stages: usize) -> MultistageGraph {
-        let vertices = vec![vec![]; stages];
+        let vertices = vec![HashMap::new(); stages];
 
         MultistageGraph {
             vertices: vertices,
-            // current_path: 0,
         }
     }
 
@@ -140,50 +132,92 @@ impl MultistageGraph {
         }
     }
 
-    pub fn add_vertex(&mut self, stage: usize) {
+    pub fn add_vertex(&mut self, stage: usize, label: usize) {
         let vertex = Vertex::new(stage);
 
         if stage < self.vertices.len() {
-            self.vertices[stage].push(vertex);
+            self.vertices[stage].insert(label, vertex);
         }
     }
 
     pub fn add_edge(&mut self, stage: usize, from: usize, to: usize, length: f64) {
         if stage+1 < self.vertices.len() && 
-           from < self.vertices[stage].len() && 
-           to < self.vertices[stage+1].len() {
-            // Check if edge already exists
-            if !self.vertices[stage][from].successors.contains_key(&to) {
-                self.vertices[stage][from].add_successor(to, length);
-                self.vertices[stage+1][to].add_predecessor(from, length);
+           self.vertices[stage].contains_key(&from) &&
+           self.vertices[stage+1].contains_key(&to) {
+            {
+                let from_vertex = self.vertices[stage].get_mut(&from).expect("Error 1");
+                from_vertex.add_successor(to, length);
+            }
+            {
+                let to_vertex = self.vertices[stage+1].get_mut(&to).expect("Error 2");
+                to_vertex.add_predecessor(from, length);
             }
         }
     }
 
     pub fn remove_edge(&mut self, stage: usize, from: usize, to: usize) {
         if stage+1 < self.vertices.len() && 
-           from < self.vertices[stage].len() && 
-           to < self.vertices[stage+1].len() {
-            self.vertices[stage][from].remove_successor(to);
-            self.vertices[stage+1][to].remove_predecessor(from);
-        }   
+           self.vertices[stage].contains_key(&from) &&
+           self.vertices[stage+1].contains_key(&to) {
+            {
+                let from_vertex = self.vertices[stage].get_mut(&from).expect("Error 3");
+                from_vertex.remove_successor(to);
+            }
+            {
+                let to_vertex = self.vertices[stage+1].get_mut(&to).expect("Error 4");
+                to_vertex.remove_predecessor(from);
+            }
+        }
     }
 
-    pub fn get_vertex(&self, stage: usize, index: usize) -> Option<&Vertex> {
-        if stage < self.vertices.len() && index < self.vertices[stage].len() {
-            Some(&self.vertices[stage][index])
+    pub fn remove_vertex(&mut self, stage: usize, label: usize) {
+        {
+            let (before, mid) = self.vertices.split_at_mut(stage);
+            let (mid, after) = mid.split_at_mut(1);
+            match mid[0].get(&label) {
+                Some(vertex) => {
+                    match before.last_mut() {
+                        Some(other_stage) => {
+                            for other in vertex.predecessors.keys() {
+                                let mut other_vertex = other_stage.get_mut(&other).expect("Error 5");
+                                other_vertex.successors.remove(&label);
+                            }
+                        },
+                        None => {}
+                    }
+
+                    match after.first_mut() {
+                        Some(other_stage) => {
+                            for other in vertex.successors.keys() {
+                                let mut other_vertex = other_stage.get_mut(&other).expect("Error 6");
+                                other_vertex.predecessors.remove(&label);
+                            }   
+                        },
+                        None => {}
+                    }
+                },
+                None => { }
+            }
+        }
+
+        self.vertices[stage].remove(&label);
+    }
+
+    pub fn get_vertex(&self, stage: usize, label: usize) -> Option<&Vertex> {
+        if stage < self.vertices.len() {
+            self.vertices[stage].get(&label)
         } else {
             None
         }
     }
 
-    /*pub fn get_vertex_mut(&mut self, stage: usize, index: usize) -> Option<&mut Vertex> {
-        if stage < self.vertices.len() && index < self.vertices[stage].len() {
-            Some(&mut self.vertices[stage][index])
+    pub fn get_stage(&self, stage: usize) -> Option<&HashMap<usize, Vertex>> {
+        if stage < self.vertices.len() {
+            Some(&self.vertices[stage]) 
         } else {
             None
         }
-    }*/
+    }
 
     pub fn num_vertices(&self) -> usize {
         self.vertices.iter().fold(0, |sum, ref x| sum + x.len())
@@ -192,12 +226,12 @@ impl MultistageGraph {
     pub fn num_edges(&self) -> usize {
         self.vertices.iter()
                      .fold(0, 
-                        |sum0, ref x| sum0 + x.iter()
+                        |sum0, ref x| sum0 + x.values()
                                            .fold(0, 
                                                 |sum1, ref y| sum1 + y.successors.len()))
     }
 
-    pub fn print(&self) {
+    /*pub fn print(&self) {
         for (i, stage) in self.vertices.iter().enumerate() {
             println!("Stage {}:", i);
 
@@ -211,152 +245,5 @@ impl MultistageGraph {
                 println!("");
             }
         }
-    }
-    
-    /*
-    fn get_path(&self, start_stage: usize, 
-        start_vertex: usize, start_index: usize) -> Option<(f64, Vec<(usize, usize)>)> {
-        let mut vertex_ref = &self.vertices[start_stage][start_vertex];
-        
-        if start_index > vertex_ref.paths.len() - 1 {
-            return None;
-        }
-
-        let mut path = vec![(start_stage, start_vertex)];
-        let length = vertex_ref.paths[start_index].length;
-        let mut current_index = start_index;
-        let mut current_stage = start_stage;
-
-        loop {
-            current_stage = current_stage.wrapping_sub(1);
-            let current_vertex = vertex_ref.paths[current_index].previous;
-            current_index = vertex_ref.paths[current_index].previous_index;
-
-            if current_vertex.is_some() {
-                vertex_ref = &self.vertices[current_stage][current_vertex.expect("Error 0")];
-                path.push((current_stage, current_vertex.expect("Error 1")));
-            } else {
-                break;
-            }
-        }
-
-        path.reverse();
-
-        if length.is_infinite() {
-            None
-        } else {
-            Some((length, path))
-        }
-    }
-
-    fn find_shortest_paths(&mut self) {
-        for vertex in self.vertices[0].iter_mut() {
-            vertex.paths.push(Path::new(0.0, None, 0));
-        }
-
-        for s in 1..self.vertices.len() {
-            for v in 0..self.vertices[s].len() {
-                let mut min_length = f64::INFINITY;
-                let mut min_index = None;
-                
-                {
-                    let vertex = &self.vertices[s][v];
-
-                    for (&predecessor_index, &edge_length) in &vertex.predecessors {
-                        let predecessor_length = self.vertices[s-1][predecessor_index].paths[0].length;
-                        let length = if predecessor_length.is_infinite() {
-                            predecessor_length
-                        } else {
-                            predecessor_length + edge_length
-                        };
-
-                        if length < min_length {
-                            min_length = length;
-                            min_index = Some(predecessor_index);
-                        }
-                    }
-                }
-
-                let vertex = &mut self.vertices[s][v];
-                vertex.paths.push(Path::new(min_length, min_index, 0));
-            }
-        }
-    }
-
-    fn generate_next_path(& mut self, stage: usize, vertex: usize, index: usize) {
-        // B.1
-        if index == 1 && stage > 0 {
-            let mut new_candidates = BinaryHeap::new();
-            
-            {
-                let vertex_ref = &self.vertices[stage][vertex];
-                match vertex_ref.paths[0].previous {
-                    Some(best_previous) => {
-                        for (&idx, &len) in &vertex_ref.predecessors {
-                            if idx == best_previous {
-                                continue;
-                            }
-
-                            let previous_len = self.vertices[stage-1][idx].paths[0].length;
-                            if !previous_len.is_infinite() {
-                                let candidate = Candidate::new(previous_len + len, idx, 0);
-                                new_candidates.push(candidate);
-                            };
-                        }
-                    },
-                    None => {}
-                }
-            }
-
-            self.vertices[stage][vertex].candidates = new_candidates;
-        }
-
-        // Not B.2
-        if !(stage == 0 && index == 1) {
-            // B.3
-            match self.vertices[stage][vertex].paths[index-1].previous {
-                Some(previous_vertex) => {
-                    let previous_index  = self.vertices[stage][vertex].paths[index-1].previous_index;
-
-                    // B.4
-                    if self.vertices[stage-1][previous_vertex].paths.len()-1 < previous_index+1 {
-                        self.generate_next_path(stage-1, previous_vertex, previous_index+1);
-                    }
-
-                    // B.5
-                    // We have to check if a new path was added in the recursive call
-                    if !(self.vertices[stage-1][previous_vertex].paths.len() <= previous_index+1) {
-                        let previous_length = self.vertices[stage-1][previous_vertex].paths[previous_index+1].length;
-                        let new_length = *self.vertices[stage][vertex].predecessors.get(&previous_vertex).expect("Error 4");
-                        let new_candidate = Candidate::new(previous_length + new_length, previous_vertex, previous_index+1);
-                        self.vertices[stage][vertex].candidates.push(new_candidate);
-                    }
-                },
-                None => {}
-            }
-        }
-
-        // B.6
-        match self.vertices[stage][vertex].candidates.pop() {
-            Some(candidate) => {
-                let new_path = Path::from_candidate(&candidate);
-                self.vertices[stage][vertex].paths.push(new_path);
-            },
-            None => {}
-        }
-    }
-
-    pub fn get_next_path(& mut self, stage: usize, vertex: usize) -> Option<(f64, Vec<(usize, usize)>)> {
-        let current_path = self.current_path;
-
-        if current_path == 0 {
-            self.find_shortest_paths();
-        } else {
-            self.generate_next_path(stage, vertex, current_path);
-        }
-
-        self.current_path += 1;
-        self.get_path(stage, vertex, current_path)
-    }
-    */
+    }*/
 }
