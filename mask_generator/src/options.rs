@@ -4,21 +4,15 @@ pub struct CliArgs {
     #[structopt(short = "c", long = "cipher", help = "Name of the cipher to analyse. Current available ciphers:\n\tpresent\n\tgift\n\ttwine\n\tpuffin\n\tskinny\n\tmidori\n\tled\n\trectangle\n\tmibs")]
     pub cipher: String,
 
-    #[structopt(short = "m", long = "mode", help = "Which mode to run. Current available modes:\n\tsearch\n\tprobe")]
-    pub mode: String,
-
     #[structopt(short = "r", long = "rounds", help = "Number of rounds.")]
     pub rounds: Option<usize>,
 
     #[structopt(short = "p", long = "patterns", help = "Number of patterns to generate.")]
-    pub pattern_add: Option<usize>,
+    pub num_patterns: Option<usize>,
 
-    #[structopt(short = "l", long = "pruning", help = "Number of pruning iterations.")]
-    pub pruning_rounds: Option<usize>,
-    
-    #[structopt(short = "x", long = "falsepositive", help = "False positive rate used for Bloom filters.")]
-    pub false_positive: Option<f64>,
+    #[structopt(short = "f", long = "file", help = "File to dump mask set to.")]
+    pub file_name_mask: Option<String>,
 
-    #[structopt(short = "f", long = "file", help = "File to dump mask set to in single mode.")]
-    pub file_path: Option<String>,
+    #[structopt(short = "g", long = "file", help = "File to dump graph data to.")]
+    pub file_name_graph: Option<String>,    
 }

@@ -87,10 +87,12 @@ impl Cipher for Midori {
         (input, self.linear_layer(output))
     }
 
+    #[allow(unused_variables)]
     fn linear_layer_inv(&self, input: u64) -> u64 {
         panic!("not implemented");
     }
 
+    #[allow(unused_variables)]
     fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u64> {
         panic!("not implemented");
     }
@@ -98,5 +100,16 @@ impl Cipher for Midori {
     /* Returns the string "Midori". */
     fn name(&self) -> String {
         String::from("Midori")
+    }
+
+    /* Function that defines how values of input mask, output mask, and bias 
+     * are categorised for an LatMap. 
+     *
+     * alpha    Input mask.
+     * beta     Output mask.
+     * bias     Absolute counter bias.
+     */
+    fn lat_diversify(&self, _alpha: u64, _beta: u64, bias: i16) -> (i16, u16) {
+        (bias, 0)
     }
 }

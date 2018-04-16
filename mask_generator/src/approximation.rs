@@ -8,7 +8,7 @@ use std::hash::{Hash, Hasher};
  * beta     The output mask.
  * value    Squared correlation of the approximation.
  */
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct Approximation {
     pub alpha: u64,
     pub beta: u64,
