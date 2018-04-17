@@ -6,23 +6,37 @@ use std::io::Write;
 use std::sync::mpsc;
 use std::sync::{Arc, Barrier};
 use time;
+use std::cmp;
 
 use cipher::*;
 use graph_search::MultistageGraph;
 use single_round::{SortedApproximations, AppType};
 use utility::ProgressBar;
 
-pub fn compress(x: u64, block_size: usize) -> u64 {
-    let blocks = 64 / block_size;
-    let mask = (1 << block_size) - 1;
+lazy_static! {
+    static ref COMPRESS: Vec<Vec<usize>> = vec![
+        vec![16, 16, 16, 16],
+        vec![8, 8, 16, 8, 8, 16],
+        vec![8, 8, 8, 8, 8, 8, 8, 8],
+        vec![4, 4, 8, 4, 4, 8, 4, 4, 8, 4, 4, 8],
+        vec![4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+        vec![2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    ];
+}
+
+pub fn compress(x: u64, level: usize) -> u64 {
     let mut out = 0;
+    let mut tmp = x;
 
-    for i in 0..blocks {
-        let block_value = (x >> (i*block_size)) & mask;
+    for (i, block) in COMPRESS[level].iter().enumerate() {
+        let mask = ((1 << block) - 1) as u64;
 
-        if block_value != 0 {
+        if tmp & mask != 0 {
             out ^= 1 << i;
         }
+
+        tmp >>= block;
     }
 
     out
@@ -32,7 +46,7 @@ fn get_vertices (
     approximations: &mut SortedApproximations, 
     rounds: usize, 
     filters: &Vec<HashSet<u64>>,
-    block_size: usize) 
+    level: usize) 
     -> MultistageGraph {
     let num_threads = num_cpus::get();
     let barrier = Arc::new(Barrier::new(num_threads));
@@ -69,9 +83,12 @@ fn get_vertices (
                         approximation.alpha
                     };
 
+                    let old = compress(alpha, level - 1);
+                    let new = compress(alpha, level);
+
                     for r in 0..rounds {
-                        if filters[r].contains(&compress(alpha, block_size * 2)) {
-                            alpha_sets[r].insert(compress(alpha, block_size));
+                        if filters[r].contains(&old) {
+                            alpha_sets[r].insert(new);
                         }
                     }
 
@@ -83,7 +100,7 @@ fn get_vertices (
                     println!("");
                 }
 
-                // For the last round, collect all beta values
+                // Collect all beta values allowed by filters
                 let mut beta_sets = vec![HashSet::new(); rounds];
                 let mut progress_bar = ProgressBar::new(num_beta);
                 thread_approximations.set_type_beta();
@@ -95,9 +112,12 @@ fn get_vertices (
                         approximation.beta
                     };
 
+                    let old = compress(beta, level - 1);
+                    let new = compress(beta, level);
+
                     for r in 0..rounds {
-                        if filters[r+1].contains(&compress(beta, block_size * 2)) {
-                            beta_sets[r].insert(compress(beta, block_size));
+                        if filters[r+1].contains(&old) {
+                            beta_sets[r].insert(new);
                         }
                     }
                     
@@ -160,9 +180,12 @@ fn add_middle_edges(
     graph: &MultistageGraph,
     approximations: &mut SortedApproximations, 
     rounds: usize, 
-    block_size: usize)
+    level: usize)
     -> MultistageGraph {
-    if block_size < approximations.cipher.sbox().size {
+    let min_block = COMPRESS[level].iter()
+                                   .fold(approximations.cipher.size(), |acc, &x| cmp::min(x, acc));
+
+    if min_block < approximations.cipher.sbox().size {
         approximations.set_type_all();
     } else {
         approximations.set_type_beta();
@@ -182,15 +205,19 @@ fn add_middle_edges(
                 let mut progress_bar = ProgressBar::new(thread_approximations.len());
                 
                 // Annoying solution, hopefully okay
-                let tmp = thread_approximations.sbox_patterns.iter().cloned().skip(t).step_by(num_threads).collect();
+                let tmp = thread_approximations.sbox_patterns.iter()
+                                                             .cloned()
+                                                             .skip(t)
+                                                             .step_by(num_threads)
+                                                             .collect();
                 thread_approximations.sbox_patterns = tmp;
 
                 // Collect edges
                 let mut edges = HashMap::new();
 
                 for (approximation, _) in thread_approximations.into_iter() {    
-                    let alpha = compress(approximation.alpha, block_size) as usize;
-                    let beta = compress(approximation.beta, block_size) as usize;
+                    let alpha = compress(approximation.alpha, level) as usize;
+                    let beta = compress(approximation.beta, level) as usize;
                     let length = -approximation.value.log2();
                     
                     for r in 1..rounds-1 {
@@ -217,20 +244,23 @@ fn add_middle_edges(
     base_graph
 }
 
-/* Creates a linear hull graph, compressing the approximations with the specified block_size. 
+/* Creates a linear hull graph, compressing the approximations with the specified level. 
  *
  * approximations   Approximations to use.
  * rounds           Number of rounds.
- * block_size       Block size of the compression.
+ * level       Block size of the compression.
  * vertex_maps      Map of the allowed mask values.
  */ 
 fn add_outer_edges (
     graph: &MultistageGraph,
     approximations: &mut SortedApproximations, 
     rounds: usize, 
-    block_size: usize) 
+    level: usize) 
     -> MultistageGraph {
-    if block_size < approximations.cipher.sbox().size {
+    let min_block = COMPRESS[level].iter()
+                                   .fold(approximations.cipher.size(), |acc, &x| cmp::min(x, acc));
+
+    if min_block < approximations.cipher.sbox().size {
         approximations.set_type_all();
     } else {
         approximations.set_type_beta();
@@ -257,8 +287,8 @@ fn add_outer_edges (
                 let mut edges = HashMap::new();
 
                 for (approximation, _) in thread_approximations.into_iter() {    
-                    let alpha = compress(approximation.alpha, block_size) as usize;
-                    let beta = compress(approximation.beta, block_size) as usize;
+                    let alpha = compress(approximation.alpha, level) as usize;
+                    let beta = compress(approximation.beta, level) as usize;
                     let length = -approximation.value.log2();
 
                     // First round                    
@@ -366,24 +396,59 @@ fn update_filters(
 fn remove_dead_patterns(
     filters: &Vec<HashSet<u64>>, 
     approximations: &mut SortedApproximations,
-    block_size: usize) {
-    let mut good_patterns = vec![false; approximations.len_patterns()];
-    approximations.set_type_alpha();
+    level: usize) {
+    let num_threads = num_cpus::get();
+    let (result_tx, result_rx) = mpsc::channel();
+    
+    scoped::scope(|scope| {
+        for t in 0..num_threads {
+            let mut thread_approximations = approximations.clone();
+            let result_tx = result_tx.clone();
 
-    for (approximation, pattern_idx) in approximations.into_iter() {
-        let alpha = approximation.alpha;
-        let good = filters.iter().fold(false, |acc, ref x| acc | x.contains(&compress(alpha, block_size)));
-        good_patterns[pattern_idx] |= good;
-    }
+            scope.spawn(move || {
+                thread_approximations.set_type_alpha();
+                let mut progress_bar = ProgressBar::new(thread_approximations.len());
+                
+                // Annoying solution, hopefully okay
+                let tmp = thread_approximations.sbox_patterns.iter()
+                                                             .cloned()
+                                                             .skip(t)
+                                                             .step_by(num_threads)
+                                                             .collect();
+                thread_approximations.sbox_patterns = tmp;
 
-    // Keep only good patterns
-    let mut new_patterns = vec![];
+                let mut good_patterns = vec![false; thread_approximations.len_patterns()];
 
-    for (i, keep) in good_patterns.iter().enumerate() {
-        if *keep {
-            new_patterns.push(approximations.sbox_patterns[i].clone());
+                for (approximation, pattern_idx) in thread_approximations.into_iter() {
+                    let alpha = approximation.alpha;
+                    let good = filters.iter()
+                                      .fold(false, 
+                                            |acc, ref x| acc | x.contains(&compress(alpha, level)));
+                    good_patterns[pattern_idx] |= good;
+                    progress_bar.increment();
+                }
+
+                // Keep only good patterns
+                let mut new_patterns = vec![];
+
+                for (i, keep) in good_patterns.iter().enumerate() {
+                    if *keep {
+                        new_patterns.push(thread_approximations.sbox_patterns[i].clone());
+                    }
+                }
+
+                result_tx.send(new_patterns).expect("Thread could not send result");
+            });
         }
+    });
+
+    let mut new_patterns = Vec::new();
+
+    for _ in 0..num_threads {
+        let mut thread_result = result_rx.recv().expect("Main could not receive result");
+        new_patterns.append(&mut thread_result);
     }
+    println!("");
 
     approximations.sbox_patterns = new_patterns;
     approximations.set_type_all();
@@ -402,14 +467,10 @@ pub fn generate_graph(
     patterns: usize) 
     -> MultistageGraph {
     let mut approximations = SortedApproximations::new(cipher, patterns, AppType::All);
-    let mut block_size = 16;
-    let mut filters = vec![(0..(1 << (cipher.size() / (block_size)))).collect() ; rounds+1];
+    let mut filters = vec![(0..(1 << (cipher.size() / 16))).collect() ; rounds+1];
     let mut graph = MultistageGraph::new(0);
-    let levels = (block_size as f64).log2() as usize; 
 
-    for r in 0..levels {
-        block_size /= 2;
-
+    for level in 1..COMPRESS.len() {
         approximations.set_type_all();
         let num_app = approximations.len();
         approximations.set_type_alpha();
@@ -417,23 +478,23 @@ pub fn generate_graph(
         approximations.set_type_beta();
         let num_beta = approximations.len();
 
+        println!("Level {}.", level);
         println!("{} approximations ({} alpha, {} beta).", num_app, num_alpha, num_beta);
-        println!("Block size: {} bits.", block_size);
 
         let start = time::precise_time_s();
-        graph = get_vertices(&mut approximations, rounds, &filters, block_size);
+        graph = get_vertices(&mut approximations, rounds, &filters, level);
         println!("Added vertices [{} s]", time::precise_time_s()-start);
 
         let start = time::precise_time_s();
-        graph = add_middle_edges(&graph, &mut approximations, rounds, block_size);
+        graph = add_middle_edges(&graph, &mut approximations, rounds, level);
         println!("Graph has {} vertices and {} edges [{} s]", 
             graph.num_vertices(), 
             graph.num_edges(),
             time::precise_time_s()-start);
 
-        let mut name = String::from("test_step1");
-        name.push_str(&r.to_string());
-        print_to_graph_tool(&graph, &name);
+        /*let mut name = String::from("test_step1");
+        name.push_str(&level.to_string());
+        print_to_graph_tool(&graph, &name);*/
 
         let start = time::precise_time_s();
         if rounds > 2 {
@@ -444,19 +505,19 @@ pub fn generate_graph(
             graph.num_edges(), 
             time::precise_time_s()-start);
 
-        let mut name = String::from("test_step2");
-        name.push_str(&r.to_string());
-        print_to_graph_tool(&graph, &name);
+        /*let mut name = String::from("test_step2");
+        name.push_str(&level.to_string());
+        print_to_graph_tool(&graph, &name);*/
 
         let start = time::precise_time_s();
-        graph = add_outer_edges(&mut graph, &mut approximations, rounds, block_size);
+        graph = add_outer_edges(&mut graph, &mut approximations, rounds, level);
         println!("Graph has {} vertices and {} edges [{} s]", 
             graph.num_vertices(), 
             graph.num_edges(),
             time::precise_time_s()-start);
 
         let mut name = String::from("test_step3");
-        name.push_str(&r.to_string());
+        name.push_str(&level.to_string());
         print_to_graph_tool(&graph, &name);
 
         let start = time::precise_time_s();
@@ -466,11 +527,11 @@ pub fn generate_graph(
             graph.num_edges(), 
             time::precise_time_s()-start);
         
-        let mut name = String::from("test_step4");
-        name.push_str(&r.to_string());
-        print_to_graph_tool(&graph, &name);
+        /*let mut name = String::from("test_step4");
+        name.push_str(&level.to_string());
+        print_to_graph_tool(&graph, &name);*/
 
-        if r != levels - 1 {
+        if level != COMPRESS.len() - 1 {
             let start = time::precise_time_s();
             let good_vertices = update_filters(&mut filters, &graph);
             println!("Number of good vertices: {} [{} s]", 
@@ -479,7 +540,7 @@ pub fn generate_graph(
 
             let start = time::precise_time_s();
             let patterns_before = approximations.len_patterns();
-            remove_dead_patterns(&filters, &mut approximations, block_size);
+            remove_dead_patterns(&filters, &mut approximations, level);
             let patterns_after = approximations.len_patterns();
             println!("Removed {} dead patterns [{} s]", 
                 patterns_before - patterns_after, 

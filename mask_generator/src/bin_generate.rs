@@ -1,5 +1,6 @@
 #![feature(iterator_step_by)]
 
+#[macro_use] extern crate lazy_static;
 extern crate time;
 extern crate structopt;
 #[macro_use] extern crate structopt_derive;
