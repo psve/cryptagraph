@@ -6,7 +6,6 @@ extern crate structopt;
 extern crate rand;
 extern crate num_cpus;
 extern crate crossbeam_utils;
-extern crate bimap;
 
 mod cipher;
 mod utility;
@@ -16,7 +15,6 @@ mod approximation;
 mod find_hulls;
 mod options;
 mod graph_search;
-mod filter;
 mod graph_generate;
 
 use cipher::*;

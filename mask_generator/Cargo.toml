@@ -10,7 +10,6 @@ structopt = "*"
 structopt-derive = "*"
 num_cpus = "*"
 crossbeam-utils = "*"
-bimap = "*"
 
 [dev-dependencies]
 quickcheck = "0.6"

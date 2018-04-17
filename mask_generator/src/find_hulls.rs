@@ -104,11 +104,6 @@ impl EdgeMap {
     pub fn contains_key(&self, approximation: &Approximation) -> bool {
         self.map.contains_key(approximation)
     }
-
-    /* Reimplementation of HashMap::empty */
-    pub fn is_empty(&self) -> bool {
-        self.map.is_empty()
-    }
 }
 
 /***********************************************************************************************/

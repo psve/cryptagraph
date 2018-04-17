@@ -80,7 +80,7 @@ pub struct Vertex {
 }
 
 impl Vertex {
-    fn new(stage: usize) -> Vertex {
+    fn new() -> Vertex {
         Vertex {
             predecessors: HashMap::new(),
             successors: HashMap::new(),
@@ -95,13 +95,13 @@ impl Vertex {
         self.successors.insert(successor, length);
     }
 
-    fn remove_predecessor(&mut self, predecessor: usize) {
+    /*fn remove_predecessor(&mut self, predecessor: usize) {
         self.predecessors.remove(&predecessor);
     }
 
     fn remove_successor(&mut self, successor: usize) {
         self.successors.remove(&successor);
-    }
+    }*/
 }
 
 /*************************************************************************************************/
@@ -124,16 +124,16 @@ impl MultistageGraph {
         self.vertices.len()
     }
 
-    pub fn stage_len(&self, stage: usize) -> usize {
+    /*pub fn stage_len(&self, stage: usize) -> usize {
         if stage < self.vertices.len() {
             self.vertices[stage].len()
         } else {
             0
         }
-    }
+    }*/
 
     pub fn add_vertex(&mut self, stage: usize, label: usize) {
-        let vertex = Vertex::new(stage);
+        let vertex = Vertex::new();
 
         if stage < self.vertices.len() {
             self.vertices[stage].insert(label, vertex);
@@ -155,7 +155,7 @@ impl MultistageGraph {
         }
     }
 
-    pub fn remove_edge(&mut self, stage: usize, from: usize, to: usize) {
+    /*pub fn remove_edge(&mut self, stage: usize, from: usize, to: usize) {
         if stage+1 < self.vertices.len() && 
            self.vertices[stage].contains_key(&from) &&
            self.vertices[stage+1].contains_key(&to) {
@@ -168,7 +168,7 @@ impl MultistageGraph {
                 to_vertex.remove_predecessor(from);
             }
         }
-    }
+    }*/
 
     pub fn remove_vertex(&mut self, stage: usize, label: usize) {
         {
