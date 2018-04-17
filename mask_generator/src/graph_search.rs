@@ -135,7 +135,7 @@ impl MultistageGraph {
     pub fn add_vertex(&mut self, stage: usize, label: usize) {
         let vertex = Vertex::new();
 
-        if stage < self.vertices.len() {
+        if stage < self.vertices.len() && !self.vertices[stage].contains_key(&label) {
             self.vertices[stage].insert(label, vertex);
         }
     }
@@ -179,6 +179,7 @@ impl MultistageGraph {
                     match before.last_mut() {
                         Some(other_stage) => {
                             for other in vertex.predecessors.keys() {
+                                // println!("{} {} {}", stage, label, other);
                                 let mut other_vertex = other_stage.get_mut(&other).expect("Error 5");
                                 other_vertex.successors.remove(&label);
                             }

@@ -16,9 +16,9 @@ use utility::ProgressBar;
 lazy_static! {
     static ref COMPRESS: Vec<Vec<usize>> = vec![
         vec![16, 16, 16, 16],
-        vec![8, 8, 16, 8, 8, 16],
+        // vec![8, 8, 16, 8, 8, 16],
         vec![8, 8, 8, 8, 8, 8, 8, 8],
-        vec![4, 4, 8, 4, 4, 8, 4, 4, 8, 4, 4, 8],
+        // vec![4, 4, 8, 4, 4, 8, 4, 4, 8, 4, 4, 8],
         vec![4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
         vec![2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
@@ -72,7 +72,7 @@ fn get_vertices (
                 thread_approximations.sbox_patterns = tmp;
 
                 // Collect all alpha values allowed by filters
-                let mut alpha_sets = vec![HashSet::new(); rounds];
+                let mut alpha_sets = vec![HashSet::new(); rounds-1];
                 let mut progress_bar = ProgressBar::new(num_alpha);
                 thread_approximations.set_type_alpha();
 
@@ -86,8 +86,8 @@ fn get_vertices (
                     let old = compress(alpha, level - 1);
                     let new = compress(alpha, level);
 
-                    for r in 0..rounds {
-                        if filters[r].contains(&old) {
+                    for r in 0..rounds-1 {
+                        if filters[r+1].contains(&old) {
                             alpha_sets[r].insert(new);
                         }
                     }
@@ -100,8 +100,8 @@ fn get_vertices (
                     println!("");
                 }
 
-                // Collect all beta values allowed by filters
-                let mut beta_sets = vec![HashSet::new(); rounds];
+                // For the last round, collect all beta values
+                let mut beta_sets = vec![HashSet::new(); rounds-1];
                 let mut progress_bar = ProgressBar::new(num_beta);
                 thread_approximations.set_type_beta();
 
@@ -115,7 +115,7 @@ fn get_vertices (
                     let old = compress(beta, level - 1);
                     let new = compress(beta, level);
 
-                    for r in 0..rounds {
+                    for r in 0..rounds-1 {
                         if filters[r+1].contains(&old) {
                             beta_sets[r].insert(new);
                         }
@@ -130,10 +130,10 @@ fn get_vertices (
     });
     println!("");
 
-    let mut vertex_sets = vec![HashSet::new(); rounds+1];
+    let mut vertex_sets = vec![HashSet::new(); rounds-1];
     {
-        let mut alpha_sets = vec![HashSet::new(); rounds+1];
-        let mut beta_sets = vec![HashSet::new(); rounds+1];
+        let mut alpha_sets = vec![HashSet::new(); rounds-1];
+        let mut beta_sets = vec![HashSet::new(); rounds-1];
 
         for _ in 0..num_threads {
             let thread_result = result_rx.recv().expect("Main could not receive result");
@@ -147,20 +147,17 @@ fn get_vertices (
             }
         }
 
-        vertex_sets[0] = alpha_sets[0].clone();
-        vertex_sets[rounds] = beta_sets[rounds-1].clone();
-
-        for i in 1..rounds {
-            vertex_sets[i] = alpha_sets[i].intersection(&beta_sets[i-1]).cloned().collect();
+        for i in 0..rounds-1 {
+            vertex_sets[i] = alpha_sets[i].intersection(&beta_sets[i]).cloned().collect();
         }
     }
 
     // Create graph from vertex sets
     let mut graph = MultistageGraph::new(rounds+1);
 
-    for i in 0..rounds+1 {
+    for i in 0..rounds-1 {
         for &label in &vertex_sets[i] {
-            graph.add_vertex(i, label as usize);
+            graph.add_vertex(i+1, label as usize);
         }
 
         vertex_sets[i].clear();
@@ -172,6 +169,17 @@ fn get_vertices (
 
 fn add_edges(graph: &mut MultistageGraph, edges: &HashMap<(usize, usize, usize), f64>) {
     for (&(stage, from, to), &length) in edges {
+        graph.add_edge(stage, from, to, length);
+    }
+}
+
+fn add_edges_and_vertices(graph: &mut MultistageGraph, edges: &HashMap<(usize, usize, usize), f64>) {
+    for (&(stage, from, to), &length) in edges {
+        if stage == 0 {
+            graph.add_vertex(0, from);
+        } else {
+            graph.add_vertex(stage+1, to);
+        }
         graph.add_edge(stage, from, to, length);
     }
 }
@@ -280,7 +288,11 @@ fn add_outer_edges (
                 let mut progress_bar = ProgressBar::new(thread_approximations.len());
                 
                 // Annoying solution, hopefully okay
-                let tmp = thread_approximations.sbox_patterns.iter().cloned().skip(t).step_by(num_threads).collect();
+                let tmp = thread_approximations.sbox_patterns.iter()
+                                                             .cloned()
+                                                             .skip(t)
+                                                             .step_by(num_threads)
+                                                             .collect();
                 thread_approximations.sbox_patterns = tmp;
 
                 // Add edges
@@ -292,7 +304,7 @@ fn add_outer_edges (
                     let length = -approximation.value.log2();
 
                     // First round                    
-                    if graph.get_vertex(0, alpha).is_some() && 
+                    if /*graph.get_vertex(0, alpha).is_some() && */
                        graph.get_vertex(1, beta).is_some() {
                         let vertex_ref = graph.get_vertex(1, beta).unwrap();
 
@@ -302,8 +314,8 @@ fn add_outer_edges (
                     }
 
                     // Last round
-                    if graph.get_vertex(rounds-1, alpha).is_some() && 
-                       graph.get_vertex(rounds, beta).is_some() {
+                    if graph.get_vertex(rounds-1, alpha).is_some() /*&& 
+                       graph.get_vertex(rounds, beta).is_some()*/ {
                         let vertex_ref = graph.get_vertex(rounds-1, alpha).unwrap();
 
                         if rounds == 2 || vertex_ref.predecessors.len() != 0 {
@@ -321,7 +333,7 @@ fn add_outer_edges (
 
     for _ in 0..num_threads {
         let thread_result = result_rx.recv().expect("Main could not receive result");
-        add_edges(&mut base_graph, &thread_result);
+        add_edges_and_vertices(&mut base_graph, &thread_result);
     }
 
     println!("");
@@ -492,9 +504,9 @@ pub fn generate_graph(
             graph.num_edges(),
             time::precise_time_s()-start);
 
-        /*let mut name = String::from("test_step1");
+        let mut name = String::from("test_step1");
         name.push_str(&level.to_string());
-        print_to_graph_tool(&graph, &name);*/
+        print_to_graph_tool(&graph, &name);
 
         let start = time::precise_time_s();
         if rounds > 2 {
@@ -505,9 +517,9 @@ pub fn generate_graph(
             graph.num_edges(), 
             time::precise_time_s()-start);
 
-        /*let mut name = String::from("test_step2");
+        let mut name = String::from("test_step2");
         name.push_str(&level.to_string());
-        print_to_graph_tool(&graph, &name);*/
+        print_to_graph_tool(&graph, &name);
 
         let start = time::precise_time_s();
         graph = add_outer_edges(&mut graph, &mut approximations, rounds, level);
@@ -519,17 +531,6 @@ pub fn generate_graph(
         let mut name = String::from("test_step3");
         name.push_str(&level.to_string());
         print_to_graph_tool(&graph, &name);
-
-        let start = time::precise_time_s();
-        prune_graph(&mut graph, 0, rounds+1);
-        println!("Pruned graph has {} vertices and {} edges [{} s]", 
-            graph.num_vertices(), 
-            graph.num_edges(), 
-            time::precise_time_s()-start);
-        
-        /*let mut name = String::from("test_step4");
-        name.push_str(&level.to_string());
-        print_to_graph_tool(&graph, &name);*/
 
         if level != COMPRESS.len() - 1 {
             let start = time::precise_time_s();
