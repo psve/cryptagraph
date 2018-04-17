@@ -6,13 +6,11 @@ use std::sync::mpsc;
 use std::thread;
 use time;
 use utility::ProgressBar;
-use bimap::BiMap;
 
 use cipher::Cipher;
 use find_hulls::{find_hulls, SingleRoundMap};
 use graph_generate::{generate_graph, print_to_graph_tool};
 use approximation::Approximation;
-use graph_search::MultistageGraph;
 
 fn find_trails (
     cipher: &Cipher, 

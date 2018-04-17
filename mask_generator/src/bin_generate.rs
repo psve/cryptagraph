@@ -6,7 +6,6 @@ extern crate structopt;
 extern crate rand;
 extern crate num_cpus;
 extern crate crossbeam_utils;
-extern crate bimap;
 
 mod cipher;
 mod utility;
