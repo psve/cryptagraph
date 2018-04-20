@@ -118,7 +118,7 @@ pub fn find_approximations(
             let mut progress_bar = ProgressBar::new(input_masks.len());
 
             for &alpha in input_masks.iter().skip(t).step_by(num_threads) {
-                let edge_map = find_hulls(&single_round_map, rounds, alpha);
+                let edge_map = find_hulls(&single_round_map, rounds, vec![alpha]);
                 num_found += edge_map.map.len();
 
                 for (a, b) in &edge_map.map {

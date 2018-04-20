@@ -10,9 +10,9 @@ pub struct CliArgs {
     #[structopt(short = "p", long = "patterns", help = "Number of patterns to generate.")]
     pub num_patterns: Option<usize>,
 
-    #[structopt(short = "f", long = "file", help = "File to dump mask set to.")]
+    #[structopt(short = "f", long = "file_mask", help = "File to dump mask set to.")]
     pub file_name_mask: Option<String>,
 
-    #[structopt(short = "g", long = "file", help = "File to dump graph data to.")]
+    #[structopt(short = "g", long = "file_graph", help = "File to dump graph data to.")]
     pub file_name_graph: Option<String>,    
 }

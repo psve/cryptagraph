@@ -16,9 +16,9 @@ use utility::ProgressBar;
 lazy_static! {
     static ref COMPRESS: Vec<Vec<usize>> = vec![
         vec![16, 16, 16, 16],
-        // vec![8, 8, 16, 8, 8, 16],
+        vec![8, 8, 16, 8, 8, 16],
         vec![8, 8, 8, 8, 8, 8, 8, 8],
-        // vec![4, 4, 8, 4, 4, 8, 4, 4, 8, 4, 4, 8],
+        vec![4, 4, 8, 4, 4, 8, 4, 4, 8, 4, 4, 8],
         vec![4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
         vec![2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
@@ -479,6 +479,7 @@ pub fn generate_graph(
     patterns: usize) 
     -> MultistageGraph {
     let mut approximations = SortedApproximations::new(cipher, patterns, AppType::All);
+    println!("{:?}", approximations.sbox_patterns.last().unwrap().pattern);
     let mut filters = vec![(0..(1 << (cipher.size() / 16))).collect() ; rounds+1];
     let mut graph = MultistageGraph::new(0);
 
@@ -504,9 +505,9 @@ pub fn generate_graph(
             graph.num_edges(),
             time::precise_time_s()-start);
 
-        let mut name = String::from("test_step1");
+        /*let mut name = String::from("test_step1");
         name.push_str(&level.to_string());
-        print_to_graph_tool(&graph, &name);
+        print_to_graph_tool(&graph, &name);*/
 
         let start = time::precise_time_s();
         if rounds > 2 {
@@ -517,9 +518,9 @@ pub fn generate_graph(
             graph.num_edges(), 
             time::precise_time_s()-start);
 
-        let mut name = String::from("test_step2");
+        /*let mut name = String::from("test_step2");
         name.push_str(&level.to_string());
-        print_to_graph_tool(&graph, &name);
+        print_to_graph_tool(&graph, &name);*/
 
         let start = time::precise_time_s();
         graph = add_outer_edges(&mut graph, &mut approximations, rounds, level);
@@ -528,9 +529,9 @@ pub fn generate_graph(
             graph.num_edges(),
             time::precise_time_s()-start);
 
-        let mut name = String::from("test_step3");
+        /*let mut name = String::from("test_step3");
         name.push_str(&level.to_string());
-        print_to_graph_tool(&graph, &name);
+        print_to_graph_tool(&graph, &name);*/
 
         if level != COMPRESS.len() - 1 {
             let start = time::precise_time_s();
