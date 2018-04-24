@@ -13,6 +13,7 @@ pub fn parity_masks(input: u64, output: u64, alpha: u64, beta: u64) -> u64 {
     (y >> 60) & 1
 }
 
+#[allow(dead_code)]
 pub fn parity(input: u64) -> u64 {
     let mut y = input;
 

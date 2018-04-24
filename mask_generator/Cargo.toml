@@ -11,6 +11,7 @@ structopt-derive = "*"
 num_cpus = "*"
 crossbeam-utils = "*"
 lazy_static = "*"
+fnv = "*"
 
 [dev-dependencies]
 quickcheck = "0.6"

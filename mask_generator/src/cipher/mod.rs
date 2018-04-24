@@ -10,9 +10,7 @@ pub struct Sbox {
     pub size: usize,
     pub table: Vec<u8>,
     pub lat: Vec<Vec<usize>>,
-    // pub min_max_corr: Vec<(f64, f64)>,
 }
-
 
 impl Sbox {
     /* Generates a new S-box from a table.
@@ -21,8 +19,7 @@ impl Sbox {
      */
     fn new(size: usize, table: Vec<u8>) -> Sbox {
         let lat = Sbox::generate_lat(&table, size);
-        // let min_max_corr = Sbox::generate_min_max_corr(&lat, size);
-        Sbox{size: size, table: table, lat: lat/*, min_max_corr: min_max_corr*/}
+        Sbox{size: size, table: table, lat: lat}
     }
 
     /* Generates the LAT associated with the S-box. */
@@ -48,24 +45,9 @@ impl Sbox {
         lat
     }
 
-    /*fn generate_min_max_corr(lat: &Vec<Vec<usize>>, sbox_size: usize) -> Vec<(f64, f64)> {
-        let balance = (1 << (sbox_size - 1)) as i16;
-        let mut min_max_corr = vec![(0.0, 1.0); 1 << sbox_size];
-
-        for (i, row) in lat.iter().enumerate() {
-            let (min, max) = row.iter()
-                                .filter(|&x| *x as i16 != balance)
-                                .fold((i16::max_value(), 0),
-                                      |acc, &x|
-                                      (cmp::min(acc.0, (x as i16 - balance).abs()),
-                                       cmp::max(acc.1, (x as i16 - balance).abs())));
-            let (min_corr, max_corr) = ((min as f64 / balance as f64).powi(2),
-                                        (max as f64 / balance as f64).powi(2));
-            min_max_corr[i] = (min_corr, max_corr);
-        }
-
-        min_max_corr
-    }*/
+    pub fn balance(&self) -> i16 {
+        (1 << (self.size - 1)) as i16
+    }
 }
 
 /* A trait defining an SPN cipher */
@@ -113,15 +95,6 @@ pub trait Cipher: Send + Sync {
      * output   Output mask to the S-box layer.
      */
     fn sbox_mask_transform(&self, input: u64, output: u64) -> (u64, u64);
-
-    /* Function that defines how values of input mask, output mask, and bias 
-     * are categorised for an LatMap. 
-     *
-     * alpha    Input mask.
-     * beta     Output mask.
-     * bias     Absolute counter bias.
-     */
-    fn lat_diversify(&self, alpha: u64, beta: u64, bias: i16) -> (i16, u16);
 }
 
 mod present;
@@ -148,5 +121,3 @@ pub fn name_to_cipher(name : &str) -> Option<Box<(Cipher + Sync)>> {
         _ => None
     }
 }
-
-mod tests;

@@ -263,24 +263,10 @@ impl Cipher for Twine {
 
         (alpha, beta)
     }
-
-    /* Function that defines how values of input mask, output mask, and bias 
-     * are categorised for an LatMap. 
-     *
-     * alpha    Input mask.
-     * beta     Output mask.
-     * bias     Absolute counter bias.
-     */
-    fn lat_diversify(&self, _alpha: u64, _beta: u64, bias: i16) -> (i16, u16) {
-        (bias, 0)
-    }
 }
 
 
 mod tests {
-    use cipher;
-
-
     #[test]
     fn encryption_test() {
         let cipher = cipher::name_to_cipher("twine").unwrap();

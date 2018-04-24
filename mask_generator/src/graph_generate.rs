@@ -1,6 +1,6 @@
 use crossbeam_utils::scoped;
 use num_cpus;
-use std::collections::{HashSet, HashMap};
+use fnv::{FnvHashSet, FnvHashMap};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::mpsc;
@@ -9,16 +9,13 @@ use time;
 use std::cmp;
 
 use cipher::*;
-use graph_search::MultistageGraph;
+use graph::MultistageGraph;
 use single_round::{SortedApproximations, AppType};
 use utility::ProgressBar;
 
 lazy_static! {
     static ref COMPRESS: Vec<Vec<usize>> = vec![
-        vec![16, 16, 16, 16],
-        vec![8, 8, 16, 8, 8, 16],
         vec![8, 8, 8, 8, 8, 8, 8, 8],
-        vec![4, 4, 8, 4, 4, 8, 4, 4, 8, 4, 4, 8],
         vec![4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
         vec![2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
@@ -45,7 +42,7 @@ pub fn compress(x: u64, level: usize) -> u64 {
 fn get_vertices (
     approximations: &mut SortedApproximations, 
     rounds: usize, 
-    filters: &Vec<HashSet<u64>>,
+    filters: &Vec<FnvHashSet<u64>>,
     level: usize) 
     -> MultistageGraph {
     let num_threads = num_cpus::get();
@@ -72,7 +69,7 @@ fn get_vertices (
                 thread_approximations.sbox_patterns = tmp;
 
                 // Collect all alpha values allowed by filters
-                let mut alpha_sets = vec![HashSet::new(); rounds-1];
+                let mut alpha_sets = vec![FnvHashSet::default(); rounds-1];
                 let mut progress_bar = ProgressBar::new(num_alpha);
                 thread_approximations.set_type_alpha();
 
@@ -101,7 +98,7 @@ fn get_vertices (
                 }
 
                 // For the last round, collect all beta values
-                let mut beta_sets = vec![HashSet::new(); rounds-1];
+                let mut beta_sets = vec![FnvHashSet::default(); rounds-1];
                 let mut progress_bar = ProgressBar::new(num_beta);
                 thread_approximations.set_type_beta();
 
@@ -130,20 +127,20 @@ fn get_vertices (
     });
     println!("");
 
-    let mut vertex_sets = vec![HashSet::new(); rounds-1];
+    let mut vertex_sets: Vec<FnvHashSet<u64>> = vec![FnvHashSet::default(); rounds-1];
     {
-        let mut alpha_sets = vec![HashSet::new(); rounds-1];
-        let mut beta_sets = vec![HashSet::new(); rounds-1];
+        let mut alpha_sets = vec![FnvHashSet::default(); rounds-1];
+        let mut beta_sets = vec![FnvHashSet::default(); rounds-1];
 
         for _ in 0..num_threads {
             let thread_result = result_rx.recv().expect("Main could not receive result");
             
             for (i, set) in thread_result.0.iter().enumerate() {
-                alpha_sets[i] = alpha_sets[i].union(&set).cloned().collect();
+                alpha_sets[i].extend(set.iter());
             }
 
             for (i, set) in thread_result.1.iter().enumerate() {
-                beta_sets[i] = beta_sets[i].union(&set).cloned().collect();
+                beta_sets[i].extend(set.iter());
             }
         }
 
@@ -167,13 +164,13 @@ fn get_vertices (
     graph
 }
 
-fn add_edges(graph: &mut MultistageGraph, edges: &HashMap<(usize, usize, usize), f64>) {
+fn add_edges(graph: &mut MultistageGraph, edges: &FnvHashMap<(usize, usize, usize), f64>) {
     for (&(stage, from, to), &length) in edges {
         graph.add_edge(stage, from, to, length);
     }
 }
 
-fn add_edges_and_vertices(graph: &mut MultistageGraph, edges: &HashMap<(usize, usize, usize), f64>) {
+fn add_edges_and_vertices(graph: &mut MultistageGraph, edges: &FnvHashMap<(usize, usize, usize), f64>) {
     for (&(stage, from, to), &length) in edges {
         if stage == 0 {
             graph.add_vertex(0, from);
@@ -221,7 +218,7 @@ fn add_middle_edges(
                 thread_approximations.sbox_patterns = tmp;
 
                 // Collect edges
-                let mut edges = HashMap::new();
+                let mut edges = FnvHashMap::default();
 
                 for (approximation, _) in thread_approximations.into_iter() {    
                     let alpha = compress(approximation.alpha, level) as usize;
@@ -296,7 +293,7 @@ fn add_outer_edges (
                 thread_approximations.sbox_patterns = tmp;
 
                 // Add edges
-                let mut edges = HashMap::new();
+                let mut edges = FnvHashMap::default();
 
                 for (approximation, _) in thread_approximations.into_iter() {    
                     let alpha = compress(approximation.alpha, level) as usize;
@@ -304,8 +301,7 @@ fn add_outer_edges (
                     let length = -approximation.value.log2();
 
                     // First round                    
-                    if /*graph.get_vertex(0, alpha).is_some() && */
-                       graph.get_vertex(1, beta).is_some() {
+                    if graph.get_vertex(1, beta).is_some() {
                         let vertex_ref = graph.get_vertex(1, beta).unwrap();
 
                         if rounds == 2 || vertex_ref.successors.len() != 0 {
@@ -314,8 +310,7 @@ fn add_outer_edges (
                     }
 
                     // Last round
-                    if graph.get_vertex(rounds-1, alpha).is_some() /*&& 
-                       graph.get_vertex(rounds, beta).is_some()*/ {
+                    if graph.get_vertex(rounds-1, alpha).is_some() {
                         let vertex_ref = graph.get_vertex(rounds-1, alpha).unwrap();
 
                         if rounds == 2 || vertex_ref.predecessors.len() != 0 {
@@ -380,7 +375,7 @@ fn prune_graph(graph: &mut MultistageGraph, start: usize, stop: usize) {
  * vertex_maps  Map of vertex indices to values.
  */
 fn update_filters(
-    filters: &mut Vec<HashSet<u64>>, 
+    filters: &mut Vec<FnvHashSet<u64>>, 
     graph: &MultistageGraph)
     -> usize {
     let stages = graph.stages();
@@ -388,13 +383,14 @@ fn update_filters(
 
     for stage in 0..stages {
         filters[stage].clear();
+        filters[stage].extend(graph.get_stage(stage).unwrap()
+                                   .iter()
+                                   .filter(|(_, vertex_ref)| 
+                                        vertex_ref.successors.len() != 0 || 
+                                        vertex_ref.predecessors.len() != 0)
+                                   .map(|(alpha, _)| *alpha as u64));
 
-        for (alpha, vertex_ref) in graph.get_stage(stage).unwrap() {                    
-            if vertex_ref.successors.len() != 0 || vertex_ref.predecessors.len() != 0 {
-                filters[stage].insert(*alpha as u64);
-                good_vertices += 1;
-            }
-        }
+        good_vertices += filters[stage].len();
     }
 
     good_vertices
@@ -406,7 +402,7 @@ fn update_filters(
  * approximations   Approximations to remove patterns from.
  */
 fn remove_dead_patterns(
-    filters: &Vec<HashSet<u64>>, 
+    filters: &Vec<FnvHashSet<u64>>, 
     approximations: &mut SortedApproximations,
     level: usize) {
     let num_threads = num_cpus::get();
@@ -479,8 +475,7 @@ pub fn generate_graph(
     patterns: usize) 
     -> MultistageGraph {
     let mut approximations = SortedApproximations::new(cipher, patterns, AppType::All);
-    println!("{:?}", approximations.sbox_patterns.last().unwrap().pattern);
-    let mut filters = vec![(0..(1 << (cipher.size() / 16))).collect() ; rounds+1];
+    let mut filters = vec![(0..(1 << COMPRESS[0].len())).collect() ; rounds+1];
     let mut graph = MultistageGraph::new(0);
 
     for level in 1..COMPRESS.len() {

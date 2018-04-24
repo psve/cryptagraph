@@ -1,5 +1,5 @@
 use num_cpus;
-use std::collections::HashSet;
+use fnv::FnvHashSet;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::mpsc;
@@ -17,9 +17,9 @@ fn find_trails (
     rounds: usize, 
     patterns: usize,
     file_name_graph: Option<String>) 
-    -> (SingleRoundMap, HashSet<u64>) {
+    -> (SingleRoundMap, FnvHashSet<u64>) {
     let graph = generate_graph(cipher, rounds, patterns);
-    
+
     match file_name_graph {
         Some(path) => {
             print_to_graph_tool(&graph, &path);
@@ -28,7 +28,9 @@ fn find_trails (
     }
     
     let mut single_round_map = SingleRoundMap::new();
-    let input_masks = graph.get_stage(0).unwrap().keys().map(|x| *x as u64).collect();
+    let input_masks = graph.get_stage(0).unwrap()
+                           .keys().map(|&x| x as u64)
+                           .collect();
     let stages = graph.stages();
 
     for stage in 0..stages-1 {
@@ -78,7 +80,7 @@ pub fn find_approximations(
                                        .open(file_app_path)
                                        .expect("Could not open file.");
 
-            let mut total_set = HashSet::new();
+            let mut total_set = FnvHashSet::default();
 
             for (alpha, betas) in &single_round_map.map {
                 total_set.insert(*alpha);
@@ -117,14 +119,17 @@ pub fn find_approximations(
             let mut result = vec![];
             let mut progress_bar = ProgressBar::new(input_masks.len());
 
-            for &alpha in input_masks.iter().skip(t).step_by(num_threads) {
-                let edge_map = find_hulls(&single_round_map, rounds, vec![alpha]);
-                num_found += edge_map.map.len();
+            let mut paths = 0;
 
+            for &alpha in input_masks.iter().skip(t).step_by(num_threads) {
+                let edge_map = find_hulls(&single_round_map, rounds, alpha);
+                num_found += edge_map.map.len();
+                
                 for (a, b) in &edge_map.map {
+                    paths += b.0;
                     result.push((a.clone(), b.0, b.1));
                 }
-
+                
                 result.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
                 if result.len() > 0 {
                     min_correlation = min_correlation.min(result[result.len()-1].2);
@@ -133,9 +138,11 @@ pub fn find_approximations(
                 progress_bar.increment();
             }
 
-            result_tx.send((result, min_correlation, num_found)).expect("Thread could not send result");
+            result_tx.send((result, min_correlation, num_found, paths)).expect("Thread could not send result");
         });
     }
+
+    let mut paths = 0;
 
     for _ in 0..num_threads {
         let mut thread_result = result_rx.recv().expect("Main could not receive result");
@@ -143,6 +150,7 @@ pub fn find_approximations(
         result.append(&mut thread_result.0);
         min_correlation = min_correlation.min(thread_result.1);
         num_found += thread_result.2;
+        paths += thread_result.3;
     }
 
     println!("");
@@ -153,6 +161,7 @@ pub fn find_approximations(
     println!("\nFound {} approximations. [{} s]", num_found, time::precise_time_s()-hull_start);
     println!("Smallest squared correlation: {}", min_correlation.log2());
     println!("Largest squared correlation:  {}\n", result[0].2.log2());
+    println!("Total number of trails:  {}\n", paths);
     println!("Search finished. [{} s]", time::precise_time_s()-start);
 
     for &(ref approximation, num_paths, value) in &result {
