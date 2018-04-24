@@ -20,8 +20,8 @@ pub struct Mibs {
 }
 
 impl Mibs {
-    const PERMUTATION : [usize ; 8] = [1, 7, 0, 2, 5, 6, 3, 4];
-    const IPERMUTATION : [usize ; 8] = [2, 0, 3, 6, 7, 4, 5, 1];
+    const PERMUTATION : [usize ; 8] = [3, 4, 1, 2, 5, 7, 0, 6];
+    const IPERMUTATION : [usize ; 8] = [6, 2, 3, 0, 1, 4, 7, 5];
 }
 
 pub fn new() -> Mibs {
@@ -59,24 +59,25 @@ impl Cipher for Mibs {
      */
     fn linear_layer(&self, input: u64) -> u64{
         let mut x = input;
-        x ^= (x & (0xf << 12)) << 16;
-        x ^= (x & (0xf << 8)) << 16;
-        x ^= (x & (0xf << 4)) << 16;
-        x ^= (x & (0xf << 0)) << 16;
-        x ^= (x & (0xf << 28)) >> 24;
-        x ^= (x & (0xf << 24)) >> 24;
-        x ^= (x & (0xf << 20)) >> 8;
-        x ^= (x & (0xf << 16)) >> 8;
-        x ^= (x & (0xf << 12)) << 4;
-        x ^= (x & (0xf << 8)) << 20;
-        x ^= (x & (0xf << 4)) << 20;
-        x ^= (x & (0xf << 0)) << 20;
-        x ^= (x & (0xf << 28)) >> 16;
-        x ^= (x & (0xf << 24)) >> 16;
-        x ^= (x & (0xf << 20)) >> 16;
         x ^= (x & (0xf << 16)) >> 16;
-        let mut output = 0;
+        x ^= (x & (0xf << 20)) >> 16;
+        x ^= (x & (0xf << 24)) >> 16;
+        x ^= (x & (0xf << 28)) >> 16;
+        x ^= (x & (0xf << 0)) << 24;
+        x ^= (x & (0xf << 4)) << 24;
+        x ^= (x & (0xf << 8)) << 8;
+        x ^= (x & (0xf << 12)) << 8;
+        x ^= (x & (0xf << 16)) >> 4;
+        x ^= (x & (0xf << 20)) >> 20;
+        x ^= (x & (0xf << 24)) >> 20;
+        x ^= (x & (0xf << 28)) >> 20;
+        x ^= (x & (0xf << 0)) << 16;
+        x ^= (x & (0xf << 4)) << 16;
+        x ^= (x & (0xf << 8)) << 16;
+        x ^= (x & (0xf << 12)) << 16;
 
+        let mut output = 0;
+        
         for i in 0..8 {
             output ^= ((x >> (4*i)) & 0xf) << (Mibs::PERMUTATION[i] * 4);
         }
@@ -94,25 +95,25 @@ impl Cipher for Mibs {
         for i in 0..8 {
             output ^= ((input >> (4*i)) & 0xf) << (Mibs::IPERMUTATION[i] * 4);
         }
-
+        
         let mut x = output;
 
-        x ^= (x & (0xf << 16)) >> 16;
-        x ^= (x & (0xf << 20)) >> 16;
-        x ^= (x & (0xf << 24)) >> 16;
-        x ^= (x & (0xf << 28)) >> 16;
-        x ^= (x & (0xf << 0)) << 20;
-        x ^= (x & (0xf << 4)) << 20;
-        x ^= (x & (0xf << 8)) << 20;
-        x ^= (x & (0xf << 12)) << 4;
-        x ^= (x & (0xf << 16)) >> 8;
-        x ^= (x & (0xf << 20)) >> 8;
-        x ^= (x & (0xf << 24)) >> 24;
-        x ^= (x & (0xf << 28)) >> 24;
-        x ^= (x & (0xf << 0)) << 16;
-        x ^= (x & (0xf << 4)) << 16;
-        x ^= (x & (0xf << 8)) << 16;
         x ^= (x & (0xf << 12)) << 16;
+        x ^= (x & (0xf << 8)) << 16;
+        x ^= (x & (0xf << 4)) << 16;
+        x ^= (x & (0xf << 0)) << 16;
+        x ^= (x & (0xf << 28)) >> 20;
+        x ^= (x & (0xf << 24)) >> 20;
+        x ^= (x & (0xf << 20)) >> 20;
+        x ^= (x & (0xf << 16)) >> 4;
+        x ^= (x & (0xf << 12)) << 8;
+        x ^= (x & (0xf << 8)) << 8;
+        x ^= (x & (0xf << 4)) << 24;
+        x ^= (x & (0xf << 0)) << 24;
+        x ^= (x & (0xf << 28)) >> 16;
+        x ^= (x & (0xf << 24)) >> 16;
+        x ^= (x & (0xf << 20)) >> 16;
+        x ^= (x & (0xf << 16)) >> 16;
 
         x
     }
@@ -167,12 +168,13 @@ impl Cipher for Mibs {
             output ^= (right ^ left) << 32;
         }
 
+        output = (output >> 32) ^ (output << 32);
         output
     }
 
     /* Performs decryption */
     fn decrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64 {
-        let mut output = (input >> 32) ^ (input << 32);
+        let mut output = input;
 
         for i in 0..32 {
             let mut left = output >> 32;
@@ -234,7 +236,6 @@ impl Cipher for Mibs {
 mod tests {
     use cipher;
     
-    /* Test vectors given in specification don't seem to match. 
     #[test]
     fn encryption_test() {
         let cipher = cipher::name_to_cipher("mibs").unwrap();
@@ -263,14 +264,14 @@ mod tests {
 
         assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
 
-        let key = [0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10];
+        let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
         let round_keys = cipher.key_schedule(32, &key);
         let plaintext = 0xffffffffffffffff;
         let ciphertext = 0x595263b93ffe6e18;
 
         assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
     }
-    */
+    
 
     #[test]
     fn encryption_decryption_test() {
