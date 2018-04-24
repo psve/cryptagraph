@@ -243,6 +243,8 @@ impl Cipher for Midori {
 
 #[cfg(test)]
 mod tests {
+    use cipher;
+    
     #[test]
     fn encryption_test() {
         let cipher = cipher::name_to_cipher("midori").unwrap();

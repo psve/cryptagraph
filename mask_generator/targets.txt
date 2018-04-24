@@ -1,18 +1,17 @@
 Implemented:
-TWINE -- Full
-PRESENT -- Full
 GIFT -- Full
-Midori -- Full
-Skinny -- Full
-PUFFIN -- Full
+KLEIN - Full
 LED -- Full
-RECTANGLE -- Full
 MIBS -- Full
+Midori -- Full
+PRESENT -- Full
+PRIDE - Full
+PUFFIN -- Full
+RECTANGLE -- Full
+Skinny -- Full
+TWINE -- Full
 
 Not implemented:
-KLEIN - GF16 multiplication
-Khazad - GF256 multiplication
-PRIDE - Annoying huge matrix multiplication
 LowMC - Randomised linear layer
 PRINTCipher - Key dependent permutation
 LBlock - Different S-boxes
@@ -20,6 +19,8 @@ KATAN - How to handle AND as S-boxes
 Simon - How to handle AND as S-boxes
 
 Maybe:
+Fly
 PRINCE - Annoying huge matrix multiplication
 QARMA
 Roadrunner
+Khazad - GF256 multiplication and 8 bit sbox

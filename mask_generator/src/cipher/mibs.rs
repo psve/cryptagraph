@@ -229,7 +229,11 @@ impl Cipher for Mibs {
     }
 }
 
+
+#[cfg(test)]
 mod tests {
+    use cipher;
+    
     /* Test vectors given in specification don't seem to match. 
     #[test]
     fn encryption_test() {

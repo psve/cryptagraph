@@ -199,6 +199,8 @@ impl Cipher for Puffin {
 
 #[cfg(test)]
 mod tests {
+    use cipher;
+    
     /* No test vectors provided in specification
     #[test]
     fn encryption_test() {

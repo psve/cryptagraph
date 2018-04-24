@@ -265,8 +265,10 @@ impl Cipher for Twine {
     }
 }
 
-
+#[cfg(test)]
 mod tests {
+    use cipher;
+    
     #[test]
     fn encryption_test() {
         let cipher = cipher::name_to_cipher("twine").unwrap();

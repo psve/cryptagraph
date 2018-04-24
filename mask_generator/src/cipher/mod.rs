@@ -106,6 +106,8 @@ mod midori;
 mod led;
 mod rectangle;
 mod mibs;
+mod klein;
+mod pride;
 
 pub fn name_to_cipher(name : &str) -> Option<Box<(Cipher + Sync)>> {
     match name {
@@ -118,6 +120,8 @@ pub fn name_to_cipher(name : &str) -> Option<Box<(Cipher + Sync)>> {
         "led"       => Some(Box::new(led::new())),
         "rectangle" => Some(Box::new(rectangle::new())),
         "mibs"      => Some(Box::new(mibs::new())),
+        "klein"     => Some(Box::new(klein::new())),
+        "pride"     => Some(Box::new(pride::new())),
         _ => None
     }
 }
