@@ -8,7 +8,7 @@ use utility;
 #[derive(Clone, Debug)]
 pub struct Sbox {
     pub size: usize,
-    table: Vec<u8>,
+    pub table: Vec<u8>,
     pub lat: Vec<Vec<usize>>,
     // pub min_max_corr: Vec<(f64, f64)>,
 }
@@ -73,6 +73,9 @@ pub trait Cipher: Send + Sync {
     /* Returns the size of the cipher input in bits. */
     fn size(&self) -> usize;
 
+    /* Returns key-size in bits */
+    fn key_size(&self) -> usize;
+
     /* Returns the number of S-boxes in the non-linear layer. */
     fn num_sboxes(&self) -> usize;
 
@@ -94,8 +97,11 @@ pub trait Cipher: Send + Sync {
     /* Computes a vector of round key from a cipher key*/
     fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u64>;
 
-    /* Returns key-size in bits */
-    fn key_size(&self) -> usize;
+    /* Performs encryption */
+    fn encrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64;
+
+    /* Performs decryption */
+    fn decrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64;
 
     /* Returns the name of the cipher. */
     fn name(&self) -> String;

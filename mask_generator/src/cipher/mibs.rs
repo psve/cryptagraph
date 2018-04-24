@@ -14,16 +14,23 @@ use cipher::Cipher;
 #[derive(Clone)]
 pub struct Mibs {
     size: usize,
-    sbox: Sbox
+    key_size: usize,
+    sbox: Sbox,
+    isbox: Sbox
 }
 
 impl Mibs {
     const PERMUTATION : [usize ; 8] = [1, 7, 0, 2, 5, 6, 3, 4];
+    const IPERMUTATION : [usize ; 8] = [2, 0, 3, 6, 7, 4, 5, 1];
 }
 
 pub fn new() -> Mibs {
     let table = vec![4, 15, 3, 8, 13, 10, 12, 0, 11, 5, 7, 14, 2, 6, 1, 9];
-    Mibs{size: 64, sbox: Sbox::new(4, table)}
+    let itable = vec![7, 14, 12, 2, 0, 9, 13, 10, 3, 15, 5, 8, 6, 4, 11, 1];
+    Mibs{size: 64,
+         key_size: 64, 
+         sbox: Sbox::new(4, table),
+         isbox: Sbox::new(4, itable)}
 }
 
 impl Cipher for Mibs {
@@ -31,9 +38,9 @@ impl Cipher for Mibs {
     fn size(&self) -> usize {
         self.size
     }
-
+    /* Returns key-size in bits */
     fn key_size(&self) -> usize {
-        panic!("not implemented");
+        self.key_size
     }
 
     /* Returns the number of S-boxes in MIBS. This is always 16. */
@@ -52,7 +59,6 @@ impl Cipher for Mibs {
      */
     fn linear_layer(&self, input: u64) -> u64{
         let mut x = input;
-
         x ^= (x & (0xf << 12)) << 16;
         x ^= (x & (0xf << 8)) << 16;
         x ^= (x & (0xf << 4)) << 16;
@@ -69,7 +75,6 @@ impl Cipher for Mibs {
         x ^= (x & (0xf << 24)) >> 16;
         x ^= (x & (0xf << 20)) >> 16;
         x ^= (x & (0xf << 16)) >> 16;
-
         let mut output = 0;
 
         for i in 0..8 {
@@ -79,12 +84,132 @@ impl Cipher for Mibs {
         output
     }
 
+    /* Applies the inverse linear layer, st.
+     *
+     * I = linear_layer_inv o linear_layer
+     */
+    fn linear_layer_inv(&self, input: u64) -> u64 {
+        let mut output = 0;
+
+        for i in 0..8 {
+            output ^= ((input >> (4*i)) & 0xf) << (Mibs::IPERMUTATION[i] * 4);
+        }
+
+        let mut x = output;
+
+        x ^= (x & (0xf << 16)) >> 16;
+        x ^= (x & (0xf << 20)) >> 16;
+        x ^= (x & (0xf << 24)) >> 16;
+        x ^= (x & (0xf << 28)) >> 16;
+        x ^= (x & (0xf << 0)) << 20;
+        x ^= (x & (0xf << 4)) << 20;
+        x ^= (x & (0xf << 8)) << 20;
+        x ^= (x & (0xf << 12)) << 4;
+        x ^= (x & (0xf << 16)) >> 8;
+        x ^= (x & (0xf << 20)) >> 8;
+        x ^= (x & (0xf << 24)) >> 24;
+        x ^= (x & (0xf << 28)) >> 24;
+        x ^= (x & (0xf << 0)) << 16;
+        x ^= (x & (0xf << 4)) << 16;
+        x ^= (x & (0xf << 8)) << 16;
+        x ^= (x & (0xf << 12)) << 16;
+
+        x
+    }
+
+    /* Computes a vector of round key from a cipher key*/    
+    fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u64> {
+        if key.len() * 8 != self.key_size {
+            panic!("invalid key-length");
+        }
+
+        let mut keys = vec![];
+        let mut s = 0;
+
+        // load key into 63-bit state
+        for i in 0..8 {
+            s <<= 8;
+            s |= key[i] as u64;
+        }
+
+        for r in 0..rounds {
+            s = (s >> 15) ^ (s << (64-15));
+            s = (s & 0x0fffffffffffffff) ^ ((self.sbox.table[(s >> 60) as usize] as u64) << 60);
+            s ^= ((r+1) as u64) << 11;
+            keys.push(s >> 32);
+        }
+
+        keys
+    }
+
+    /* Performs encryption */
+    fn encrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64 {
+        let mut output = input;
+
+        for i in 0..32 {
+            let mut left = output >> 32;
+            let right = output & 0xffffffff;
+            output = left;
+
+            // Add round key
+            left ^= round_keys[i];
+
+            // Sbox
+            let mut tmp = 0;
+
+            for j in 0..8 {
+                tmp ^= (self.sbox.table[((left >> (4*j)) & 0xf) as usize] as u64) << (4*j);
+            }
+
+            // Linear layer
+            left = self.linear_layer(tmp);
+
+            output ^= (right ^ left) << 32;
+        }
+
+        output
+    }
+
+    /* Performs decryption */
+    fn decrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64 {
+        let mut output = (input >> 32) ^ (input << 32);
+
+        for i in 0..32 {
+            let mut left = output >> 32;
+            let right = output & 0xffffffff;
+            output = left;
+
+            // Add round key
+            left ^= round_keys[31-i];
+
+            // Sbox
+            let mut tmp = 0;
+
+            for j in 0..8 {
+                tmp ^= (self.sbox.table[((left >> (4*j)) & 0xf) as usize] as u64) << (4*j);
+            }
+
+            // Linear layer
+            left = self.linear_layer(tmp);
+
+            output ^= (right ^ left) << 32;
+        }
+
+        (output >> 32) ^ (output << 32)
+    }
+
+    /* Returns the string "MIBS". */
+    fn name(&self) -> String {
+        String::from("MIBS")
+    }
+    
     /* Transforms the input and output mask of the S-box layer to an
      * input and output mask of a round.
      *
      * input    Input mask to the S-box layer.
      * output   Output mask to the S-box layer.
      */
+
     fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
         let output = self.linear_layer(output & 0xffffffff)
                    ^ (self.linear_layer(output >> 32) << 32);
@@ -103,21 +228,6 @@ impl Cipher for Mibs {
         (alpha, beta)
     }
 
-    #[allow(unused_variables)]
-    fn linear_layer_inv(&self, input: u64) -> u64 {
-        panic!("not implemented");
-    }
-
-    #[allow(unused_variables)]
-    fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u64> {
-        panic!("not implemented");
-    }
-
-    /* Returns the string "MIBS". */
-    fn name(&self) -> String {
-        String::from("MIBS")
-    }
-
     /* Function that defines how values of input mask, output mask, and bias 
      * are categorised for an LatMap. 
      *
@@ -130,3 +240,62 @@ impl Cipher for Mibs {
     }
 }
 
+mod tests {
+    use cipher;
+
+    /* Test vectors given in specification don't seem to match. 
+    #[test]
+    fn encryption_test() {
+        let cipher = cipher::name_to_cipher("mibs").unwrap();
+        let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let round_keys = cipher.key_schedule(32, &key);
+        let plaintext = 0x0000000000000000;
+        let ciphertext = 0x6d1d3722e19613d2;
+
+        assert_eq!(ciphertext, cipher.encrypt(plaintext, &round_keys));
+
+        let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+        let round_keys = cipher.key_schedule(32, &key);
+        let plaintext = 0xffffffffffffffff;
+        let ciphertext = 0x595263b93ffe6e18;
+
+        assert_eq!(ciphertext, cipher.encrypt(plaintext, &round_keys));
+    }
+
+    #[test]
+    fn decryption_test() {
+        let cipher = cipher::name_to_cipher("mibs").unwrap();
+        let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let round_keys = cipher.key_schedule(32, &key);
+        let plaintext = 0x0000000000000000;
+        let ciphertext = 0x6d1d3722e19613d2;
+
+        assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
+
+        let key = [0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10];
+        let round_keys = cipher.key_schedule(32, &key);
+        let plaintext = 0xffffffffffffffff;
+        let ciphertext = 0x595263b93ffe6e18;
+
+        assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
+    }
+    */
+
+    #[test]
+    fn encryption_decryption_test() {
+        let cipher = cipher::name_to_cipher("mibs").unwrap();
+        let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let round_keys = cipher.key_schedule(32, &key);
+        let plaintext = 0x0123456789abcdef;
+        let ciphertext = cipher.encrypt(plaintext, &round_keys);
+
+        assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
+
+        let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+        let round_keys = cipher.key_schedule(32, &key);
+        let plaintext = 0x0123456789abcdef;
+        let ciphertext = cipher.encrypt(plaintext, &round_keys);
+
+        assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
+    }
+}

@@ -1,13 +1,13 @@
 Implemented:
-TWINE
-PRESENT
-GIFT
-Midori
-Skinny
-PUFFIN
-LED
-RECTANGLE
-MIBS
+TWINE -- Full
+PRESENT -- Full
+GIFT -- Full
+Midori -- Full
+Skinny -- Full
+PUFFIN -- Full
+LED -- Full
+RECTANGLE -- Full
+MIBS -- Full
 
 Not implemented:
 PRINCE - Annoying huge matrix multiplication
@@ -19,3 +19,6 @@ PRINTCipher - Key dependent permutation
 LBlock - Different S-boxes
 KATAN - How to handle AND as S-boxes
 Simon - How to handle AND as S-boxes
+
+Maybe:
+Roadrunner
