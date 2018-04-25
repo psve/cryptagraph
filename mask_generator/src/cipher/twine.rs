@@ -1,5 +1,4 @@
-use cipher::Sbox;
-use cipher::Cipher;
+use cipher::{Sbox, CipherStructure, Cipher};
 
 #[derive(Clone)]
 pub struct Twine {
@@ -27,23 +26,12 @@ pub fn new() -> Twine {
           constants: constants}
 }
 
-impl Twine {
-    /* Applies the inverse nibble permutation of TWINE to the input.
-     *
-     * input    Input to be permuted.
-     */
-    fn linear_layer_inverse(&self, input: u64) -> u64{
-        let mut output = 0;
-
-        for i in 0..16 {
-            output ^= ((input >> (i*4)) & 0xf) << (self.inverse[i]*4);
-        }
-
-        output
-    }
-}
-
 impl Cipher for Twine {
+    /* Returns the design type of the cipher */
+    fn structure(&self) -> CipherStructure {
+        CipherStructure::Feistel
+    }
+
     /* Returns the size of the input to TWINE. This is always 64 bits. */
     fn size(&self) -> usize {
         self.size
@@ -216,50 +204,29 @@ impl Cipher for Twine {
      */
     fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
         let mut alpha = 0;
+        let mut tmp = 0;
 
-        alpha ^= (input & 0xf) << 4;
-        alpha ^= (input & 0xf0) << 8;
-        alpha ^= (input & 0xf00) << 12;
-        alpha ^= (input & 0xf000) << 16;
-        alpha ^= (input & 0xf0000) << 20;
-        alpha ^= (input & 0xf00000) << 24;
-        alpha ^= (input & 0xf000000) << 28;
-        alpha ^= (input & 0xf0000000) << 32;
+        for i in 0..8 {
+            alpha ^= ((output >> 4*i) & 0xf) << (i*8);
+            alpha ^= ((input >> 4*i) & 0xf) << (i*8+4);
+            tmp ^= ((output >> (4*i+32)) & 0xf) << (i*8);
+        }
 
-        alpha ^= (output & 0xf) << 0;
-        alpha ^= (output & 0xf0) << 4;
-        alpha ^= (output & 0xf00) << 8;
-        alpha ^= (output & 0xf000) << 12;
-        alpha ^= (output & 0xf0000) << 16;
-        alpha ^= (output & 0xf00000) << 20;
-        alpha ^= (output & 0xf000000) << 24;
-        alpha ^= (output & 0xf0000000) << 28;
+        tmp = self.linear_layer_inv(tmp);
+        alpha ^= tmp;
 
         let mut beta = 0;
+        tmp = 0;
 
-        beta ^= ((input & 0xf00000000) >> 32) << 4;
-        beta ^= ((input & 0xf000000000) >> 32) << 8;
-        beta ^= ((input & 0xf0000000000) >> 32) << 12;
-        beta ^= ((input & 0xf00000000000) >> 32) << 16;
-        beta ^= ((input & 0xf000000000000) >> 32) << 20;
-        beta ^= ((input & 0xf0000000000000) >> 32) << 24;
-        beta ^= ((input & 0xf00000000000000) >> 32) << 28;
-        beta ^= ((input & 0xf000000000000000) >> 32) << 32;
+        for i in 0..8 {
+            beta ^= ((output >> (4*i+32)) & 0xf) << (i*8);
+            beta ^= ((input >> (4*i+32)) & 0xf) << (i*8+4);
+            tmp ^= ((output >> 4*i) & 0xf) << (i*8);
+        }
 
-        alpha ^= self.linear_layer_inverse(beta);
-
-        beta ^= ((output & 0xf00000000) >> 32) << 0;
-        beta ^= ((output & 0xf000000000) >> 32) << 4;
-        beta ^= ((output & 0xf0000000000) >> 32) << 8;
-        beta ^= ((output & 0xf00000000000) >> 32) << 12;
-        beta ^= ((output & 0xf000000000000) >> 32) << 16;
-        beta ^= ((output & 0xf0000000000000) >> 32) << 20;
-        beta ^= ((output & 0xf00000000000000) >> 32) << 24;
-        beta ^= ((output & 0xf000000000000000) >> 32) << 28;
-
-        beta ^= self.linear_layer(alpha & 0xf0f0f0f0f0f0f0f0);
-
-        beta = self.linear_layer(beta);
+        tmp = self.linear_layer(tmp);
+        beta ^= tmp;
+        beta = self.linear_layer(beta);       
 
         (alpha, beta)
     }

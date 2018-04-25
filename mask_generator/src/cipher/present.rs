@@ -1,5 +1,4 @@
-use cipher::Sbox;
-use cipher::Cipher;
+use cipher::{Sbox, CipherStructure, Cipher};
 
 /*****************************************************************
                             PRESENT
@@ -42,6 +41,10 @@ pub fn new() -> Present {
 }
 
 impl Cipher for Present {
+    /* Returns the design type of the cipher */
+    fn structure(&self) -> CipherStructure {
+        CipherStructure::Spn
+    }
 
     /* Returns the size of the input to PRESENT. This is always 64 bits. */
     fn size(&self) -> usize {

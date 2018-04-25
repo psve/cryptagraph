@@ -190,7 +190,9 @@ fn add_middle_edges(
     let min_block = COMPRESS[level].iter()
                                    .fold(approximations.cipher.size(), |acc, &x| cmp::min(x, acc));
 
-    if min_block < approximations.cipher.sbox().size {
+
+    if min_block < approximations.cipher.sbox().size  || 
+       approximations.cipher.structure() == CipherStructure::Feistel {
         approximations.set_type_all();
     } else {
         approximations.set_type_beta();
@@ -260,12 +262,15 @@ fn add_outer_edges (
     graph: &MultistageGraph,
     approximations: &mut SortedApproximations, 
     rounds: usize, 
-    level: usize) 
+    level: usize,
+    alpha_allowed: &FnvHashSet<u64>,
+    beta_allowed: &FnvHashSet<u64>) 
     -> MultistageGraph {
     let min_block = COMPRESS[level].iter()
                                    .fold(approximations.cipher.size(), |acc, &x| cmp::min(x, acc));
 
-    if min_block < approximations.cipher.sbox().size {
+    if min_block < approximations.cipher.sbox().size  || 
+       approximations.cipher.structure() == CipherStructure::Feistel {
         approximations.set_type_all();
     } else {
         approximations.set_type_beta();
@@ -295,13 +300,14 @@ fn add_outer_edges (
                 // Add edges
                 let mut edges = FnvHashMap::default();
 
-                for (approximation, _) in thread_approximations.into_iter() {    
+                for (approximation, _) in thread_approximations.into_iter() {
                     let alpha = compress(approximation.alpha, level) as usize;
                     let beta = compress(approximation.beta, level) as usize;
                     let length = -approximation.value.log2();
 
                     // First round                    
-                    if graph.get_vertex(1, beta).is_some() {
+                    if (alpha_allowed.len() == 0 || alpha_allowed.contains(&(alpha as u64))) && 
+                        graph.get_vertex(1, beta).is_some() {
                         let vertex_ref = graph.get_vertex(1, beta).unwrap();
 
                         if rounds == 2 || vertex_ref.successors.len() != 0 {
@@ -310,7 +316,8 @@ fn add_outer_edges (
                     }
 
                     // Last round
-                    if graph.get_vertex(rounds-1, alpha).is_some() {
+                    if (beta_allowed.len() == 0 || beta_allowed.contains(&(beta as u64))) && 
+                        graph.get_vertex(rounds-1, alpha).is_some() {
                         let vertex_ref = graph.get_vertex(rounds-1, alpha).unwrap();
 
                         if rounds == 2 || vertex_ref.predecessors.len() != 0 {
@@ -472,7 +479,9 @@ fn remove_dead_patterns(
 pub fn generate_graph(
     cipher: &Cipher, 
     rounds: usize, 
-    patterns: usize) 
+    patterns: usize,
+    alpha_allowed: &FnvHashSet<u64>,
+    beta_allowed: &FnvHashSet<u64>) 
     -> MultistageGraph {
     let mut approximations = SortedApproximations::new(cipher, patterns, AppType::All);
     let mut filters = vec![(0..(1 << COMPRESS[0].len())).collect() ; rounds+1];
@@ -504,21 +513,25 @@ pub fn generate_graph(
         name.push_str(&level.to_string());
         print_to_graph_tool(&graph, &name);*/
 
-        let start = time::precise_time_s();
         if rounds > 2 {
+            let start = time::precise_time_s();
             prune_graph(&mut graph, 1, rounds);
+            println!("Pruned graph has {} vertices and {} edges [{} s]", 
+                graph.num_vertices(), 
+                graph.num_edges(), 
+                time::precise_time_s()-start);
         }
-        println!("Pruned graph has {} vertices and {} edges [{} s]", 
-            graph.num_vertices(), 
-            graph.num_edges(), 
-            time::precise_time_s()-start);
 
         /*let mut name = String::from("test_step2");
         name.push_str(&level.to_string());
         print_to_graph_tool(&graph, &name);*/
 
         let start = time::precise_time_s();
-        graph = add_outer_edges(&mut graph, &mut approximations, rounds, level);
+        let alpha_allowed_comp = alpha_allowed.iter().map(|&x| compress(x, level)).collect();
+        let beta_allowed_comp = beta_allowed.iter().map(|&x| compress(x, level)).collect();
+
+        graph = add_outer_edges(&mut graph, &mut approximations, rounds, level, 
+                                &alpha_allowed_comp, &beta_allowed_comp);
         println!("Graph has {} vertices and {} edges [{} s]", 
             graph.num_vertices(), 
             graph.num_edges(),
@@ -527,6 +540,15 @@ pub fn generate_graph(
         /*let mut name = String::from("test_step3");
         name.push_str(&level.to_string());
         print_to_graph_tool(&graph, &name);*/
+
+        if alpha_allowed.len() > 0 || beta_allowed.len() > 0 {
+            let start = time::precise_time_s();
+            prune_graph(&mut graph, 0, rounds+1);
+            println!("Pruned graph has {} vertices and {} edges [{} s]", 
+                graph.num_vertices(), 
+                graph.num_edges(), 
+                time::precise_time_s()-start);
+        }
 
         if level != COMPRESS.len() - 1 {
             let start = time::precise_time_s();

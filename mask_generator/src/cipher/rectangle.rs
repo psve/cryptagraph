@@ -1,5 +1,4 @@
-use cipher::Sbox;
-use cipher::Cipher;
+use cipher::{Sbox, CipherStructure, Cipher};
 
 /*****************************************************************
                             RECTANGLE
@@ -38,6 +37,11 @@ pub fn new() -> Rectangle {
 }
 
 impl Cipher for Rectangle {
+    /* Returns the design type of the cipher */
+    fn structure(&self) -> CipherStructure {
+        CipherStructure::Spn
+    }
+    
     /* Returns the size of the input to RECTANGLE. This is always 64 bits. */
     fn size(&self) -> usize {
         self.size

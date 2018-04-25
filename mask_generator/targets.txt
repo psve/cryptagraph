@@ -12,9 +12,9 @@ Skinny -- Full
 TWINE -- Full
 
 Not implemented:
-LowMC - Randomised linear layer
-PRINTCipher - Key dependent permutation
+Piccolo
 LBlock - Different S-boxes
+MCrypton - Different S-boxes
 KATAN - How to handle AND as S-boxes
 Simon - How to handle AND as S-boxes
 

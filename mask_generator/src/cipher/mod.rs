@@ -50,8 +50,17 @@ impl Sbox {
     }
 }
 
+#[derive(PartialEq, Eq)]
+pub enum CipherStructure {
+    Spn,
+    Feistel
+}
+
 /* A trait defining an SPN cipher */
 pub trait Cipher: Send + Sync {
+    /* Returns the design type of the cipher */
+    fn structure(&self) -> CipherStructure;
+
     /* Returns the size of the cipher input in bits. */
     fn size(&self) -> usize;
 

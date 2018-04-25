@@ -1,7 +1,7 @@
 use num_cpus;
 use fnv::FnvHashSet;
-use std::fs::OpenOptions;
-use std::io::Write;
+use std::fs::{File, OpenOptions};
+use std::io::{Write, BufReader, BufRead};
 use std::sync::mpsc;
 use std::thread;
 use time;
@@ -12,15 +12,74 @@ use find_hulls::{find_hulls, SingleRoundMap};
 use graph_generate::{generate_graph, print_to_graph_tool};
 use approximation::Approximation;
 
+fn dump_masks(file_mask_out: String, single_round_map: &SingleRoundMap) {
+    let mut file_app_path = file_mask_out.clone();
+    file_app_path.push_str(".app");
+    let mut file_set_path = file_mask_out.clone();
+    file_set_path.push_str(".set");
+
+    let mut file = OpenOptions::new()
+                               .write(true)
+                               .truncate(true)
+                               .create(true)
+                               .open(file_app_path)
+                               .expect("Could not open file.");
+
+    let mut total_set = FnvHashSet::default();
+
+    for (alpha, betas) in &single_round_map.map {
+        total_set.insert(*alpha);
+
+        for &(beta, _) in betas {
+            total_set.insert(beta);
+
+            write!(file, "{:016x}, {:016x}\n", alpha, beta).expect("Could not write to file.");
+        }
+    }
+
+    let mut file = OpenOptions::new()
+                               .write(true)
+                               .truncate(true)
+                               .create(true)
+                               .open(file_set_path)
+                               .expect("Could not open file.");
+    
+    for mask in &total_set {
+        write!(file, "{:016x}\n", mask).expect("Could not write to file.");
+    }
+}
+
+fn read_allowed(file_mask_in: String) -> (FnvHashSet<u64>,FnvHashSet<u64>) {
+    let mut file_alpha_path = file_mask_in.clone();
+    file_alpha_path.push_str(".alpha");
+    let mut file_beta_path = file_mask_in.clone();
+    file_beta_path.push_str(".beta");
+
+    let file = File::open(file_alpha_path).expect("Could not open file.");
+    let alpha_allowed = BufReader::new(file).lines()
+                                            .map(|x| u64::from_str_radix(&x.expect("Error reading file"), 16)
+                                                         .expect("Could not parse integer"))
+                                            .collect();
+
+    let file = File::open(file_beta_path).expect("Could not open file.");
+    let beta_allowed = BufReader::new(file).lines()
+                                           .map(|x| u64::from_str_radix(&x.expect("Error reading file"), 16)
+                                                        .expect("Could not parse integer"))
+                                           .collect();
+    (alpha_allowed, beta_allowed)
+}
+
 fn find_trails (
     cipher: &Cipher, 
     rounds: usize, 
     patterns: usize,
-    file_name_graph: Option<String>) 
+    alpha_allowed: &FnvHashSet<u64>,
+    beta_allowed: &FnvHashSet<u64>,
+    file_graph: Option<String>) 
     -> (SingleRoundMap, FnvHashSet<u64>) {
-    let graph = generate_graph(cipher, rounds, patterns);
+    let graph = generate_graph(cipher, rounds, patterns, alpha_allowed, beta_allowed);
 
-    match file_name_graph {
+    match file_graph {
         Some(path) => {
             print_to_graph_tool(&graph, &path);
         },
@@ -50,12 +109,13 @@ fn find_trails (
     (single_round_map, input_masks)
 }
 
-pub fn find_approximations(
+pub fn find_approximations (
     cipher: &Cipher, 
     rounds: usize, 
     patterns: usize,
-    file_name_mask: Option<String>,
-    file_name_graph: Option<String>) {
+    file_mask_in: Option<String>,
+    file_mask_out: Option<String>,
+    file_graph: Option<String>) {
     let num_threads = num_cpus::get();
     let (result_tx, result_rx) = mpsc::channel();
     let start = time::precise_time_s();
@@ -63,45 +123,23 @@ pub fn find_approximations(
     let num_keep = 50;
     let mut min_correlation = 1.0_f64;
     let mut num_found = 0;
-    let (single_round_map, input_masks) = find_trails (cipher, rounds, patterns, file_name_graph);
+
+    let (alpha_allowed, beta_allowed) = match file_mask_in {
+        Some(path) => {
+            read_allowed(path)
+        },
+        None => {  
+            (FnvHashSet::default(), FnvHashSet::default())
+        }
+    };
+
+    let (single_round_map, input_masks) = 
+        find_trails(cipher, rounds, patterns, &alpha_allowed, &beta_allowed, file_graph);
 
     // Dump union of all hull sets if path is specified
-    match file_name_mask {
+    match file_mask_out {
         Some(path) => {
-            let mut file_app_path = path.clone();
-            file_app_path.push_str(".app");
-            let mut file_set_path = path.clone();
-            file_set_path.push_str(".set");
-
-            let mut file = OpenOptions::new()
-                                       .write(true)
-                                       .append(false)
-                                       .create(true)
-                                       .open(file_app_path)
-                                       .expect("Could not open file.");
-
-            let mut total_set = FnvHashSet::default();
-
-            for (alpha, betas) in &single_round_map.map {
-                total_set.insert(*alpha);
-
-                for &(beta, _) in betas {
-                    total_set.insert(beta);
-
-                    write!(file, "{:016x}, {:016x}\n", alpha, beta).expect("Could not write to file.");
-                }
-            }
-
-            let mut file = OpenOptions::new()
-                                       .write(true)
-                                       .append(false)
-                                       .create(true)
-                                       .open(file_set_path)
-                                       .expect("Could not open file.");
-            
-            for mask in &total_set {
-                write!(file, "{:016x}\n", mask).expect("Could not write to file.");
-            }
+            dump_masks(path, &single_round_map);
         },
         None => { }
     }
@@ -113,6 +151,8 @@ pub fn find_approximations(
     for t in 0..num_threads {
         let input_masks = input_masks.clone();
         let single_round_map = single_round_map.clone();
+        let alpha_allowed = alpha_allowed.clone();
+        let beta_allowed = beta_allowed.clone();
         let result_tx = result_tx.clone();
 
         thread::spawn(move || {
@@ -126,8 +166,11 @@ pub fn find_approximations(
                 num_found += edge_map.map.len();
                 
                 for (a, b) in &edge_map.map {
-                    paths += b.0;
-                    result.push((a.clone(), b.0, b.1));
+                    if (alpha_allowed.len() == 0 || alpha_allowed.contains(&a.alpha)) &&
+                       (beta_allowed.len() == 0 || beta_allowed.contains(&a.beta)) {
+                        paths += b.0;
+                        result.push((a.clone(), b.0, b.1));
+                    }
                 }
                 
                 result.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());

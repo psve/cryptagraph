@@ -221,7 +221,7 @@ impl Eq for InternalSboxPattern {}
 
 /***********************************************************************************************/
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 enum PatternStatus {
     New,
     Old,
@@ -275,73 +275,69 @@ impl SboxPattern {
     }
 
     pub fn next(&mut self, lat_map: &LatMap, app_type: &AppType) -> Option<Approximation> {
-        let status = self.status.clone();
-        match status {
-            PatternStatus::New => {
-                for &(i, x) in &self.pattern {
-                    let sbox_app = match app_type {
-                        AppType::All   => lat_map.get(&x).unwrap()[0],
-                        AppType::Alpha => lat_map.get_alpha(&x).unwrap()[0],
-                        AppType::Beta  => lat_map.get_beta(&x).unwrap()[0]
-                    };
-                    let alpha = sbox_app.alpha;
-                    let beta = sbox_app.beta;
+        if self.counter.len() == 0 {
+            self.status = PatternStatus::Empty;
+        }
 
-                    self.approximation.alpha ^= alpha << i;
-                    self.approximation.beta ^= beta << i;
-                }
+        if self.status == PatternStatus::Empty {
+            return None;
+        }
 
-                self.status = PatternStatus::Old;
-                return self.next(lat_map, app_type);
-            },
-            PatternStatus::Old => {
-                if self.counter.len() == 0 {
-                    self.status = PatternStatus::Empty;
-                }
+        if self.status == PatternStatus::New {
+            for &(i, x) in &self.pattern {
+                let sbox_app = match app_type {
+                    AppType::All   => lat_map.get(&x).unwrap()[0],
+                    AppType::Alpha => lat_map.get_alpha(&x).unwrap()[0],
+                    AppType::Beta  => lat_map.get_beta(&x).unwrap()[0]
+                };
+                let alpha = sbox_app.alpha;
+                let beta = sbox_app.beta;
 
-                let result = self.approximation;
+                self.approximation.alpha ^= alpha << i;
+                self.approximation.beta ^= beta << i;
+            }
 
-                for i in 0..self.counter.len() {
-                    let idx = self.pattern[i].0;
-                    let val = self.pattern[i].1;
-                    let modulus = match app_type {
-                        AppType::All   => lat_map.len_of(val),
-                        AppType::Alpha => lat_map.len_of_alpha(val),
-                        AppType::Beta  => lat_map.len_of_beta(val)
-                    };
+            self.status = PatternStatus::Old;
+        }
+        
+        let result = self.approximation;
 
-                    self.counter[i] = (self.counter[i] + 1) % modulus;
+        for i in 0..self.counter.len() {
+            let idx = self.pattern[i].0;
+            let val = self.pattern[i].1;
+            let modulus = match app_type {
+                AppType::All   => lat_map.len_of(val),
+                AppType::Alpha => lat_map.len_of_alpha(val),
+                AppType::Beta  => lat_map.len_of_beta(val)
+            };
 
-                    // No more approximations
-                    if i+1 == self.counter.len() && self.counter[i] == 0 {
-                        self.status = PatternStatus::Empty;
-                        return Some(result);
-                    }
+            self.counter[i] = (self.counter[i] + 1) % modulus;
 
-                    // Update current position
-                    let app = match app_type {
-                        AppType::All   => lat_map.get(&val).unwrap()[self.counter[i]],
-                        AppType::Alpha => lat_map.get_alpha(&val).unwrap()[self.counter[i]],
-                        AppType::Beta  => lat_map.get_beta(&val).unwrap()[self.counter[i]]
-                    };
-
-                    self.approximation.alpha = 
-                        (self.approximation.alpha & !(self.mask << idx)) ^ (app.alpha << idx);
-                    self.approximation.beta = 
-                        (self.approximation.beta & !(self.mask << idx)) ^ (app.beta << idx);
-
-                    // Continue only if current counter rolls over
-                    if self.counter[i] != 0 {
-                        break;
-                    }
-                }
-                
+            // No more approximations
+            if i+1 == self.counter.len() && self.counter[i] == 0 {
+                self.status = PatternStatus::Empty;
                 return Some(result);
-            },
-            PatternStatus::Empty => {
-                return None;
+            }
+
+            // Update current position
+            let app = match app_type {
+                AppType::All   => lat_map.get(&val).unwrap()[self.counter[i]],
+                AppType::Alpha => lat_map.get_alpha(&val).unwrap()[self.counter[i]],
+                AppType::Beta  => lat_map.get_beta(&val).unwrap()[self.counter[i]]
+            };
+
+            self.approximation.alpha = 
+                (self.approximation.alpha & !(self.mask << idx)) ^ (app.alpha << idx);
+            self.approximation.beta = 
+                (self.approximation.beta & !(self.mask << idx)) ^ (app.beta << idx);
+
+            // Continue only if current counter rolls over
+            if self.counter[i] != 0 {
+                break;
             }
         }
+        
+        Some(result)
     }
 
     /* Returns the number of approximations described by this pattern */

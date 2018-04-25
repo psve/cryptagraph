@@ -36,13 +36,15 @@ fn run_search(
     cipher: &Cipher, 
     rounds: usize, 
     num_patterns: usize, 
-    file_name_mask: Option<String>,
-    file_name_graph: Option<String>) {
+    file_mask_in: Option<String>,
+    file_mask_out: Option<String>,
+    file_graph: Option<String>) {
     println!("\tCipher: {}.", cipher.name());
     println!("\tRounds: {}.", rounds);
     println!("\tS-box patterns: {}\n", num_patterns);
 
-    multi_round::find_approximations(cipher, rounds, num_patterns, file_name_mask, file_name_graph);
+    multi_round::find_approximations(cipher, rounds, num_patterns, 
+                                     file_mask_in, file_mask_out, file_graph);
 }
 
 fn main() {
@@ -50,14 +52,16 @@ fn main() {
 
     let rounds = options.rounds.expect("Number of rounds must be specified in this mode.");
     let num_patterns = options.num_patterns.expect("Number of patterns must be specified in this mode.");
-    let file_name_mask = options.file_name_mask;
-    let file_name_graph = options.file_name_graph;
+    let file_mask_in = options.file_mask_in;
+    let file_mask_out = options.file_mask_out;
+    let file_graph = options.file_graph;
 
     let cipher = match name_to_cipher(options.cipher.as_ref()) {
         Some(c) => c,
         None    => panic!("Cipher must be one of: present, gift, twine, puffin, skinny, midori, led, rectangle, mibs")
     };
 
-    run_search(cipher.as_ref(), rounds, num_patterns, file_name_mask, file_name_graph);
+    run_search(cipher.as_ref(), rounds, num_patterns, 
+               file_mask_in, file_mask_out, file_graph);
 }
     

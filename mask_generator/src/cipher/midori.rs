@@ -1,5 +1,4 @@
-use cipher::Sbox;
-use cipher::Cipher;
+use cipher::{Sbox, CipherStructure, Cipher};
 
 /*****************************************************************
                             Midori
@@ -48,6 +47,11 @@ pub fn new() -> Midori {
 }
 
 impl Cipher for Midori {
+    /* Returns the design type of the cipher */
+    fn structure(&self) -> CipherStructure {
+        CipherStructure::Spn
+    }
+    
     /* Returns the size of the input to Midori. This is always 64 bits. */
     fn size(&self) -> usize {
         self.size

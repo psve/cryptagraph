@@ -1,5 +1,4 @@
-use cipher::Sbox;
-use cipher::Cipher;
+use cipher::{Sbox, CipherStructure, Cipher};
 
 /*****************************************************************
                             MIBS
@@ -34,6 +33,11 @@ pub fn new() -> Mibs {
 }
 
 impl Cipher for Mibs {
+    /* Returns the design type of the cipher */
+    fn structure(&self) -> CipherStructure {
+        CipherStructure::Feistel
+    }
+
     /* Returns the size of the input to MIBS. This is always 64 bits. */
     fn size(&self) -> usize {
         self.size
@@ -215,17 +219,11 @@ impl Cipher for Mibs {
     fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
         let output = self.linear_layer(output & 0xffffffff)
                    ^ (self.linear_layer(output >> 32) << 32);
-        let mut alpha = 0;
-
+        let mut alpha = output;
         alpha ^= input << 32;
-        alpha ^= output & 0xffffffff;
-        alpha ^= input >> 32;
 
-        let mut beta = 0;
-
-        beta ^= input >> 32;
-        beta ^= output & 0xffffffff00000000;
-        beta ^= input << 32;
+        let mut beta = output;
+        beta ^= input >> 32;        
 
         (alpha, beta)
     }

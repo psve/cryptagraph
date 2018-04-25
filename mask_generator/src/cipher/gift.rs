@@ -1,5 +1,4 @@
-use cipher::Sbox;
-use cipher::Cipher;
+use cipher::{Sbox, CipherStructure, Cipher};
 
 #[derive(Clone)]
 pub struct Gift {
@@ -33,6 +32,11 @@ pub fn new() -> Gift {
 }
 
 impl Cipher for Gift {
+    /* Returns the design type of the cipher */
+    fn structure(&self) -> CipherStructure {
+        CipherStructure::Spn
+    }
+
     /* Returns the size of the input to GIFT. This is always 64 bits. */
     fn size(&self) -> usize {
         self.size

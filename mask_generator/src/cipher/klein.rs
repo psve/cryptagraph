@@ -1,5 +1,4 @@
-use cipher::Sbox;
-use cipher::Cipher;
+use cipher::{Sbox, CipherStructure, Cipher};
 
 /*****************************************************************
                             KLEIN
@@ -43,7 +42,11 @@ fn mult_08(y: u8) -> u8{
 }
 
 impl Cipher for Klein {
-
+    /* Returns the design type of the cipher */
+    fn structure(&self) -> CipherStructure {
+        CipherStructure::Spn
+    }
+    
     /* Returns the size of the input to KLEIN. This is always 64 bits. */
     fn size(&self) -> usize {
         self.size

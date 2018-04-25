@@ -1,5 +1,4 @@
-use cipher::Sbox;
-use cipher::Cipher;
+use cipher::{Sbox, CipherStructure, Cipher};
 
 /*****************************************************************
                             LED
@@ -44,6 +43,11 @@ fn led_times2(x: u64) -> u64 {
 }
 
 impl Cipher for Led {
+    /* Returns the design type of the cipher */
+    fn structure(&self) -> CipherStructure {
+        CipherStructure::Spn
+    }
+    
     /* Returns the size of the input to LED. This is always 64 bits. */
     fn size(&self) -> usize {
         self.size
