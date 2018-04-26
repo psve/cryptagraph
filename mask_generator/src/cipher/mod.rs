@@ -117,6 +117,7 @@ mod rectangle;
 mod mibs;
 mod klein;
 mod pride;
+mod khazad;
 
 pub fn name_to_cipher(name : &str) -> Option<Box<(Cipher + Sync)>> {
     match name {
@@ -131,6 +132,7 @@ pub fn name_to_cipher(name : &str) -> Option<Box<(Cipher + Sync)>> {
         "mibs"      => Some(Box::new(mibs::new())),
         "klein"     => Some(Box::new(klein::new())),
         "pride"     => Some(Box::new(pride::new())),
+        "khazad"     => Some(Box::new(khazad::new())),
         _ => None
     }
 }
