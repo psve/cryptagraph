@@ -541,14 +541,12 @@ pub fn generate_graph(
         name.push_str(&level.to_string());
         print_to_graph_tool(&graph, &name);*/
 
-        if alpha_allowed.len() > 0 || beta_allowed.len() > 0 {
-            let start = time::precise_time_s();
-            prune_graph(&mut graph, 0, rounds+1);
-            println!("Pruned graph has {} vertices and {} edges [{} s]", 
-                graph.num_vertices(), 
-                graph.num_edges(), 
-                time::precise_time_s()-start);
-        }
+        let start = time::precise_time_s();
+        prune_graph(&mut graph, 0, rounds+1);
+        println!("Pruned graph has {} vertices and {} edges [{} s]", 
+            graph.num_vertices(), 
+            graph.num_edges(), 
+            time::precise_time_s()-start);
 
         if level != COMPRESS.len() - 1 {
             let start = time::precise_time_s();

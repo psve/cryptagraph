@@ -134,7 +134,7 @@ impl Cipher for Gift {
     fn encrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64 {
         let mut output = input;
 
-        for i in 0..16 {
+        for i in 0..28 {
             // Apply S-box
             let mut tmp = 0;
 
@@ -156,9 +156,9 @@ impl Cipher for Gift {
     fn decrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64 {
         let mut output = input;
 
-        for i in 0..16 {
+        for i in 0..28 {
             // Add round key
-            output ^= round_keys[15-i];
+            output ^= round_keys[27-i];
 
             // Apply linear layer
             output = self.linear_layer_inv(output);
@@ -238,7 +238,7 @@ mod tests {
         let cipher = cipher::name_to_cipher("gift").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(16, &key);
+        let round_keys = cipher.key_schedule(28, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 
@@ -246,7 +246,7 @@ mod tests {
 
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(16, &key);
+        let round_keys = cipher.key_schedule(28, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 
