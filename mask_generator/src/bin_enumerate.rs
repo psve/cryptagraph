@@ -1,8 +1,8 @@
 extern crate structopt;
 extern crate rand;
+extern crate fnv;
 
-#[macro_use]
-extern crate structopt_derive;
+#[macro_use] extern crate structopt_derive;
 
 mod pool;
 mod cipher;
@@ -59,7 +59,7 @@ fn main() {
         let line = line.unwrap();
         let mask = match u64::from_str_radix(&line, 16) {
             Ok(m)  => m,
-            Err(e) => panic!("failed to parse mask")
+            Err(_) => panic!("failed to parse mask")
         };
         masks.push(mask);
     }
@@ -71,6 +71,8 @@ fn main() {
         Some(c) => c,
         None    => panic!("unsupported cipher")
     };
+
+    // calculate LAT for masks between rounds (cipher dependent)
 
     println!("{:x} {:x}", alpha, beta);
     println!("> calculating approximation table");
@@ -87,7 +89,7 @@ fn main() {
     let mut rng = OsRng::new().unwrap();
     let mut key = vec![0; cipher.key_size() / 8];
 
-    for k in 0..options.keys {
+    for _ in 0..options.keys {
 
         // generate rounds keys
 
@@ -96,13 +98,16 @@ fn main() {
 
         // initalize pool with chosen alpha
 
-        pool_old.init(alpha);
+        pool_old.clear();
+        pool_old.add(alpha);
 
         for rkey in keys.iter() {
 
             // "clock" all patterns one round
 
             pool::step(&lat, &mut pool_new, &pool_old, *rkey);
+
+            //// println!("pool size {:}", pool_new.size());
 
             // swap pools
 
@@ -120,15 +125,12 @@ fn main() {
             }
         }
 
-        println!("{:}", match pool_old.masks.get(&beta) {
-            Some(c) => *c,
-            None    => 0.0
-        });
+        for (beta, corr) in &pool_old.masks {
+            println!("corr[{:x}] = {:}", beta, corr);
+            println!("path[{:x}] = {:}", beta, match pool_old.paths.get(&beta) {
+                Some(c) => *c,
+                None    => 0
+            });
+        }
     }
-
-    /*
-    for (k, v) in pool_old.masks.iter() {
-        println!("{:x} {:}", k, v);
-    }
-    */
 }

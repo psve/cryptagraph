@@ -1,23 +1,29 @@
-/*
- *
- */
-
 use cipher::{Cipher, Sbox};
 use std::collections::{HashMap};
 use approximation::{Approximation};
 
+/* Linear Approximation Table over some component.
+ *
+ * Maps (alpha, beta) -> correlation
+ */
 pub struct LAT {
     lat       : Vec<Vec<Option<f64>>>,
     map_alpha : Vec<Vec<Approximation>>,
     map_beta  : Vec<Vec<Approximation>>
 }
 
+/* Approximation over a full domain (up to 64-bit)
+ */
 pub struct MaskApproximation {
     pub corr  : f64,
     pub alpha : u64,
     pub beta  : u64, // permuted, -> new alpha
 }
 
+/* Linear Approximation Table for entire round permutation
+ *
+ * The linear layer has been applied to the { beta } set.
+ */
 pub struct MaskLAT {
     map_alpha: HashMap<u64, Vec<MaskApproximation>>,
 }
@@ -113,11 +119,12 @@ impl MaskLAT {
         let mut alpha      = alpha;
         let mut beta       = beta;
 
+        assert!(cipher.sbox().size * cipher.num_sboxes() == 64);
+
         let w = cipher.sbox().size;
         let m = (1 << w) - 1;
 
-        for i in 0..cipher.num_sboxes() {
-
+        for _ in 0..cipher.num_sboxes() {
             match lat.lookup(alpha & m, beta & m) {
                 None    => { return None; }
                 Some(c) => {
@@ -138,7 +145,7 @@ impl MaskLAT {
     /* Constructs a LAT over the bricklayer function
      * for the particular set of parities
      */
-    pub fn new(cipher : &Cipher, alphas : &Vec<u64>) -> MaskLAT {
+    pub fn new(cipher : &Cipher, masks : &Vec<u64>) -> MaskLAT {
 
         // construct lat for single sbox instance
 
@@ -148,7 +155,7 @@ impl MaskLAT {
 
         let mut betas = vec![];
 
-        for alpha in alphas.iter() {
+        for alpha in masks.iter() {
             let beta = cipher.linear_layer_inv(*alpha);
             assert!(cipher.linear_layer(beta) == *alpha);
             betas.push(beta);
@@ -160,11 +167,11 @@ impl MaskLAT {
             map_alpha : HashMap::new(),
         };
 
-        for alpha in alphas.iter() {
+        for alpha in masks.iter() {
             mlat.map_alpha.insert(*alpha, vec![]);
         }
 
-        for alpha in alphas.iter() {
+        for alpha in masks.iter() {
             for beta in betas.iter() {
                 match MaskLAT::correlation(cipher, &lat, *alpha, *beta) {
                     None       => (), // zero correlation
@@ -172,7 +179,7 @@ impl MaskLAT {
                         let vector = mlat.map_alpha.get_mut(alpha).unwrap();
                         vector.push(MaskApproximation{
                             alpha : *alpha,
-                            beta  : cipher.linear_layer(*beta),
+                            beta  : cipher.linear_layer(*beta), // NOTE: apply linear layer again
                             corr  : corr
                         });
                     }
