@@ -19,8 +19,8 @@ impl Sbox {
      * table    A table discribing the S-box transformation.
      */
     fn new(size: usize, table: Vec<u8>) -> Sbox {
-        let lat = Sbox::generate_lat(&table, size);
-        let ddt = Sbox::generate_ddt(&table, size);
+        let lat = Sbox::generate_lat(&table[..], size);
+        let ddt = Sbox::generate_ddt(&table[..], size);
 
         Sbox {
             size: size, 
@@ -31,7 +31,7 @@ impl Sbox {
     }
 
     /* Generates the LAT associated with the S-box. */
-    fn generate_lat(table: &Vec<u8>, sbox_size: usize) -> Vec<Vec<usize>> {
+    fn generate_lat(table: &[u8], sbox_size: usize) -> Vec<Vec<usize>> {
         let lat_size = 1 << sbox_size;
         let mut lat = vec![vec![0; lat_size]; lat_size];
 
@@ -54,7 +54,7 @@ impl Sbox {
     }
 
     /* Generates the DDT associated with the S-box. */
-    fn generate_ddt(table: &Vec<u8>, sbox_size: usize) -> Vec<Vec<usize>> {
+    fn generate_ddt(table: &[u8], sbox_size: usize) -> Vec<Vec<usize>> {
         let ddt_size = 1 << sbox_size;
         let mut ddt = vec![vec![0; ddt_size]; ddt_size];
 
@@ -88,7 +88,7 @@ pub enum CipherStructure {
 }
 
 /* A trait defining an SPN cipher */
-pub trait Cipher: Send + Sync {
+pub trait Cipher: Sync {
     /* Returns the design type of the cipher */
     fn structure(&self) -> CipherStructure;
 
@@ -151,7 +151,7 @@ mod pride;
 mod khazad;
 mod fly;
 
-pub fn name_to_cipher(name : &str) -> Option<Box<(Cipher + Send)>> {
+pub fn name_to_cipher(name : &str) -> Option<Box<Cipher>> {
     match name {
         "present"   => Some(Box::new(present::new())),
         "gift"      => Some(Box::new(gift::new())),

@@ -2,6 +2,7 @@ use property::{Property, PropertyType, PropertyFilter, PropertyMap};
 use cipher::Cipher;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
+use smallvec::SmallVec;
 
 /* An internal representation of a partial S-box pattern. An S-box pattern describes a
  * truncated property, but where the value is specified for each S-box.
@@ -28,10 +29,10 @@ impl InternalSboxPattern {
      * property_values  A list of property values for the S-box in descending order.
                         Is assumed to contain the bias of the trivial property.
      */
-    fn extend(&self, property_values: &Vec<i16>, property_type: PropertyType) ->
+    fn extend(&self, property_values: &[i16], property_type: PropertyType) ->
         (Option<InternalSboxPattern>, Option<InternalSboxPattern>) {
         // Counter bias of the trivial property
-        let trivial = property_values[0] as f64;
+        let trivial = *property_values.first().expect("No values found.") as f64;
 
         // We generate at most two new patterns
         let mut extended_patterns = (None, None);
@@ -40,18 +41,10 @@ impl InternalSboxPattern {
         // If the current pattern is complete, we cannot extend in this way
         if !self.is_complete() {
             let mut new_pattern = self.clone();
-            new_pattern.pattern[self.determined_length] = Some(property_values[0]);
+            new_pattern.pattern[self.determined_length] = Some(trivial as i16);
             new_pattern.determined_length += 1;
 
-            match property_type {
-                PropertyType::Linear => {
-                    new_pattern.value *= (property_values[0] as f64 / trivial).powi(2);
-                },
-                PropertyType::Differential => {
-                    new_pattern.value *= property_values[0] as f64 / trivial;  
-                }
-            }
-            
+            // Note that the value doesn't change when extended by the trivial pattern            
             extended_patterns.0 = Some(new_pattern);
         }
 
@@ -157,7 +150,7 @@ impl SboxPattern {
      *
      * internal_sbox_pattern    A complete internal S-box pattern.
      */
-    fn new(
+    fn new (
         cipher: &Cipher,
         internal_sbox_pattern: &InternalSboxPattern,
         property_type: PropertyType) 
@@ -312,19 +305,14 @@ impl<'a> SortedProperties<'a> {
         
         // Generate property map and get S-box property values
         let property_map = PropertyMap::new(cipher, property_type);
-        let mut property_values = vec![];
-
-        for (key, _) in &property_map.map {
-            property_values.push(*key);
-        }
+        let mut property_values: SmallVec<[_; 128]> = property_map.map.keys().cloned().collect();
 
         // We need the values in descending order
-        property_values.sort();
-        property_values.reverse();
+        property_values.sort_by(|a, b| b.cmp(&a));
 
         // Start with a partial pattern where only the first value is determined
         let mut tmp = vec![None; cipher.num_sboxes()];
-        tmp[0] = Some(property_values[0]);
+        tmp[0] = Some(*property_values.first().expect("No values found."));
         let current_pattern = InternalSboxPattern {
             pattern: tmp,
             determined_length: 1,
@@ -356,7 +344,8 @@ impl<'a> SortedProperties<'a> {
             let current_pattern = heap.pop().unwrap();
 
             // Extend best pattern and add the result to the heap
-            let (pattern_1, pattern_2) = current_pattern.extend(&property_values, property_type);
+            let (pattern_1, pattern_2) = current_pattern.extend(&property_values[..], 
+                                                                property_type);
 
             match pattern_1 {
                 Some(pattern) => {

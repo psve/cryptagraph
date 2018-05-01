@@ -106,7 +106,7 @@ fn read_allowed(file_mask_in: String) -> (FnvHashSet<u64>,FnvHashSet<u64>) {
 }
 
 pub fn find_approximations (
-    cipher: &Cipher, 
+    cipher: Box<Cipher>, 
     property_type: PropertyType,
     rounds: usize, 
     patterns: usize,
@@ -134,10 +134,6 @@ pub fn find_approximations (
         },
         None => {}
     }
-    
-    let input_masks: FnvHashSet<_> = graph.get_stage(0).unwrap()
-                                          .keys().map(|&x| x as u64)
-                                          .collect();
 
     // Dump union of all hull sets if path is specified
     match file_mask_out {
@@ -147,9 +143,7 @@ pub fn find_approximations (
         None => { }
     }
     
-    let result = parallel_find_hulls(&graph, rounds, &input_masks, 
-                                     &input_allowed, &output_allowed, 
-                                     num_keep);
+    let result = parallel_find_hulls(&graph,&input_allowed, &output_allowed, num_keep);
     
     println!("Search finished. [{} s]", time::precise_time_s()-start);
 

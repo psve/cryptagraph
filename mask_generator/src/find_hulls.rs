@@ -1,5 +1,6 @@
 use property::{Property};
-use fnv::{FnvHashMap, FnvHashSet};
+use fnv::FnvHashSet;
+use indexmap::IndexMap;
 use graph::MultistageGraph;
 use time;
 use std::sync::mpsc;
@@ -19,14 +20,14 @@ fn find_hulls(
     graph: &MultistageGraph, 
     rounds: usize, 
     input: u64) 
-    -> Vec<Property> {
+    -> IndexMap<u64, Property> {
     let start_property = Property::new(input, input, 1.0, 1);
-    let mut edge_map = FnvHashMap::default();
+    let mut edge_map = IndexMap::new();
     edge_map.insert(input, start_property);
 
     // Extend edge map the desired number of rounds
     for r in 0..rounds {
-        let mut new_edge_map = FnvHashMap::default();
+        let mut new_edge_map = IndexMap::new();
 
         // Go through all edges (i.e. properties (input, output)) in the current map
         for (output, &property) in &edge_map {
@@ -51,19 +52,19 @@ fn find_hulls(
         edge_map = new_edge_map;
     }
 
-    edge_map.values().map(|x| *x).collect()
+    edge_map
 }
 
 pub fn parallel_find_hulls (
     graph: &MultistageGraph,
-    rounds: usize,
-    input_masks: &FnvHashSet<u64>,
     input_allowed: &FnvHashSet<u64>,
     output_allowed: &FnvHashSet<u64>,
     num_keep: usize) 
     -> Vec<Property> {
+    let rounds = graph.stages() - 1;
+    let input_len = graph.get_stage(0).unwrap().len();
     println!("Finding linear hulls ({} input masks, {} approximations):", 
-             input_masks.len(), graph.num_edges());
+             input_len, graph.num_edges());
 
     let start = time::precise_time_s();
     let num_threads = num_cpus::get();
@@ -75,16 +76,16 @@ pub fn parallel_find_hulls (
 
             scope.spawn(move || {
                 let mut result = vec![];
-                let mut progress_bar = ProgressBar::new(input_masks.len());
+                let mut progress_bar = ProgressBar::new(input_len);
                 let mut min_value = 1.0_f64;
                 let mut num_found = 0;
                 let mut paths = 0;
 
-                for &input in input_masks.iter().skip(t).step_by(num_threads) {
-                    let hulls = find_hulls(&graph, rounds, input);
+                for &input in graph.get_stage(0).unwrap().keys().skip(t).step_by(num_threads) {
+                    let hulls = find_hulls(&graph, rounds, input as u64);
                     num_found += hulls.len();
                     
-                    for property in &hulls {
+                    for property in hulls.values() {
                         if (input_allowed.len() == 0 || input_allowed.contains(&property.input)) &&
                            (output_allowed.len() == 0 || output_allowed.contains(&property.output)) {
                             paths += property.trails;

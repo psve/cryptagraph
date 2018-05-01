@@ -8,6 +8,8 @@ extern crate rand;
 extern crate num_cpus;
 extern crate crossbeam_utils;
 extern crate fnv;
+extern crate indexmap;
+#[macro_use] extern crate smallvec;
 
 mod cipher;
 mod utility;
@@ -34,7 +36,7 @@ use property::PropertyType;
  * file_name                File name prefix to use for output. 
  */
 fn run_search(
-    cipher: &Cipher, 
+    cipher: Box<Cipher>, 
     property_type: PropertyType,
     rounds: usize, 
     num_patterns: usize, 
@@ -64,7 +66,7 @@ fn main() {
         None    => panic!("Cipher must be one of: present, gift, twine, puffin, skinny, midori, led, rectangle, mibs")
     };
 
-    run_search(cipher.as_ref(), property_type, rounds, num_patterns, 
+    run_search(cipher, property_type, rounds, num_patterns, 
                file_mask_in, file_mask_out, file_graph);
 }
     

@@ -12,6 +12,8 @@ num_cpus = "*"
 crossbeam-utils = "*"
 lazy_static = "*"
 fnv = "*"
+indexmap = "*"
+smallvec = "*"
 
 [dev-dependencies]
 quickcheck = "0.6"

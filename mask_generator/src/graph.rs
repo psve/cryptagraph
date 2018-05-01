@@ -1,4 +1,5 @@
 use fnv::FnvHashMap;
+use indexmap::IndexMap;
 
 #[derive(Clone, Debug)]
 pub struct Vertex {
@@ -43,36 +44,40 @@ impl MultistageGraph {
         self.vertices.len()
     }
 
-    pub fn add_vertex(&mut self, stage: usize, label: usize) {
-        let vertex = Vertex::new();
-
-        if stage < self.vertices.len() && !self.vertices[stage].contains_key(&label) {
-            self.vertices[stage].insert(label, vertex);
+    pub fn add_vertex(&mut self, stage: usize, label: usize) {    
+        if !self.vertices.get(stage).expect("Stage out of range").contains_key(&label) {
+            let vertex = Vertex::new();
+            self.vertices.get_mut(stage)
+                         .expect("Stage out of range")
+                         .insert(label, vertex);
         }
     }
 
     pub fn add_edge(&mut self, stage: usize, from: usize, to: usize, length: f64) {
-        if stage+1 < self.vertices.len() && 
-           self.vertices[stage].contains_key(&from) &&
-           self.vertices[stage+1].contains_key(&to) {
+        if self.vertices.get(stage).expect("Stage out of range").contains_key(&from) &&
+           self.vertices.get(stage+1).expect("Stage out of range").contains_key(&to) {
             {
-                let from_vertex = self.vertices[stage].get_mut(&from).expect("Error 1");
+                let from_vertex = self.vertices.get_mut(stage)
+                                      .expect("Stage out of range")
+                                      .get_mut(&from).expect("Error 1");
                 from_vertex.add_successor(to, length);
             }
             {
-                let to_vertex = self.vertices[stage+1].get_mut(&to).expect("Error 2");
+                let to_vertex = self.vertices.get_mut(stage+1)
+                                    .expect("Stage out of range")
+                                    .get_mut(&to).expect("Error 2");
                 to_vertex.add_predecessor(from, length);
             }
         }
     }
 
-    pub fn add_edges(&mut self, edges: &FnvHashMap<(usize, usize, usize), f64>) {
+    pub fn add_edges(&mut self, edges: &IndexMap<(usize, usize, usize), f64>) {
         for (&(stage, from, to), &length) in edges {
             self.add_edge(stage, from, to, length);
         }
     }
 
-    pub fn add_edges_and_vertices(&mut self, edges: &FnvHashMap<(usize, usize, usize), f64>) {
+    pub fn add_edges_and_vertices(&mut self, edges: &IndexMap<(usize, usize, usize), f64>) {
         for (&(stage, from, to), &length) in edges {
             if stage == 0 {
                 self.add_vertex(0, from);
@@ -93,7 +98,6 @@ impl MultistageGraph {
                     match before.last_mut() {
                         Some(other_stage) => {
                             for other in vertex.predecessors.keys() {
-                                // println!("{} {} {}", stage, label, other);
                                 let mut other_vertex = other_stage.get_mut(&other).expect("Error 5");
                                 other_vertex.successors.remove(&label);
                             }
@@ -151,19 +155,15 @@ impl MultistageGraph {
     }
 
     pub fn get_vertex(&self, stage: usize, label: usize) -> Option<&Vertex> {
-        if stage < self.vertices.len() {
-            self.vertices[stage].get(&label)
-        } else {
-            None
-        }
+        self.vertices.get(stage).expect("Stage out of range.").get(&label)
     }
 
     pub fn get_stage(&self, stage: usize) -> Option<&FnvHashMap<usize, Vertex>> {
-        if stage < self.vertices.len() {
-            Some(&self.vertices[stage]) 
-        } else {
-            None
-        }
+        Some(&self.vertices.get(stage).expect("Stage out of range."))
+    }
+
+    pub fn has_vertex(&self, stage: usize, label: usize) -> bool {
+        self.vertices.get(stage).expect("Stage out of range.").contains_key(&label)
     }
 
     pub fn num_vertices(&self) -> usize {

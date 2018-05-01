@@ -198,7 +198,7 @@ impl Cipher for Fly {
     }
 
     /* Performs decryption */
-    fn decrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64 {
+    fn decrypt(&self, _input: u64, _round_keys: &Vec<u64>) -> u64 {
         panic!("Not implemented")
     }
 

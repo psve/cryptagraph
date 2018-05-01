@@ -1,9 +1,11 @@
 use crossbeam_utils::scoped;
 use num_cpus;
-use fnv::{FnvHashSet, FnvHashMap};
+use fnv::FnvHashSet;
+use indexmap::IndexMap;
 use std::sync::mpsc;
 use std::sync::{Arc, Barrier};
 use time;
+use smallvec::SmallVec;
 
 use cipher::*;
 use graph::MultistageGraph;
@@ -15,29 +17,40 @@ lazy_static! {
     static ref THREADS: usize = num_cpus::get();
 }
 
+#[inline(always)]
 pub fn compress(x: u64, level: usize) -> u64 {
-    let mut out = 0;
-    let mut tmp = x;
-
-    let block = 1 << (3-level);
-    let mask = ((1 << block) - 1) as u64;
-    let steps = 64 / block;
-
-    for i in 0..steps {
-        if tmp & mask != 0 {
-            out ^= 1 << i;
+    match level {
+        0 => {
+             (x & 0x0101010101010101) |
+            ((x & 0x0202020202020202) >> 1) |
+            ((x & 0x0404040404040404) >> 2) |
+            ((x & 0x0808080808080808) >> 3) |
+            ((x & 0x1010101010101010) >> 4) |
+            ((x & 0x2020202020202020) >> 5) |
+            ((x & 0x4040404040404040) >> 6) |
+            ((x & 0x8080808080808080) >> 7)
         }
-
-        tmp >>= block;
+        1 => {
+             (x & 0x1111111111111111) |
+            ((x & 0x2222222222222222) >> 1) |
+            ((x & 0x4444444444444444) >> 2) |
+            ((x & 0x8888888888888888) >> 3)
+        },
+        2 => {
+             (x & 0x5555555555555555) |
+            ((x & 0xaaaaaaaaaaaaaaaa) >> 1)
+        },
+        3 => {
+            x
+        },
+        _ => panic!("Compression level out of range.")
     }
-
-    out
 }
 
 fn get_vertices (
     properties: &SortedProperties, 
     rounds: usize, 
-    filters: &Vec<FnvHashSet<u64>>,
+    filters: &[FnvHashSet<u64>],
     level: usize) 
     -> MultistageGraph {
     let barrier = Arc::new(Barrier::new(*THREADS));
@@ -64,7 +77,7 @@ fn get_vertices (
                 thread_properties.sbox_patterns = tmp;
 
                 // Collect all input values allowed by filters
-                let mut input_sets = vec![FnvHashSet::default(); rounds-1];
+                let mut input_sets: SmallVec<[_; 256]> = smallvec![FnvHashSet::default(); rounds-1];
                 let mut progress_bar = ProgressBar::new(num_input);
                 thread_properties.set_type_input();
 
@@ -78,8 +91,8 @@ fn get_vertices (
                     let old = compress(input, level - 1);
                     let new = compress(input, level);
 
-                    for r in 0..rounds-1 {
-                        if filters[r+1].contains(&old) {
+                    for (r, f) in filters.iter().skip(1).take(rounds-1).enumerate() {
+                        if f.contains(&old) {
                             input_sets[r].insert(new);
                         }
                     }
@@ -93,7 +106,7 @@ fn get_vertices (
                 }
 
                 // For the last round, collect all output values
-                let mut output_sets = vec![FnvHashSet::default(); rounds-1];
+                let mut output_sets: SmallVec<[_; 256]> = smallvec![FnvHashSet::default(); rounds-1];
                 let mut progress_bar = ProgressBar::new(num_output);
                 thread_properties.set_type_output();
 
@@ -107,8 +120,8 @@ fn get_vertices (
                     let old = compress(output, level - 1);
                     let new = compress(output, level);
 
-                    for r in 0..rounds-1 {
-                        if filters[r+1].contains(&old) {
+                    for (r, f) in filters.iter().skip(1).take(rounds-1).enumerate() {
+                        if f.contains(&old) {
                             output_sets[r].insert(new);
                         }
                     }
@@ -121,38 +134,25 @@ fn get_vertices (
         }
     });
     println!("");
+    
+    // Create graph from vertex sets
+    let mut graph = MultistageGraph::new(rounds+1);
+    let mut input_sets: SmallVec<[FnvHashSet<u64>; 256]> = smallvec![FnvHashSet::default(); rounds-1];
+    let mut output_sets: SmallVec<[FnvHashSet<u64>; 256]> = smallvec![FnvHashSet::default(); rounds-1];
 
-    let mut vertex_sets: Vec<FnvHashSet<u64>> = vec![FnvHashSet::default(); rounds-1];
-    {
-        let mut input_sets = vec![FnvHashSet::default(); rounds-1];
-        let mut output_sets = vec![FnvHashSet::default(); rounds-1];
-
-        for _ in 0..*THREADS {
-            let thread_result = result_rx.recv().expect("Main could not receive result");
-            
-            for (i, set) in thread_result.0.iter().enumerate() {
-                input_sets[i].extend(set.iter());
-            }
-
-            for (i, set) in thread_result.1.iter().enumerate() {
-                output_sets[i].extend(set.iter());
-            }
-        }
+    for _ in 0..*THREADS {
+        let thread_result = result_rx.recv().expect("Main could not receive result");
         
-        for i in 0..rounds-1 {
-            vertex_sets[i] = input_sets[i].intersection(&output_sets[i]).cloned().collect();
+        for i in 0..thread_result.0.len() {
+            input_sets[i].extend(thread_result.0[i].iter());
+            output_sets[i].extend(thread_result.1[i].iter());   
         }
     }
 
-    // Create graph from vertex sets
-    let mut graph = MultistageGraph::new(rounds+1);
-
     for i in 0..rounds-1 {
-        for &label in &vertex_sets[i] {
+        for &label in input_sets[i].intersection(&output_sets[i]) {
             graph.add_vertex(i+1, label as usize);
         }
-
-        vertex_sets[i].clear();
     }
     
     graph
@@ -194,7 +194,7 @@ fn add_middle_edges(
                 thread_properties.sbox_patterns = tmp;
 
                 // Collect edges
-                let mut edges = FnvHashMap::default();
+                let mut edges = IndexMap::new();
 
                 for (property, _) in thread_properties.into_iter() {    
                     let input = compress(property.input, level) as usize;
@@ -202,8 +202,8 @@ fn add_middle_edges(
                     let length = -property.value.log2();
                     
                     for r in 1..rounds-1 {
-                        if graph.get_vertex(r, input).is_some() && 
-                           graph.get_vertex(r+1, output).is_some() {
+                        if graph.has_vertex(r, input) && 
+                           graph.has_vertex(r+1, output) {
                             edges.insert((r, input, output), length);
                         }
                     }
@@ -270,7 +270,7 @@ fn add_outer_edges (
                 thread_properties.sbox_patterns = tmp;
 
                 // Add edges
-                let mut edges = FnvHashMap::default();
+                let mut edges = IndexMap::new();
 
                 for (property, _) in thread_properties.into_iter() {
                     let input = compress(property.input, level) as usize;
@@ -278,22 +278,27 @@ fn add_outer_edges (
                     let length = -property.value.log2();
 
                     // First round                    
-                    if (input_allowed.len() == 0 || input_allowed.contains(&(input as u64))) && 
-                        graph.get_vertex(1, output).is_some() {
-                        let vertex_ref = graph.get_vertex(1, output).unwrap();
-
-                        if rounds == 2 || vertex_ref.successors.len() != 0 {
-                            edges.insert((0, input, output), length);
+                    if (input_allowed.len() == 0 || input_allowed.contains(&(input as u64))) {
+                        match graph.get_vertex(1, output) {
+                            Some(vertex_ref) => {
+                                if rounds == 2 || vertex_ref.successors.len() != 0 {
+                                    edges.insert((0, input, output), length);
+                                }
+                            },
+                            None => {}
                         }
+                        
                     }
 
                     // Last round
-                    if (output_allowed.len() == 0 || output_allowed.contains(&(output as u64))) && 
-                        graph.get_vertex(rounds-1, input).is_some() {
-                        let vertex_ref = graph.get_vertex(rounds-1, input).unwrap();
-
-                        if rounds == 2 || vertex_ref.predecessors.len() != 0 {
-                            edges.insert((rounds-1, input, output), length);
+                    if (output_allowed.len() == 0 || output_allowed.contains(&(output as u64))) {
+                        match graph.get_vertex(rounds-1, input) {
+                            Some(vertex_ref) => {
+                                if rounds == 2 || vertex_ref.predecessors.len() != 0 {
+                                    edges.insert((rounds-1, input, output), length);
+                                }
+                            },
+                            None => {}
                         }
                     }
 
@@ -322,22 +327,21 @@ fn add_outer_edges (
  * vertex_maps  Map of vertex indices to values.
  */
 fn update_filters(
-    filters: &mut Vec<FnvHashSet<u64>>, 
+    filters: &mut [FnvHashSet<u64>], 
     graph: &MultistageGraph)
     -> usize {
-    let stages = graph.stages();
     let mut good_vertices = 0;
 
-    for stage in 0..stages {
-        filters[stage].clear();
-        filters[stage].extend(graph.get_stage(stage).unwrap()
+    for (i, f) in filters.iter_mut().enumerate() {
+        f.clear();
+        f.extend(graph.get_stage(i).unwrap()
                                    .iter()
                                    .filter(|(_, vertex_ref)| 
                                         vertex_ref.successors.len() != 0 || 
                                         vertex_ref.predecessors.len() != 0)
                                    .map(|(input, _)| *input as u64));
 
-        good_vertices += filters[stage].len();
+        good_vertices += f.len();
     }
 
     good_vertices
@@ -349,7 +353,7 @@ fn update_filters(
  * properties   Approximations to remove patterns from.
  */
 fn remove_dead_patterns(
-    filters: &Vec<FnvHashSet<u64>>, 
+    filters: &[FnvHashSet<u64>], 
     properties: &mut SortedProperties,
     level: usize) {
     let (result_tx, result_rx) = mpsc::channel();
@@ -419,6 +423,27 @@ fn remove_dead_patterns(
     properties.set_type_all();
 }
 
+fn init_filter(rounds: usize) -> SmallVec<[FnvHashSet<u64>; 256]> {
+    let mut sequence = FnvHashSet::default();
+
+    for i in 0..256 {
+        let x = (((i >> 0) & 0x1) << 0)
+              ^ (((i >> 1) & 0x1) << 8)
+              ^ (((i >> 2) & 0x1) << 16)
+              ^ (((i >> 3) & 0x1) << 24)
+              ^ (((i >> 4) & 0x1) << 32)
+              ^ (((i >> 5) & 0x1) << 40)
+              ^ (((i >> 6) & 0x1) << 48)
+              ^ (((i >> 7) & 0x1) << 56);
+
+        sequence.insert(x);
+    }
+
+    // Using smallvec here assuming most ciphers don't have a large number of rounds
+    let output: SmallVec<[_; 256]> = smallvec![sequence ; rounds+1];
+    output
+}
+
 /* Creates a graph that represents the linear hull over a number of rounds for a given cipher and 
  * set of properties. 
  * 
@@ -427,17 +452,17 @@ fn remove_dead_patterns(
  * patterns     Number of patterns to generate for properties.
  */
 pub fn generate_graph(
-    cipher: &Cipher, 
+    cipher: Box<Cipher>, 
     property_type: PropertyType,
     rounds: usize, 
     patterns: usize,
     input_allowed: &FnvHashSet<u64>,
     output_allowed: &FnvHashSet<u64>) 
     -> MultistageGraph {
-    let mut properties = SortedProperties::new(cipher, patterns, 
+    let mut properties = SortedProperties::new(cipher.as_ref(), patterns, 
                                                property_type, 
                                                PropertyFilter::All);
-    let mut filters = vec![(0..256).collect() ; rounds+1];
+    let mut filters = init_filter(rounds);
     let mut graph = MultistageGraph::new(0);
 
     for level in 1..4 {
@@ -452,7 +477,7 @@ pub fn generate_graph(
         println!("{} properties ({} input, {} output).", num_app, num_input, num_output);
 
         let start = time::precise_time_s();
-        graph = get_vertices(&properties, rounds, &filters, level);
+        graph = get_vertices(&properties, rounds, &filters[..], level);
         println!("Added vertices [{} s]", time::precise_time_s()-start);
 
         let start = time::precise_time_s();
@@ -503,14 +528,14 @@ pub fn generate_graph(
 
         if level != 3 {
             let start = time::precise_time_s();
-            let good_vertices = update_filters(&mut filters, &graph);
+            let good_vertices = update_filters(&mut filters[..], &graph);
             println!("Number of good vertices: {} [{} s]", 
                 good_vertices,
                 time::precise_time_s()-start);
 
             let start = time::precise_time_s();
             let patterns_before = properties.len_patterns();
-            remove_dead_patterns(&filters, &mut properties, level);
+            remove_dead_patterns(&filters[..], &mut properties, level);
             let patterns_after = properties.len_patterns();
             println!("Removed {} dead patterns [{} s]", 
                 patterns_before - patterns_after, 
