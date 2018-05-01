@@ -1,8 +1,6 @@
 use crossbeam_utils::scoped;
 use num_cpus;
 use fnv::{FnvHashSet, FnvHashMap};
-use std::fs::OpenOptions;
-use std::io::Write;
 use std::sync::mpsc;
 use std::sync::{Arc, Barrier};
 use time;
@@ -10,7 +8,8 @@ use std::cmp;
 
 use cipher::*;
 use graph::MultistageGraph;
-use single_round::{SortedApproximations, AppType};
+use single_round::SortedProperties;
+use property::{PropertyType, PropertyFilter};
 use utility::ProgressBar;
 
 lazy_static! {
@@ -20,6 +19,10 @@ lazy_static! {
         vec![2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
     ];
+}
+
+lazy_static! {
+    static ref THREADS: usize = num_cpus::get();
 }
 
 pub fn compress(x: u64, level: usize) -> u64 {
@@ -40,52 +43,52 @@ pub fn compress(x: u64, level: usize) -> u64 {
 }
 
 fn get_vertices (
-    approximations: &mut SortedApproximations, 
+    properties: &SortedProperties, 
     rounds: usize, 
     filters: &Vec<FnvHashSet<u64>>,
     level: usize) 
     -> MultistageGraph {
-    let num_threads = num_cpus::get();
-    let barrier = Arc::new(Barrier::new(num_threads));
+    let barrier = Arc::new(Barrier::new(*THREADS));
     let (result_tx, result_rx) = mpsc::channel();
-    approximations.set_type_alpha();
-    let num_alpha = approximations.len();
-    approximations.set_type_beta();
-    let num_beta = approximations.len();
 
     scoped::scope(|scope| {
-        for t in 0..num_threads {
-            let mut thread_approximations = approximations.clone();
+        for t in 0..*THREADS {
+            let mut thread_properties = properties.clone();
             let barrier = barrier.clone();
             let result_tx = result_tx.clone();
 
             scope.spawn(move || {
+                thread_properties.set_type_input();
+                let num_input = properties.len();
+                thread_properties.set_type_output();
+                let num_output = properties.len();
+
                 // Annoying solution, hopefully okay
-                let tmp = thread_approximations.sbox_patterns.iter()
-                                                             .cloned()
-                                                             .skip(t)
-                                                             .step_by(num_threads)
-                                                             .collect();
-                thread_approximations.sbox_patterns = tmp;
+                let tmp = thread_properties.sbox_patterns.iter()
+                                                         .cloned()
+                                                         .skip(t)
+                                                         .step_by(*THREADS)
+                                                         .collect();
+                thread_properties.sbox_patterns = tmp;
 
-                // Collect all alpha values allowed by filters
-                let mut alpha_sets = vec![FnvHashSet::default(); rounds-1];
-                let mut progress_bar = ProgressBar::new(num_alpha);
-                thread_approximations.set_type_alpha();
+                // Collect all input values allowed by filters
+                let mut input_sets = vec![FnvHashSet::default(); rounds-1];
+                let mut progress_bar = ProgressBar::new(num_input);
+                thread_properties.set_type_input();
 
-                for (approximation, _) in thread_approximations.into_iter() {
-                    let alpha = if approximation.alpha == 0 {
+                for (property, _) in thread_properties.into_iter() {
+                    let input = if property.input == 0 {
                         continue
                     } else {
-                        approximation.alpha
+                        property.input
                     };
 
-                    let old = compress(alpha, level - 1);
-                    let new = compress(alpha, level);
+                    let old = compress(input, level - 1);
+                    let new = compress(input, level);
 
                     for r in 0..rounds-1 {
                         if filters[r+1].contains(&old) {
-                            alpha_sets[r].insert(new);
+                            input_sets[r].insert(new);
                         }
                     }
 
@@ -97,31 +100,31 @@ fn get_vertices (
                     println!("");
                 }
 
-                // For the last round, collect all beta values
-                let mut beta_sets = vec![FnvHashSet::default(); rounds-1];
-                let mut progress_bar = ProgressBar::new(num_beta);
-                thread_approximations.set_type_beta();
+                // For the last round, collect all output values
+                let mut output_sets = vec![FnvHashSet::default(); rounds-1];
+                let mut progress_bar = ProgressBar::new(num_output);
+                thread_properties.set_type_output();
 
-                for (approximation, _) in thread_approximations.into_iter() {
-                    let beta = if approximation.beta == 0 {
+                for (property, _) in thread_properties.into_iter() {
+                    let output = if property.output == 0 {
                         continue
                     } else {
-                        approximation.beta
+                        property.output
                     };
 
-                    let old = compress(beta, level - 1);
-                    let new = compress(beta, level);
+                    let old = compress(output, level - 1);
+                    let new = compress(output, level);
 
                     for r in 0..rounds-1 {
                         if filters[r+1].contains(&old) {
-                            beta_sets[r].insert(new);
+                            output_sets[r].insert(new);
                         }
                     }
                     
                     progress_bar.increment();
                 }
                 
-                result_tx.send((alpha_sets, beta_sets)).expect("Thread could not send result");
+                result_tx.send((input_sets, output_sets)).expect("Thread could not send result");
             });
         }
     });
@@ -129,23 +132,23 @@ fn get_vertices (
 
     let mut vertex_sets: Vec<FnvHashSet<u64>> = vec![FnvHashSet::default(); rounds-1];
     {
-        let mut alpha_sets = vec![FnvHashSet::default(); rounds-1];
-        let mut beta_sets = vec![FnvHashSet::default(); rounds-1];
+        let mut input_sets = vec![FnvHashSet::default(); rounds-1];
+        let mut output_sets = vec![FnvHashSet::default(); rounds-1];
 
-        for _ in 0..num_threads {
+        for _ in 0..*THREADS {
             let thread_result = result_rx.recv().expect("Main could not receive result");
             
             for (i, set) in thread_result.0.iter().enumerate() {
-                alpha_sets[i].extend(set.iter());
+                input_sets[i].extend(set.iter());
             }
 
             for (i, set) in thread_result.1.iter().enumerate() {
-                beta_sets[i].extend(set.iter());
+                output_sets[i].extend(set.iter());
             }
         }
 
         for i in 0..rounds-1 {
-            vertex_sets[i] = alpha_sets[i].intersection(&beta_sets[i]).cloned().collect();
+            vertex_sets[i] = input_sets[i].intersection(&output_sets[i]).cloned().collect();
         }
     }
 
@@ -159,78 +162,58 @@ fn get_vertices (
 
         vertex_sets[i].clear();
     }
-
-    approximations.set_type_all();
+    
     graph
-}
-
-fn add_edges(graph: &mut MultistageGraph, edges: &FnvHashMap<(usize, usize, usize), f64>) {
-    for (&(stage, from, to), &length) in edges {
-        graph.add_edge(stage, from, to, length);
-    }
-}
-
-fn add_edges_and_vertices(graph: &mut MultistageGraph, edges: &FnvHashMap<(usize, usize, usize), f64>) {
-    for (&(stage, from, to), &length) in edges {
-        if stage == 0 {
-            graph.add_vertex(0, from);
-        } else {
-            graph.add_vertex(stage+1, to);
-        }
-        graph.add_edge(stage, from, to, length);
-    }
 }
 
 fn add_middle_edges(
     graph: &MultistageGraph,
-    approximations: &mut SortedApproximations, 
+    properties: &SortedProperties, 
     rounds: usize, 
     level: usize)
     -> MultistageGraph {
     let min_block = COMPRESS[level].iter()
-                                   .fold(approximations.cipher.size(), |acc, &x| cmp::min(x, acc));
-
-
-    if min_block < approximations.cipher.sbox().size  || 
-       approximations.cipher.structure() == CipherStructure::Feistel {
-        approximations.set_type_all();
-    } else {
-        approximations.set_type_beta();
-    }
+                                   .fold(properties.cipher.size(), |acc, &x| cmp::min(x, acc));
     
     // Collect edges in parallel
-    let num_threads = num_cpus::get();
     let (result_tx, result_rx) = mpsc::channel();
     let mut base_graph = graph.clone();
     
     scoped::scope(|scope| {
-        for t in 0..num_threads {
-            let mut thread_approximations = approximations.clone();
+        for t in 0..*THREADS {
+            let mut thread_properties = properties.clone();
             let result_tx = result_tx.clone();
 
             scope.spawn(move || {
-                let mut progress_bar = ProgressBar::new(thread_approximations.len());
+                if min_block < thread_properties.cipher.sbox().size  || 
+                   thread_properties.cipher.structure() == CipherStructure::Feistel {
+                    thread_properties.set_type_all();
+                } else {
+                    thread_properties.set_type_output();
+                }
+
+                let mut progress_bar = ProgressBar::new(thread_properties.len());
                 
                 // Annoying solution, hopefully okay
-                let tmp = thread_approximations.sbox_patterns.iter()
+                let tmp = thread_properties.sbox_patterns.iter()
                                                              .cloned()
                                                              .skip(t)
-                                                             .step_by(num_threads)
+                                                             .step_by(*THREADS)
                                                              .collect();
-                thread_approximations.sbox_patterns = tmp;
+                thread_properties.sbox_patterns = tmp;
 
                 // Collect edges
                 let mut edges = FnvHashMap::default();
 
-                for (approximation, _) in thread_approximations.into_iter() {    
-                    let alpha = compress(approximation.alpha, level) as usize;
-                    let beta = compress(approximation.beta, level) as usize;
-                    let length = -approximation.value.log2();
+                for (property, _) in thread_properties.into_iter() {    
+                    let input = compress(property.input, level) as usize;
+                    let output = compress(property.output, level) as usize;
+                    let length = -property.value.log2();
                     
                     for r in 1..rounds-1 {
-                        if graph.get_vertex(r, alpha).is_some() && 
-                           graph.get_vertex(r+1, beta).is_some() {
-                            edges.insert((r, alpha, beta), length);
+                        if graph.get_vertex(r, input).is_some() && 
+                           graph.get_vertex(r+1, output).is_some() {
+                            edges.insert((r, input, output), length);
                         }
                     }
 
@@ -242,86 +225,85 @@ fn add_middle_edges(
         }
     });
 
-    for _ in 0..num_threads {
+    for _ in 0..*THREADS {
         let thread_result = result_rx.recv().expect("Main could not receive result");
-        add_edges(&mut base_graph, &thread_result);
+        base_graph.add_edges(&thread_result);
     }
 
     println!("");
     base_graph
 }
 
-/* Creates a linear hull graph, compressing the approximations with the specified level. 
+/* Creates a linear hull graph, compressing the properties with the specified level. 
  *
- * approximations   Approximations to use.
+ * properties   Approximations to use.
  * rounds           Number of rounds.
  * level       Block size of the compression.
  * vertex_maps      Map of the allowed mask values.
  */ 
 fn add_outer_edges (
     graph: &MultistageGraph,
-    approximations: &mut SortedApproximations, 
+    properties: &SortedProperties, 
     rounds: usize, 
     level: usize,
-    alpha_allowed: &FnvHashSet<u64>,
-    beta_allowed: &FnvHashSet<u64>) 
+    input_allowed: &FnvHashSet<u64>,
+    output_allowed: &FnvHashSet<u64>) 
     -> MultistageGraph {
     let min_block = COMPRESS[level].iter()
-                                   .fold(approximations.cipher.size(), |acc, &x| cmp::min(x, acc));
-
-    if min_block < approximations.cipher.sbox().size  || 
-       approximations.cipher.structure() == CipherStructure::Feistel {
-        approximations.set_type_all();
-    } else {
-        approximations.set_type_beta();
-    }
+                                   .fold(properties.cipher.size(), |acc, &x| cmp::min(x, acc));
 
     // Create graph in parallel
-    let num_threads = num_cpus::get();
     let (result_tx, result_rx) = mpsc::channel();
     let mut base_graph = graph.clone();
     
     scoped::scope(|scope| {
-        for t in 0..num_threads {
-            let mut thread_approximations = approximations.clone();
+        for t in 0..*THREADS {
+            let mut thread_properties = properties.clone();
             let result_tx = result_tx.clone();
 
             scope.spawn(move || {
-                let mut progress_bar = ProgressBar::new(thread_approximations.len());
+                if min_block < thread_properties.cipher.sbox().size  || 
+                   thread_properties.cipher.structure() == CipherStructure::Feistel {
+                    thread_properties.set_type_all();
+                } else {
+                    thread_properties.set_type_output();
+                }
+
+                let mut progress_bar = ProgressBar::new(thread_properties.len());
                 
                 // Annoying solution, hopefully okay
-                let tmp = thread_approximations.sbox_patterns.iter()
+                let tmp = thread_properties.sbox_patterns.iter()
                                                              .cloned()
                                                              .skip(t)
-                                                             .step_by(num_threads)
+                                                             .step_by(*THREADS)
                                                              .collect();
-                thread_approximations.sbox_patterns = tmp;
+                thread_properties.sbox_patterns = tmp;
 
                 // Add edges
                 let mut edges = FnvHashMap::default();
 
-                for (approximation, _) in thread_approximations.into_iter() {
-                    let alpha = compress(approximation.alpha, level) as usize;
-                    let beta = compress(approximation.beta, level) as usize;
-                    let length = -approximation.value.log2();
+                for (property, _) in thread_properties.into_iter() {
+                    let input = compress(property.input, level) as usize;
+                    let output = compress(property.output, level) as usize;
+                    let length = -property.value.log2();
 
                     // First round                    
-                    if (alpha_allowed.len() == 0 || alpha_allowed.contains(&(alpha as u64))) && 
-                        graph.get_vertex(1, beta).is_some() {
-                        let vertex_ref = graph.get_vertex(1, beta).unwrap();
+                    if (input_allowed.len() == 0 || input_allowed.contains(&(input as u64))) && 
+                        graph.get_vertex(1, output).is_some() {
+                        let vertex_ref = graph.get_vertex(1, output).unwrap();
 
                         if rounds == 2 || vertex_ref.successors.len() != 0 {
-                            edges.insert((0, alpha, beta), length);
+                            edges.insert((0, input, output), length);
                         }
                     }
 
                     // Last round
-                    if (beta_allowed.len() == 0 || beta_allowed.contains(&(beta as u64))) && 
-                        graph.get_vertex(rounds-1, alpha).is_some() {
-                        let vertex_ref = graph.get_vertex(rounds-1, alpha).unwrap();
+                    if (output_allowed.len() == 0 || output_allowed.contains(&(output as u64))) && 
+                        graph.get_vertex(rounds-1, input).is_some() {
+                        let vertex_ref = graph.get_vertex(rounds-1, input).unwrap();
 
                         if rounds == 2 || vertex_ref.predecessors.len() != 0 {
-                            edges.insert((rounds-1, alpha, beta), length);
+                            edges.insert((rounds-1, input, output), length);
                         }
                     }
 
@@ -333,45 +315,13 @@ fn add_outer_edges (
         }
     });
 
-    for _ in 0..num_threads {
+    for _ in 0..*THREADS {
         let thread_result = result_rx.recv().expect("Main could not receive result");
-        add_edges_and_vertices(&mut base_graph, &thread_result);
+        base_graph.add_edges_and_vertices(&thread_result);
     }
 
     println!("");
     base_graph
-}
-
-/* Remove any edges that aren't part of a path from source to sink. 
- *
- * graph    Graph to prune.
- */
-fn prune_graph(graph: &mut MultistageGraph, start: usize, stop: usize) {
-    let mut pruned = true;
-
-    while pruned {
-        pruned = false;
-
-        for stage in start..stop {
-            let mut remove = Vec::new();
-
-            for (&label, vertex) in graph.get_stage(stage).unwrap() {
-                if stage == start && vertex.successors.len() == 0 {
-                    remove.push(label);
-                } else if stage == stop-1 && vertex.predecessors.len() == 0 {
-                    remove.push(label);
-                } else if (stage != start && stage != stop-1) && (vertex.successors.len() == 0 ||
-                    vertex.predecessors.len() == 0) {
-                    remove.push(label);
-                }
-            }
-
-            for label in remove {
-                graph.remove_vertex(stage, label);
-                pruned = true;
-            }
-        }
-    }
 }
 
 /* Update all filters with new allowed values. Returns number of vertices in the graph which
@@ -395,7 +345,7 @@ fn update_filters(
                                    .filter(|(_, vertex_ref)| 
                                         vertex_ref.successors.len() != 0 || 
                                         vertex_ref.predecessors.len() != 0)
-                                   .map(|(alpha, _)| *alpha as u64));
+                                   .map(|(input, _)| *input as u64));
 
         good_vertices += filters[stage].len();
     }
@@ -403,42 +353,41 @@ fn update_filters(
     good_vertices
 }
 
-/* Removes patterns from a SortedApproximations which a not allowed by a set of filters.
+/* Removes patterns from a SortedProperties which a not allowed by a set of filters.
  *
  * Filters          Filters to check.
- * approximations   Approximations to remove patterns from.
+ * properties   Approximations to remove patterns from.
  */
 fn remove_dead_patterns(
     filters: &Vec<FnvHashSet<u64>>, 
-    approximations: &mut SortedApproximations,
+    properties: &mut SortedProperties,
     level: usize) {
-    let num_threads = num_cpus::get();
     let (result_tx, result_rx) = mpsc::channel();
     
     scoped::scope(|scope| {
-        for t in 0..num_threads {
-            let mut thread_approximations = approximations.clone();
+        for t in 0..*THREADS {
+            let mut thread_properties = properties.clone();
             let result_tx = result_tx.clone();
 
             scope.spawn(move || {
-                thread_approximations.set_type_alpha();
-                let mut progress_bar = ProgressBar::new(thread_approximations.len());
+                thread_properties.set_type_input();
+                let mut progress_bar = ProgressBar::new(thread_properties.len());
                 
                 // Annoying solution, hopefully okay
-                let tmp = thread_approximations.sbox_patterns.iter()
+                let tmp = thread_properties.sbox_patterns.iter()
                                                              .cloned()
                                                              .skip(t)
-                                                             .step_by(num_threads)
+                                                             .step_by(*THREADS)
                                                              .collect();
-                thread_approximations.sbox_patterns = tmp;
+                thread_properties.sbox_patterns = tmp;
 
-                let mut good_patterns = vec![false; thread_approximations.len_patterns()];
+                let mut good_patterns = vec![false; thread_properties.len_patterns()];
 
-                for (approximation, pattern_idx) in thread_approximations.into_iter() {
-                    let alpha = approximation.alpha;
+                for (property, pattern_idx) in thread_properties.into_iter() {
+                    let input = property.input;
                     let good = filters.iter()
                                       .fold(false, 
-                                            |acc, ref x| acc | x.contains(&compress(alpha, level)));
+                                            |acc, ref x| acc | x.contains(&compress(input, level)));
                     good_patterns[pattern_idx] |= good;
                     progress_bar.increment();
                 }
@@ -448,7 +397,7 @@ fn remove_dead_patterns(
 
                 for (i, keep) in good_patterns.iter().enumerate() {
                     if *keep {
-                        new_patterns.push(thread_approximations.sbox_patterns[i].clone());
+                        new_patterns.push(thread_properties.sbox_patterns[i].clone());
                     }
                 }
 
@@ -459,51 +408,54 @@ fn remove_dead_patterns(
 
     let mut new_patterns = Vec::new();
 
-    for _ in 0..num_threads {
+    for _ in 0..*THREADS {
         let mut thread_result = result_rx.recv().expect("Main could not receive result");
         new_patterns.append(&mut thread_result);
     }
     println!("");
 
-    approximations.sbox_patterns = new_patterns;
-    approximations.set_type_all();
+    properties.sbox_patterns = new_patterns;
+    properties.set_type_all();
 }
 
 /* Creates a graph that represents the linear hull over a number of rounds for a given cipher and 
- * set of approximations. 
+ * set of properties. 
  * 
  * cipher       Cipher to consider.
  * rounds       Number of rounds.
- * patterns     Number of patterns to generate for approximations.
+ * patterns     Number of patterns to generate for properties.
  */
 pub fn generate_graph(
     cipher: &Cipher, 
+    property_type: PropertyType,
     rounds: usize, 
     patterns: usize,
-    alpha_allowed: &FnvHashSet<u64>,
-    beta_allowed: &FnvHashSet<u64>) 
+    input_allowed: &FnvHashSet<u64>,
+    output_allowed: &FnvHashSet<u64>) 
     -> MultistageGraph {
-    let mut approximations = SortedApproximations::new(cipher, patterns, AppType::All);
+    let mut properties = SortedProperties::new(cipher, patterns, 
+                                               property_type, 
+                                               PropertyFilter::All);
     let mut filters = vec![(0..(1 << COMPRESS[0].len())).collect() ; rounds+1];
     let mut graph = MultistageGraph::new(0);
 
     for level in 1..COMPRESS.len() {
-        approximations.set_type_all();
-        let num_app = approximations.len();
-        approximations.set_type_alpha();
-        let num_alpha = approximations.len();
-        approximations.set_type_beta();
-        let num_beta = approximations.len();
+        properties.set_type_all();
+        let num_app = properties.len();
+        properties.set_type_input();
+        let num_input = properties.len();
+        properties.set_type_output();
+        let num_output = properties.len();
 
         println!("Level {}.", level);
-        println!("{} approximations ({} alpha, {} beta).", num_app, num_alpha, num_beta);
+        println!("{} properties ({} input, {} output).", num_app, num_input, num_output);
 
         let start = time::precise_time_s();
-        graph = get_vertices(&mut approximations, rounds, &filters, level);
+        graph = get_vertices(&properties, rounds, &filters, level);
         println!("Added vertices [{} s]", time::precise_time_s()-start);
 
         let start = time::precise_time_s();
-        graph = add_middle_edges(&graph, &mut approximations, rounds, level);
+        graph = add_middle_edges(&graph, &properties, rounds, level);
         println!("Graph has {} vertices and {} edges [{} s]", 
             graph.num_vertices(), 
             graph.num_edges(),
@@ -515,7 +467,7 @@ pub fn generate_graph(
 
         if rounds > 2 {
             let start = time::precise_time_s();
-            prune_graph(&mut graph, 1, rounds);
+            graph.prune_graph(1, rounds);
             println!("Pruned graph has {} vertices and {} edges [{} s]", 
                 graph.num_vertices(), 
                 graph.num_edges(), 
@@ -527,11 +479,11 @@ pub fn generate_graph(
         print_to_graph_tool(&graph, &name);*/
 
         let start = time::precise_time_s();
-        let alpha_allowed_comp = alpha_allowed.iter().map(|&x| compress(x, level)).collect();
-        let beta_allowed_comp = beta_allowed.iter().map(|&x| compress(x, level)).collect();
+        let input_allowed_comp = input_allowed.iter().map(|&x| compress(x, level)).collect();
+        let output_allowed_comp = output_allowed.iter().map(|&x| compress(x, level)).collect();
 
-        graph = add_outer_edges(&mut graph, &mut approximations, rounds, level, 
-                                &alpha_allowed_comp, &beta_allowed_comp);
+        graph = add_outer_edges(&mut graph, &properties, rounds, level, 
+                                &input_allowed_comp, &output_allowed_comp);
         println!("Graph has {} vertices and {} edges [{} s]", 
             graph.num_vertices(), 
             graph.num_edges(),
@@ -542,7 +494,7 @@ pub fn generate_graph(
         print_to_graph_tool(&graph, &name);*/
 
         let start = time::precise_time_s();
-        prune_graph(&mut graph, 0, rounds+1);
+        graph.prune_graph(0, rounds+1);
         println!("Pruned graph has {} vertices and {} edges [{} s]", 
             graph.num_vertices(), 
             graph.num_edges(), 
@@ -556,9 +508,9 @@ pub fn generate_graph(
                 time::precise_time_s()-start);
 
             let start = time::precise_time_s();
-            let patterns_before = approximations.len_patterns();
-            remove_dead_patterns(&filters, &mut approximations, level);
-            let patterns_after = approximations.len_patterns();
+            let patterns_before = properties.len_patterns();
+            remove_dead_patterns(&filters, &mut properties, level);
+            let patterns_after = properties.len_patterns();
             println!("Removed {} dead patterns [{} s]", 
                 patterns_before - patterns_after, 
                 time::precise_time_s()-start);
@@ -568,34 +520,4 @@ pub fn generate_graph(
     }
     
     graph
-}
-
-/* Prints a graph for plotting with python graph-tool */
-pub fn print_to_graph_tool(
-    graph: &MultistageGraph,
-    path: &String) {
-    let mut path = path.clone();
-    path.push_str(".graph");
-    let mut file = OpenOptions::new()
-                               .write(true)
-                               .truncate(true)
-                               .create(true)
-                               .open(path)
-                               .expect("Could not open file.");
-
-    let stages = graph.stages();
-
-    for i in 0..stages {
-        for (j, _) in graph.get_stage(i).unwrap() {
-            write!(file, "{},{}\n", i, j).expect("Write error");
-        }
-    }        
-
-    for i in 0..stages-1 {
-        for (j, vertex_ref) in graph.get_stage(i).unwrap() {
-            for (k, _) in &vertex_ref.successors {
-                write!(file, "{},{},{},{}\n", i, j, i+1, k).expect("Write error");       
-            }
-        }
-    }   
 }

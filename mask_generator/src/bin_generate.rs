@@ -13,7 +13,7 @@ mod cipher;
 mod utility;
 mod single_round;
 mod multi_round;
-mod approximation;
+mod property;
 mod find_hulls;
 mod options;
 mod graph;
@@ -22,6 +22,7 @@ mod graph_generate;
 use cipher::*;
 use options::CliArgs;
 use structopt::StructOpt;
+use property::PropertyType;
 
 /* Performs the hull set search. 
  *
@@ -34,6 +35,7 @@ use structopt::StructOpt;
  */
 fn run_search(
     cipher: &Cipher, 
+    property_type: PropertyType,
     rounds: usize, 
     num_patterns: usize, 
     file_mask_in: Option<String>,
@@ -43,15 +45,16 @@ fn run_search(
     println!("\tRounds: {}.", rounds);
     println!("\tS-box patterns: {}\n", num_patterns);
 
-    multi_round::find_approximations(cipher, rounds, num_patterns, 
+    multi_round::find_approximations(cipher, property_type, rounds, num_patterns, 
                                      file_mask_in, file_mask_out, file_graph);
 }
 
 fn main() {
     let options = CliArgs::from_args();
 
-    let rounds = options.rounds.expect("Number of rounds must be specified in this mode.");
-    let num_patterns = options.num_patterns.expect("Number of patterns must be specified in this mode.");
+    let rounds = options.rounds;
+    let property_type = options.property_type;
+    let num_patterns = options.num_patterns;
     let file_mask_in = options.file_mask_in;
     let file_mask_out = options.file_mask_out;
     let file_graph = options.file_graph;
@@ -61,7 +64,7 @@ fn main() {
         None    => panic!("Cipher must be one of: present, gift, twine, puffin, skinny, midori, led, rectangle, mibs")
     };
 
-    run_search(cipher.as_ref(), rounds, num_patterns, 
+    run_search(cipher.as_ref(), property_type, rounds, num_patterns, 
                file_mask_in, file_mask_out, file_graph);
 }
     

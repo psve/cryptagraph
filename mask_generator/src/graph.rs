@@ -66,6 +66,24 @@ impl MultistageGraph {
         }
     }
 
+    pub fn add_edges(&mut self, edges: &FnvHashMap<(usize, usize, usize), f64>) {
+        for (&(stage, from, to), &length) in edges {
+            self.add_edge(stage, from, to, length);
+        }
+    }
+
+    pub fn add_edges_and_vertices(&mut self, edges: &FnvHashMap<(usize, usize, usize), f64>) {
+        for (&(stage, from, to), &length) in edges {
+            if stage == 0 {
+                self.add_vertex(0, from);
+            } else {
+                self.add_vertex(stage+1, to);
+            }
+
+            self.add_edge(stage, from, to, length);
+        }
+    }
+
     pub fn remove_vertex(&mut self, stage: usize, label: usize) {
         {
             let (before, mid) = self.vertices.split_at_mut(stage);
@@ -98,6 +116,38 @@ impl MultistageGraph {
         }
 
         self.vertices[stage].remove(&label);
+    }
+
+    /* Remove any edges that aren't part of a path from source to sink. 
+     *
+     * graph    Graph to prune.
+     */
+    pub fn prune_graph(&mut self, start: usize, stop: usize) {
+        let mut pruned = true;
+
+        while pruned {
+            pruned = false;
+
+            for stage in start..stop {
+                let mut remove = Vec::new();
+
+                for (&label, vertex) in self.get_stage(stage).unwrap() {
+                    if stage == start && vertex.successors.len() == 0 {
+                        remove.push(label);
+                    } else if stage == stop-1 && vertex.predecessors.len() == 0 {
+                        remove.push(label);
+                    } else if (stage != start && stage != stop-1) && (vertex.successors.len() == 0 ||
+                        vertex.predecessors.len() == 0) {
+                        remove.push(label);
+                    }
+                }
+
+                for label in remove {
+                    self.remove_vertex(stage, label);
+                    pruned = true;
+                }
+            }
+        }
     }
 
     pub fn get_vertex(&self, stage: usize, label: usize) -> Option<&Vertex> {

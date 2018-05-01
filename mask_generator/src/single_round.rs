@@ -1,125 +1,17 @@
-use approximation::{Approximation};
+use property::{Property, PropertyType, PropertyFilter, PropertyMap};
 use cipher::Cipher;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
-use fnv::FnvHashMap;
-
-/* A structure that represents the LAT of an S-box as map from correlations to approximations.
- *
- * map          The mapping from the counter bias (abs(#pairs that hold - 2^(n-1))) to
-                a vector of approximations that have that bias.
- * alpha_map    Same as map, but where only the input of the approximations are kept.
- * alpha_map    Same as map, but where only the output of the approximations are kept.
- */
-#[derive(Clone)]
-pub struct LatMap {
-    pub map: FnvHashMap<i16, Vec<Approximation>>,
-    alpha_map: FnvHashMap<i16, Vec<Approximation>>,
-    beta_map: FnvHashMap<i16, Vec<Approximation>>,
-}
-
-impl LatMap {
-    /* Generate a new LAT map from an S-box.
-     *
-     * sbox     The S-box used as the generator.
-     */
-    pub fn new(cipher: &Cipher) -> LatMap {
-        let mut map = FnvHashMap::default();
-        let mut alpha_map = FnvHashMap::default();
-        let mut beta_map = FnvHashMap::default();
-
-        // The number of pairs the hold for a balanced approximation (i.e. 2^(n-1))
-        let balance = cipher.sbox().balance();
-
-        for (alpha, row) in cipher.sbox().lat.iter().enumerate() {
-            for (beta, element) in row.iter().enumerate() {
-                // If the approximation is not balanced, we add it to the map
-                if *element as i16 != balance {
-                    // Absolute counter bias
-                    let key = ((*element as i16) - balance).abs();
-
-                    let entry = map.entry(key).or_insert(vec![]);
-                    entry.push(Approximation::new(alpha as u64, beta as u64, None));
-
-                    let entry = alpha_map.entry(key).or_insert(vec![]);
-                    entry.push(Approximation::new(alpha as u64, (beta != 0) as u64, None));
-
-                    let entry = beta_map.entry(key).or_insert(vec![]);
-                    entry.push(Approximation::new((alpha != 0) as u64, beta as u64, None));
-                }
-            }
-        }
-
-        // Remove dubplicates
-        for alphas in alpha_map.values_mut() {
-            alphas.sort();
-            alphas.dedup();
-        }
-
-        for betas in beta_map.values_mut() {
-            betas.sort();
-            betas.dedup();
-        }
-
-        LatMap{
-            map: map, 
-            alpha_map: alpha_map, 
-            beta_map: beta_map
-        }
-    }
-
-    /* Getter to avoid unecessary syntax. Simply reimplements FnvHashMap::get */
-    pub fn get(&self, k: &i16) -> Option<&Vec<Approximation>> {
-        self.map.get(k)
-    }
-
-    /* Getter for the alpha map */
-    pub fn get_alpha(&self, k: &i16) -> Option<&Vec<Approximation>> {
-        self.alpha_map.get(k)
-    }
-
-    /* Getter for the beta map */
-    pub fn get_beta(&self, k: &i16) -> Option<&Vec<Approximation>> {
-        self.beta_map.get(k)
-    }
-
-    /* Gets the number of approximations that has a certain counter bias.
-     *
-     * value    The target counter bias.
-     */
-    pub fn len_of(&self, value: i16) -> usize {
-        self.get(&value).unwrap().len()
-    }
-
-    /* Gets the number of input masks that has a certain counter bias.
-     *
-     * value    The target counter bias.
-     */
-    fn len_of_alpha(&self, value: i16) -> usize {
-        self.get_alpha(&value).unwrap().len()
-    }
-
-    /* Gets the number of output masks that has a certain counter bias.
-     *
-     * value    The target counter bias.
-     */
-    fn len_of_beta(&self, value: i16) -> usize {
-        self.get_beta(&value).unwrap().len()
-    }
-}
-
-/***********************************************************************************************/
-
 
 /* An internal representation of a partial S-box pattern. An S-box pattern describes a
- * truncated approximation, but where the counter bias is specified for each S-box.
+ * truncated property, but where the value is specified for each S-box.
  *
  * pattern              The partial pattern. Any S-box that has not been specified yet is None.
  * determined_length    The number of S-boxes determined so far.
- * value                Squared correlation of the partial pattern.
+ * value                Value of the partial pattern.
  */
 #[derive(Clone)]
-pub struct InternalSboxPattern {
+struct InternalSboxPattern {
     pattern: Vec<Option<i16>>,
     determined_length: usize,
     value: f64,
@@ -133,43 +25,61 @@ impl InternalSboxPattern {
     }
 
     /* Extends the current pattern to at most two "neighbouring" patterns
-     * corr_values      A list of counter biases for the S-box in descending order.
-                        Is assumed to contain the bias of the trivial approximation.
+     * property_values  A list of property values for the S-box in descending order.
+                        Is assumed to contain the bias of the trivial property.
      */
-    fn extend(&self, corr_values: &Vec<i16>) ->
+    fn extend(&self, property_values: &Vec<i16>, property_type: PropertyType) ->
         (Option<InternalSboxPattern>, Option<InternalSboxPattern>) {
-        // Counter bias of the trivial approximation
-        let balance = corr_values[0] as f64;
+        // Counter bias of the trivial property
+        let trivial = property_values[0] as f64;
 
         // We generate at most two new patterns
         let mut extended_patterns = (None, None);
 
-        // The first pattern extends the current pattern to the right with the trivial bias
+        // The first pattern extends the current pattern to the right with the trivial value
         // If the current pattern is complete, we cannot extend in this way
         if !self.is_complete() {
             let mut new_pattern = self.clone();
-            new_pattern.pattern[self.determined_length] = Some(corr_values[0]);
+            new_pattern.pattern[self.determined_length] = Some(property_values[0]);
             new_pattern.determined_length += 1;
-            new_pattern.value *= (corr_values[0] as f64 / balance).powi(2);
+
+            match property_type {
+                PropertyType::Linear => {
+                    new_pattern.value *= (property_values[0] as f64 / trivial).powi(2);
+                },
+                PropertyType::Differential => {
+                    new_pattern.value *= property_values[0] as f64 / trivial;  
+                }
+            }
+            
             extended_patterns.0 = Some(new_pattern);
         }
 
-        // The second pattern replaces the last determined counter bias with the
-        // next bias in the list
+        // The second pattern replaces the last determined value with the
+        // next value in the list
         let mut new_pattern = self.clone();
         let current_value = self.pattern[self.determined_length - 1].unwrap();
-        // This is kinda stupid. Could probably be improved?
-        let corr_idx = corr_values.binary_search_by(|a| a.cmp(&current_value).reverse());
+        let corr_idx = property_values.binary_search_by(|a| a.cmp(&current_value).reverse());
 
-        // This check fails if the current bias was the last on the list
+        // This check fails if the current value was the last on the list
         // In this case, this pattern isn't generated
         match corr_idx {
             Ok(x) => {
-                if x+1 < corr_values.len() {
-                    new_pattern.pattern[self.determined_length - 1] = Some(corr_values[x+1]);
-                    new_pattern.value /= (corr_values[x] as f64 / balance).powi(2);
-                    new_pattern.value *= (corr_values[x+1] as f64 / balance).powi(2);
+                if x+1 < property_values.len() {
+                    new_pattern.pattern[self.determined_length - 1] = Some(property_values[x+1]);
                     new_pattern.num_active += (x == 0) as usize;
+
+                    match property_type {
+                        PropertyType::Linear => {
+                            new_pattern.value /= (property_values[x] as f64 / trivial).powi(2);
+                            new_pattern.value *= (property_values[x+1] as f64 / trivial).powi(2);
+                        },
+                        PropertyType::Differential => {
+                            new_pattern.value /= property_values[x] as f64 / trivial;
+                            new_pattern.value *= property_values[x+1] as f64 / trivial;
+                        }
+                    }
+
                     extended_patterns.1 = Some(new_pattern);
                 }
             },
@@ -235,9 +145,8 @@ enum PatternStatus {
  */
 #[derive(Clone)]
 pub struct SboxPattern {
-    pub pattern: Vec<(usize, i16)>,
-    // pub value: f64,
-    pub approximation: Approximation,
+    pattern: Vec<(usize, i16)>,
+    property: Property,
     mask: u64,
     counter: Vec<usize>,
     status: PatternStatus,
@@ -248,33 +157,42 @@ impl SboxPattern {
      *
      * internal_sbox_pattern    A complete internal S-box pattern.
      */
-    pub fn new(
+    fn new(
         cipher: &Cipher,
-        internal_sbox_pattern: &InternalSboxPattern) 
+        internal_sbox_pattern: &InternalSboxPattern,
+        property_type: PropertyType) 
         -> SboxPattern {
-        let balance = cipher.sbox().balance();
+        let non_property = match property_type {
+            PropertyType::Linear => cipher.sbox().linear_balance(),
+            PropertyType::Differential => cipher.sbox().differential_zero(),
+        };
 
         // This fails of the pattern wasn't complete
         let pattern: Vec<_> = internal_sbox_pattern.pattern.iter()
                                                    .map(|x| x.unwrap())
                                                    .enumerate()
-                                                   .filter(|&(_,x)| x != balance)
+                                                   .filter(|&(_,x)| x != non_property)
                                                    .map(|(i,x)| (i*cipher.sbox().size, x))
                                                    .collect();
 
         let counter = vec![0; pattern.len()];
-        let approximation = Approximation::new(0, 0, Some(internal_sbox_pattern.value));
+        let property = Property::new(0, 0, internal_sbox_pattern.value, 1);
 
         SboxPattern {
             pattern: pattern, 
-            approximation: approximation,
+            property: property,
             mask: ((1 << cipher.sbox().size) - 1) as u64,
             counter: counter,
             status: PatternStatus::New
         }
     }
 
-    pub fn next(&mut self, lat_map: &LatMap, app_type: &AppType) -> Option<Approximation> {
+    fn next(
+        &mut self, 
+        property_map: &PropertyMap,
+        property_filter: &PropertyFilter) 
+        -> Option<Property> {
+        
         if self.counter.len() == 0 {
             self.status = PatternStatus::Empty;
         }
@@ -285,51 +203,51 @@ impl SboxPattern {
 
         if self.status == PatternStatus::New {
             for &(i, x) in &self.pattern {
-                let sbox_app = match app_type {
-                    AppType::All   => lat_map.get(&x).unwrap()[0],
-                    AppType::Alpha => lat_map.get_alpha(&x).unwrap()[0],
-                    AppType::Beta  => lat_map.get_beta(&x).unwrap()[0]
+                let sbox_property = match property_filter {
+                    PropertyFilter::All   => property_map.get(&x).unwrap()[0],
+                    PropertyFilter::Input => property_map.get_input(&x).unwrap()[0],
+                    PropertyFilter::Output  => property_map.get_output(&x).unwrap()[0]
                 };
-                let alpha = sbox_app.alpha;
-                let beta = sbox_app.beta;
+                let input = sbox_property.input;
+                let output = sbox_property.output;
 
-                self.approximation.alpha ^= alpha << i;
-                self.approximation.beta ^= beta << i;
+                self.property.input ^= input << i;
+                self.property.output ^= output << i;
             }
 
             self.status = PatternStatus::Old;
         }
         
-        let result = self.approximation;
+        let result = self.property;
 
         for i in 0..self.counter.len() {
             let idx = self.pattern[i].0;
             let val = self.pattern[i].1;
-            let modulus = match app_type {
-                AppType::All   => lat_map.len_of(val),
-                AppType::Alpha => lat_map.len_of_alpha(val),
-                AppType::Beta  => lat_map.len_of_beta(val)
+            let modulus = match property_filter {
+                PropertyFilter::All    => property_map.len_of(val),
+                PropertyFilter::Input  => property_map.len_of_input(val),
+                PropertyFilter::Output => property_map.len_of_output(val)
             };
 
             self.counter[i] = (self.counter[i] + 1) % modulus;
 
-            // No more approximations
+            // No more properties
             if i+1 == self.counter.len() && self.counter[i] == 0 {
                 self.status = PatternStatus::Empty;
                 return Some(result);
             }
 
             // Update current position
-            let app = match app_type {
-                AppType::All   => lat_map.get(&val).unwrap()[self.counter[i]],
-                AppType::Alpha => lat_map.get_alpha(&val).unwrap()[self.counter[i]],
-                AppType::Beta  => lat_map.get_beta(&val).unwrap()[self.counter[i]]
+            let app = match property_filter {
+                PropertyFilter::All    => property_map.get(&val).unwrap()[self.counter[i]],
+                PropertyFilter::Input  => property_map.get_input(&val).unwrap()[self.counter[i]],
+                PropertyFilter::Output => property_map.get_output(&val).unwrap()[self.counter[i]]
             };
 
-            self.approximation.alpha = 
-                (self.approximation.alpha & !(self.mask << idx)) ^ (app.alpha << idx);
-            self.approximation.beta = 
-                (self.approximation.beta & !(self.mask << idx)) ^ (app.beta << idx);
+            self.property.input = 
+                (self.property.input & !(self.mask << idx)) ^ (app.input << idx);
+            self.property.output = 
+                (self.property.output & !(self.mask << idx)) ^ (app.output << idx);
 
             // Continue only if current counter rolls over
             if self.counter[i] != 0 {
@@ -340,50 +258,43 @@ impl SboxPattern {
         Some(result)
     }
 
-    /* Returns the number of approximations described by this pattern */
-    pub fn num_app(&self, lat_map: &LatMap) -> usize {
-        self.pattern.iter().fold(1, |acc, &(_, x)| acc * lat_map.len_of(x))
+    /* Returns the number of properties described by this pattern */
+    fn num_app(&self, property_map: &PropertyMap) -> usize {
+        self.pattern.iter().fold(1, |acc, &(_, x)| acc * property_map.len_of(x))
     }
 
     /* Returns the number of input masks described by this pattern */
-    pub fn num_alpha(&self, lat_map: &LatMap) -> usize {
-        self.pattern.iter().fold(1, |acc, &(_, x)| acc * lat_map.len_of_alpha(x))
+    fn num_input(&self, property_map: &PropertyMap) -> usize {
+        self.pattern.iter().fold(1, |acc, &(_, x)| acc * property_map.len_of_input(x))
     }
 
     /* Returns the number of output masks described by this pattern */
-    pub fn num_beta(&self, lat_map: &LatMap) -> usize {
-        self.pattern.iter().fold(1, |acc, &(_, x)| acc * lat_map.len_of_beta(x))
+    fn num_output(&self, property_map: &PropertyMap) -> usize {
+        self.pattern.iter().fold(1, |acc, &(_, x)| acc * property_map.len_of_output(x))
     }
 }
 
 /***********************************************************************************************/
 
-#[derive(Clone, Debug)]
-pub enum AppType {
-    All,
-    Alpha,
-    Beta
-}
-
-/* A struct that represents a list of single round approximations of a cipher, sorted in
- * ascending order of their absolute correlation. The actual approximations are lazily
+/* A struct that represents a list of single round properties of a cipher, sorted in
+ * ascending order of their absolute correlation. The actual properties are lazily
  * generated using the Iterator trait.
  *
  * cipher                   The cipher whose round function we are considering.
- * lat_map                  The LAT map for the cipher's S-box.
- * sbox_patterns            A list of S-box patterns sorted by their absolute correlation.
- * app_type                 What type of approximation an iterator will generate.
+ * property_map             The property map for the cipher's S-box.
+ * sbox_patterns            A list of S-box patterns sorted by their propert values.
+ * property_filter          What type of property an iterator will generate.
  */
 #[derive(Clone)]
-pub struct SortedApproximations<'a> {
+pub struct SortedProperties<'a> {
     pub cipher: &'a Cipher,
-    pub lat_map: LatMap,
+    pub property_map: PropertyMap,
     pub sbox_patterns: Vec<SboxPattern>,
-    app_type: AppType,
+    property_filter: PropertyFilter,
 }
 
-impl<'a> SortedApproximations<'a> {
-    /* Returns a new SortedApproximations struct ready to be used as an iterator.
+impl<'a> SortedProperties<'a> {
+    /* Returns a new SortedProperties struct ready to be used as an iterator.
      * The function basically generates the patterns in sbox_patterns,
      * using an approach inspired by the paper
      * "Efficient Algorithms for Extracting the K Most Critical Paths in Timing Analysis"
@@ -392,22 +303,28 @@ impl<'a> SortedApproximations<'a> {
      * cipher           The cipher whose round function we are considering.
      * pattern_limit    The number of patterns we want to generate.
      */
-    pub fn new(cipher: &Cipher, pattern_limit: usize, app_type: AppType) -> SortedApproximations {
-        // Generate LAT map and get S-box counter bias values
-        let lat_map = LatMap::new(cipher);
-        let mut corr_values = vec![];
+    pub fn new(
+        cipher: &Cipher, 
+        pattern_limit: usize, 
+        property_type: PropertyType,
+        property_filter: PropertyFilter) 
+        -> SortedProperties {
+        
+        // Generate property map and get S-box property values
+        let property_map = PropertyMap::new(cipher, property_type);
+        let mut property_values = vec![];
 
-        for (key, _) in &lat_map.map {
-            corr_values.push(*key);
+        for (key, _) in &property_map.map {
+            property_values.push(*key);
         }
 
         // We need the values in descending order
-        corr_values.sort();
-        corr_values.reverse();
+        property_values.sort();
+        property_values.reverse();
 
         // Start with a partial pattern where only the first value is determined
         let mut tmp = vec![None; cipher.num_sboxes()];
-        tmp[0] = Some(corr_values[0]);
+        tmp[0] = Some(property_values[0]);
         let current_pattern = InternalSboxPattern {
             pattern: tmp,
             determined_length: 1,
@@ -415,7 +332,7 @@ impl<'a> SortedApproximations<'a> {
             num_active: 0
         };
 
-        // We maintain a heap of partial patterns sorted by their correlation value
+        // We maintain a heap of partial patterns sorted by their property value value
         let mut sbox_patterns = vec![];
         let mut heap = BinaryHeap::new();
         heap.push(current_pattern);
@@ -426,20 +343,20 @@ impl<'a> SortedApproximations<'a> {
             if heap.is_empty() {
                 let sbox_patterns: Vec<SboxPattern>
                     = sbox_patterns.iter()
-                                          .map(|x| SboxPattern::new(cipher, x))
+                                          .map(|x| SboxPattern::new(cipher, x, property_type))
                                           .collect();
 
-                return SortedApproximations{cipher: cipher.clone(),
-                                            lat_map: lat_map.clone(),
+                return SortedProperties{cipher: cipher.clone(),
+                                            property_map: property_map.clone(),
                                             sbox_patterns: sbox_patterns,
-                                            app_type: app_type}
+                                            property_filter: property_filter}
             }
 
             // Extract the current best pattern
             let current_pattern = heap.pop().unwrap();
 
             // Extend best pattern and add the result to the heap
-            let (pattern_1, pattern_2) = current_pattern.extend(&corr_values);
+            let (pattern_1, pattern_2) = current_pattern.extend(&property_values, property_type);
 
             match pattern_1 {
                 Some(pattern) => {
@@ -463,24 +380,24 @@ impl<'a> SortedApproximations<'a> {
 
         let sbox_patterns: Vec<SboxPattern>
             = sbox_patterns.iter()
-                                  .map(|x| SboxPattern::new(cipher, x))
+                                  .map(|x| SboxPattern::new(cipher, x, property_type))
                                   .collect();
 
-        return SortedApproximations{cipher: cipher.clone(),
-                                    lat_map: lat_map.clone(),
-                                    sbox_patterns: sbox_patterns,
-                                    app_type: app_type}
+        return SortedProperties{cipher: cipher.clone(),
+                                property_map: property_map.clone(),
+                                sbox_patterns: sbox_patterns,
+                                property_filter: property_filter}
     }
 
-    /* Returns the number of approximations which can be generated from the patterns. */
+    /* Returns the number of properties which can be generated from the patterns. */
     pub fn len(&self) -> usize {
         let mut len = 0;
 
         for pattern in &self.sbox_patterns {
-            let combinations = match self.app_type {
-                AppType::All   => pattern.num_app(&self.lat_map),
-                AppType::Alpha => pattern.num_alpha(&self.lat_map),
-                AppType::Beta  => pattern.num_beta(&self.lat_map),
+            let combinations = match self.property_filter {
+                PropertyFilter::All    => pattern.num_app(&self.property_map),
+                PropertyFilter::Input  => pattern.num_input(&self.property_map),
+                PropertyFilter::Output => pattern.num_output(&self.property_map),
             };
 
             len += combinations;
@@ -496,68 +413,68 @@ impl<'a> SortedApproximations<'a> {
 
     /* Sets the type field to all */
     pub fn set_type_all(&mut self) {
-        self.app_type = AppType::All;
+        self.property_filter = PropertyFilter::All;
     }
 
-    /* Sets the type field to alpha */
-    pub fn set_type_alpha(&mut self) {
-        self.app_type = AppType::Alpha;
+    /* Sets the type field to input */
+    pub fn set_type_input(&mut self) {
+        self.property_filter = PropertyFilter::Input;
     }
 
-    /* Sets the type field to beta */
-    pub fn set_type_beta(&mut self) {
-        self.app_type = AppType::Beta;
+    /* Sets the type field to output */
+    pub fn set_type_output(&mut self) {
+        self.property_filter = PropertyFilter::Output;
     }
 }
 
-impl<'a> IntoIterator for &'a SortedApproximations<'a> {
-    type Item = (Approximation, usize);
-    type IntoIter = SortedApproximationsIterator<'a>;
+impl<'a> IntoIterator for &'a SortedProperties<'a> {
+    type Item = (Property, usize);
+    type IntoIter = SortedPropertiesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        SortedApproximationsIterator { 
+        SortedPropertiesIterator { 
             cipher: self.cipher,
-            lat_map: self.lat_map.clone(),
+            property_map: self.property_map.clone(),
             sbox_patterns: self.sbox_patterns.clone(),
-            app_type: self.app_type.clone(),
+            property_filter: self.property_filter.clone(),
             current_pattern: 0       
         }
     }
 }
 
-/* An iterator over approximations represented by a SortedApproximations struct.
+/* An iterator over properties represented by a SortedProperties struct.
  *
- * sorted_approximations    The struct to iterate over. 
- * current_approximation    The last approximation generated.
+ * sorted_properties    The struct to iterate over. 
+ * current_property    The last property generated.
  * current_pattern          The index of the current pattern considered in sbox_patterns.
- * current_app_index        Describes the indexing of lat_map for the current approximation.
+ * current_app_index        Describes the indexing of property_map for the current property.
  */
 #[derive(Clone)]
-pub struct SortedApproximationsIterator<'a> {
+pub struct SortedPropertiesIterator<'a> {
     pub cipher: &'a Cipher,
-    pub lat_map: LatMap,
+    pub property_map: PropertyMap,
     pub sbox_patterns: Vec<SboxPattern>,
-    app_type: AppType,
+    property_filter: PropertyFilter,
     current_pattern: usize
 }
 
-impl<'a> Iterator for SortedApproximationsIterator<'a> {
-    type Item = (Approximation, usize);
+impl<'a> Iterator for SortedPropertiesIterator<'a> {
+    type Item = (Property, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
         let max_length = self.sbox_patterns.len();
         
-        // Stop if we have generated all possible approximations
+        // Stop if we have generated all possible properties
         if self.current_pattern >= max_length {
             return None;
         }
 
-        // Generate next approximation from the current S-box pattern and the LAT map
-        let mut approximation = None;
+        // Generate next property from the current S-box pattern and the LAT map
+        let mut property = None;
 
-        while approximation.is_none() {
+        while property.is_none() {
             let pattern = &mut self.sbox_patterns[self.current_pattern];
-            approximation = match pattern.next(&self.lat_map, &self.app_type) {
+            property = match pattern.next(&self.property_map, &self.property_filter) {
                 Some(x) => Some(x),
                 None => {
                     self.current_pattern += 1;
@@ -571,13 +488,13 @@ impl<'a> Iterator for SortedApproximationsIterator<'a> {
             }
         }
         
-        let mut approximation = approximation.unwrap();
-        let (alpha, beta) = self.cipher
-                                .sbox_mask_transform(approximation.alpha, 
-                                                     approximation.beta);
-        approximation.alpha = alpha;
-        approximation.beta = beta;
+        let mut property = property.unwrap();
+        let (input, output) = self.cipher
+                                  .sbox_mask_transform(property.input, 
+                                                       property.output);
+        property.input = input;
+        property.output = output;
 
-        Some((approximation, self.current_pattern))
+        Some((property, self.current_pattern))
     }
 }

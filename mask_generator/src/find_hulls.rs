@@ -1,163 +1,139 @@
-use approximation::{Approximation};
-use fnv::FnvHashMap;
-
-/* A struct representing a set of single round approximations.
- *
- * map      The map from alpha to a number of pairs (beta, squared correlation).
- * size     Number of approximations described by the map.
- */
-#[derive(Clone)]
-pub struct SingleRoundMap {
-    pub map: FnvHashMap<u64, Vec<(u64, f64)>>
-}
-
-impl SingleRoundMap {
-    /* Construct a new empty map */
-    pub fn new() -> SingleRoundMap {
-        SingleRoundMap{ map: FnvHashMap::default() }
-    }
-
-    /* Inserts a new single round approximation into the map. 
-     *
-     * approximation    A single round approximation.
-     */
-    pub fn insert(&mut self, approximation: Approximation) {
-        let entry = self.map.entry(approximation.alpha).or_insert(vec![]);
-        (*entry).push((approximation.beta, approximation.value));
-    }
-
-    /* Reimplementation of HashMap::get */
-    pub fn get(&self, alpha: &u64) -> Option<&Vec<(u64, f64)>> {
-        self.map.get(alpha)
-    }
-
-    /* Returns the number of approximations stored in the map */
-    pub fn len(&self) -> usize {
-        let mut length = 0;
-
-        for (_, v) in &self.map {
-            length += v.len();
-        }
-
-        length
-    }
-}
+use property::{Property};
+use fnv::{FnvHashMap, FnvHashSet};
+use graph::MultistageGraph;
+use time;
+use std::sync::mpsc;
+use num_cpus;
+use utility::ProgressBar;
+use crossbeam_utils::scoped;
 
 /***********************************************************************************************/
 
-
-/* A structure that maps approximations over a given number of rounds to an edge, 
- * which in turn represents a sub hull.
+/* Find all linear subhulls which use a specific set of single round properties 
+ * starting with a parity input. 
  *
- * map      The mapping from approximation to an edge 
- */
-#[derive(Clone)]
-pub struct EdgeMap {
-    pub map: FnvHashMap<Approximation, (usize, f64)>
-}
-
-impl EdgeMap {
-    /* Construct a new empty map */
-    pub fn new() -> EdgeMap {
-        EdgeMap{ map: FnvHashMap::default() }
-    }
-
-    /* Reimplementation of HashMap::insert */
-    pub fn insert(&mut self, approximation: Approximation, num_paths: usize, 
-        value: f64) {
-        self.map.insert(approximation, (num_paths, value));
-    }
-
-    /* Construct an edge map mapping from alpha to all betas in a single round map.
-     * 
-     * single_round_map     A single round map.
-     * alpha                The desired start mask.
-     */
-    fn from_single_round_map(single_round_map: &SingleRoundMap, alpha: u64) -> EdgeMap {
-        let mut edge_map = EdgeMap::new();
-        
-        match single_round_map.get(&alpha) {
-            Some(betas) => {
-                // If alpha was in the single round map, add all approximations starting
-                // with alpha to the edge map            
-                for &(beta, value) in betas {
-                    let approximation = Approximation::new(alpha, beta, Some(value));
-                    edge_map.insert(approximation, 1, value);
-                }
-            },
-            None => { }
-        }
-        
-        return edge_map;
-    }
-
-    /* Reimplementation of HashMap::get_mut */
-    pub fn get_mut(&mut self, approximation: &Approximation) 
-        -> Option<&mut (usize, f64)> {
-        self.map.get_mut(approximation)
-    }
-
-    /* Reimplementation of HashMap::contains_key */
-    pub fn contains_key(&self, approximation: &Approximation) -> bool {
-        self.map.contains_key(approximation)
-    }
-}
-
-/***********************************************************************************************/
-
-/* Find all linear subhulls which use a specific set of single round approximations 
- * starting with a parity alpha. 
- *
- * single_round_map     A map that describes the single round approximations included in the hull.
+ * single_round_map     A map that describes the single round properties included in the hull.
  * rounds               The number of rounds to consider.
  */
-pub fn find_hulls(
-    single_round_map: &SingleRoundMap, 
+fn find_hulls(
+    graph: &MultistageGraph, 
     rounds: usize, 
-    alpha: u64) 
-    -> EdgeMap {
-    // Set up one round edge map
-    let mut edge_map = EdgeMap::from_single_round_map(&single_round_map, alpha);
+    input: u64) 
+    -> Vec<Property> {
+    let start_property = Property::new(input, input, 1.0, 1);
+    let mut edge_map = FnvHashMap::default();
+    edge_map.insert(input, start_property);
 
     // Extend edge map the desired number of rounds
-    for _ in 1..rounds {
-        let mut new_edge_map = EdgeMap::new();
+    for r in 0..rounds {
+        let mut new_edge_map = FnvHashMap::default();
 
-        // Go through all edges (i.e. approximations (alpha, beta)) in the current map
-        // for (approximation, &(num_paths, value, ref intermediate)) in &edge_map.map {
-        for (approximation, &(num_paths, value)) in &edge_map.map {
-            let alpha = approximation.alpha;
-            let beta = approximation.beta;
-            
-            // Look up beta in the single round map in order to extend one round
-            match single_round_map.get(&beta) {
-                Some(gammas) => {
-                    // For each approximation of the type (beta, gamma)
-                    for &(gamma, new_value) in gammas {
-                        let new_approximation = Approximation::new(alpha, gamma, Some(new_value));
+        // Go through all edges (i.e. properties (input, output)) in the current map
+        for (output, &property) in &edge_map {
+            // Look up output in the single round map in order to extend one round
+            match graph.get_vertex(r, *output as usize) {
+                Some(vertex_ref) => {
+                    for (&new_output, &length) in &vertex_ref.successors {
+                        let new_value = 2.0f64.powf(-length);
+                        let entry = new_edge_map.entry(new_output as u64)
+                                                .or_insert(Property::new(property.input,
+                                                                         new_output as u64,
+                                                                         0.0, 0));
 
-                        // Check of the approximation (alpha, gamma) is already in the new map
-                        if new_edge_map.contains_key(&new_approximation) {
-                            let existing_edge = new_edge_map.get_mut(&new_approximation)
-                                                            .unwrap();
-
-                            // Update number of trails fo und and the squared correlation
-                            existing_edge.0 += num_paths;
-                            existing_edge.1 += value * new_value;
-                        } else {
-                            // Otherwise, extend the (alpha, beta) with (beta, gamma)
-                            new_edge_map.insert(new_approximation, 
-                                                num_paths, 
-                                                value * new_value);
-                        }
+                        (*entry).trails += property.trails;
+                        (*entry).value += property.value * new_value;
                     }
                 },
                 None => {}
-            };
+            }
         }
 
         edge_map = new_edge_map;
     }
 
-    edge_map
+    edge_map.values().map(|x| *x).collect()
+}
+
+pub fn parallel_find_hulls (
+    graph: &MultistageGraph,
+    rounds: usize,
+    input_masks: &FnvHashSet<u64>,
+    input_allowed: &FnvHashSet<u64>,
+    output_allowed: &FnvHashSet<u64>,
+    num_keep: usize) 
+    -> Vec<Property> {
+    println!("Finding linear hulls ({} input masks, {} approximations):", 
+             input_masks.len(), graph.num_edges());
+
+    let start = time::precise_time_s();
+    let num_threads = num_cpus::get();
+    let (result_tx, result_rx) = mpsc::channel();
+
+    scoped::scope(|scope| {
+        for t in 0..num_threads {
+            let result_tx = result_tx.clone();
+
+            scope.spawn(move || {
+                let mut result = vec![];
+                let mut progress_bar = ProgressBar::new(input_masks.len());
+                let mut min_value = 1.0_f64;
+                let mut num_found = 0;
+                let mut paths = 0;
+
+                for &input in input_masks.iter().skip(t).step_by(num_threads) {
+                    let hulls = find_hulls(&graph, rounds, input);
+                    num_found += hulls.len();
+                    
+                    for property in &hulls {
+                        if (input_allowed.len() == 0 || input_allowed.contains(&property.input)) &&
+                           (output_allowed.len() == 0 || output_allowed.contains(&property.output)) {
+                            paths += property.trails;
+                            result.push(*property);
+                        }
+                    }
+                    
+                    result.sort_by(|a, b| b.value.partial_cmp(&a.value).unwrap());
+                    match result.last() {
+                        Some(property) => {
+                            min_value = min_value.min(property.value);
+                        },
+                        None => { }
+                    }
+                    result.truncate(num_keep);
+                    progress_bar.increment();
+                }
+
+                result_tx.send((result, min_value, num_found, paths)).expect("Thread could not send result");
+            });
+        }
+    });
+
+    let mut paths = 0;
+    let mut num_found = 0;
+    let mut min_value = 1.0_f64;;
+    let mut result = vec![];
+
+    for _ in 0..num_threads {
+        let mut thread_result = result_rx.recv().expect("Main could not receive result");
+        
+        result.append(&mut thread_result.0);
+        min_value = min_value.min(thread_result.1);
+        num_found += thread_result.2;
+        paths += thread_result.3;
+    }
+
+    println!("");
+
+    result.sort_by(|a, b| b.value.partial_cmp(&a.value).unwrap());
+    result.truncate(num_keep);
+
+    println!("\nFound {} approximations. [{} s]", num_found, time::precise_time_s()-start);
+
+    if result.len() > 0 {
+        println!("Smallest squared correlation: {}", min_value.log2());
+        println!("Largest squared correlation:  {}\n", result[0].value.log2());
+        println!("Total number of trails:  {}\n", paths);
+    }
+
+    result
 }
