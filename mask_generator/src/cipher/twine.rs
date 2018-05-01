@@ -57,10 +57,23 @@ impl Cipher for Twine {
      */
     fn linear_layer(&self, input: u64) -> u64{
         let mut output = 0;
-
-        for i in 0..16 {
-            output ^= ((input >> (i*4)) & 0xf) << (self.permutation[i]*4);
-        }
+        
+        output ^= ((input >> ( 0*4)) & 0xf) << (self.permutation[ 0]*4);
+        output ^= ((input >> ( 1*4)) & 0xf) << (self.permutation[ 1]*4);
+        output ^= ((input >> ( 2*4)) & 0xf) << (self.permutation[ 2]*4);
+        output ^= ((input >> ( 3*4)) & 0xf) << (self.permutation[ 3]*4);
+        output ^= ((input >> ( 4*4)) & 0xf) << (self.permutation[ 4]*4);
+        output ^= ((input >> ( 5*4)) & 0xf) << (self.permutation[ 5]*4);
+        output ^= ((input >> ( 6*4)) & 0xf) << (self.permutation[ 6]*4);
+        output ^= ((input >> ( 7*4)) & 0xf) << (self.permutation[ 7]*4);
+        output ^= ((input >> ( 8*4)) & 0xf) << (self.permutation[ 8]*4);
+        output ^= ((input >> ( 9*4)) & 0xf) << (self.permutation[ 9]*4);
+        output ^= ((input >> (10*4)) & 0xf) << (self.permutation[10]*4);
+        output ^= ((input >> (11*4)) & 0xf) << (self.permutation[11]*4);
+        output ^= ((input >> (12*4)) & 0xf) << (self.permutation[12]*4);
+        output ^= ((input >> (13*4)) & 0xf) << (self.permutation[13]*4);
+        output ^= ((input >> (14*4)) & 0xf) << (self.permutation[14]*4);
+        output ^= ((input >> (15*4)) & 0xf) << (self.permutation[15]*4);
 
         output
     }
@@ -68,9 +81,22 @@ impl Cipher for Twine {
     fn linear_layer_inv(&self, input: u64) -> u64 {
         let mut output = 0;
 
-        for i in 0..16 {
-            output ^= ((input >> (i*4)) & 0xf) << (self.inverse[i]*4);
-        }
+        output ^= ((input >> ( 0*4)) & 0xf) << (self.inverse[ 0]*4);
+        output ^= ((input >> ( 1*4)) & 0xf) << (self.inverse[ 1]*4);
+        output ^= ((input >> ( 2*4)) & 0xf) << (self.inverse[ 2]*4);
+        output ^= ((input >> ( 3*4)) & 0xf) << (self.inverse[ 3]*4);
+        output ^= ((input >> ( 4*4)) & 0xf) << (self.inverse[ 4]*4);
+        output ^= ((input >> ( 5*4)) & 0xf) << (self.inverse[ 5]*4);
+        output ^= ((input >> ( 6*4)) & 0xf) << (self.inverse[ 6]*4);
+        output ^= ((input >> ( 7*4)) & 0xf) << (self.inverse[ 7]*4);
+        output ^= ((input >> ( 8*4)) & 0xf) << (self.inverse[ 8]*4);
+        output ^= ((input >> ( 9*4)) & 0xf) << (self.inverse[ 9]*4);
+        output ^= ((input >> (10*4)) & 0xf) << (self.inverse[10]*4);
+        output ^= ((input >> (11*4)) & 0xf) << (self.inverse[11]*4);
+        output ^= ((input >> (12*4)) & 0xf) << (self.inverse[12]*4);
+        output ^= ((input >> (13*4)) & 0xf) << (self.inverse[13]*4);
+        output ^= ((input >> (14*4)) & 0xf) << (self.inverse[14]*4);
+        output ^= ((input >> (15*4)) & 0xf) << (self.inverse[15]*4);
 
         output
     }

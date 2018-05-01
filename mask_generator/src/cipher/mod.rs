@@ -10,6 +10,7 @@ pub struct Sbox {
     pub size: usize,
     pub table: Vec<u8>,
     pub lat: Vec<Vec<usize>>,
+    pub ddt: Vec<Vec<usize>>,
 }
 
 impl Sbox {
@@ -19,7 +20,14 @@ impl Sbox {
      */
     fn new(size: usize, table: Vec<u8>) -> Sbox {
         let lat = Sbox::generate_lat(&table, size);
-        Sbox{size: size, table: table, lat: lat}
+        let ddt = Sbox::generate_ddt(&table, size);
+
+        Sbox {
+            size: size, 
+            table: table, 
+            lat: lat,
+            ddt: ddt
+         }
     }
 
     /* Generates the LAT associated with the S-box. */
@@ -45,8 +53,31 @@ impl Sbox {
         lat
     }
 
-    pub fn balance(&self) -> i16 {
+    /* Generates the DDT associated with the S-box. */
+    fn generate_ddt(table: &Vec<u8>, sbox_size: usize) -> Vec<Vec<usize>> {
+        let ddt_size = 1 << sbox_size;
+        let mut ddt = vec![vec![0; ddt_size]; ddt_size];
+
+        for plaintext_0 in 0..ddt_size {
+            let ciphertext_0 = table[plaintext_0];
+
+            for in_diff in 0..ddt_size {
+                let plaintext_1 = plaintext_0 ^ in_diff;
+                let ciphertext_1 = table[plaintext_1];
+
+                ddt[in_diff][(ciphertext_0 ^ ciphertext_1) as usize] += 1;
+            }
+        }
+
+        ddt
+    }
+
+    pub fn linear_balance(&self) -> i16 {
         (1 << (self.size - 1)) as i16
+    }
+
+    pub fn differential_zero(&self) -> i16 {
+        0
     }
 }
 
@@ -118,8 +149,9 @@ mod mibs;
 mod klein;
 mod pride;
 mod khazad;
+mod fly;
 
-pub fn name_to_cipher(name : &str) -> Option<Box<(Cipher + Sync)>> {
+pub fn name_to_cipher(name : &str) -> Option<Box<(Cipher + Send)>> {
     match name {
         "present"   => Some(Box::new(present::new())),
         "gift"      => Some(Box::new(gift::new())),
@@ -132,7 +164,8 @@ pub fn name_to_cipher(name : &str) -> Option<Box<(Cipher + Sync)>> {
         "mibs"      => Some(Box::new(mibs::new())),
         "klein"     => Some(Box::new(klein::new())),
         "pride"     => Some(Box::new(pride::new())),
-        "khazad"     => Some(Box::new(khazad::new())),
+        "khazad"    => Some(Box::new(khazad::new())),
+        "fly"       => Some(Box::new(fly::new())),
         _ => None
     }
 }

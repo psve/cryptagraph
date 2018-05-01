@@ -1,5 +1,6 @@
 Implemented:
 GIFT -- Full
+Khazad -- Full
 KLEIN - Full
 LED -- Full
 MIBS -- Full
@@ -23,4 +24,3 @@ Fly
 PRINCE - Annoying huge matrix multiplication
 QARMA
 Roadrunner
-Khazad - GF256 multiplication and 8 bit sbox

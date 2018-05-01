@@ -82,9 +82,14 @@ impl Cipher for Mibs {
 
         let mut output = 0;
         
-        for i in 0..8 {
-            output ^= ((x >> (4*i)) & 0xf) << (Mibs::PERMUTATION[i] * 4);
-        }
+        output ^= ((x >> (4*0)) & 0xf) << (Mibs::PERMUTATION[0] * 4);
+        output ^= ((x >> (4*1)) & 0xf) << (Mibs::PERMUTATION[1] * 4);
+        output ^= ((x >> (4*2)) & 0xf) << (Mibs::PERMUTATION[2] * 4);
+        output ^= ((x >> (4*3)) & 0xf) << (Mibs::PERMUTATION[3] * 4);
+        output ^= ((x >> (4*4)) & 0xf) << (Mibs::PERMUTATION[4] * 4);
+        output ^= ((x >> (4*5)) & 0xf) << (Mibs::PERMUTATION[5] * 4);
+        output ^= ((x >> (4*6)) & 0xf) << (Mibs::PERMUTATION[6] * 4);
+        output ^= ((x >> (4*7)) & 0xf) << (Mibs::PERMUTATION[7] * 4);
 
         output
     }
@@ -95,10 +100,15 @@ impl Cipher for Mibs {
      */
     fn linear_layer_inv(&self, input: u64) -> u64 {
         let mut output = 0;
-
-        for i in 0..8 {
-            output ^= ((input >> (4*i)) & 0xf) << (Mibs::IPERMUTATION[i] * 4);
-        }
+        
+        output ^= ((input >> (4*0)) & 0xf) << (Mibs::IPERMUTATION[0] * 4);
+        output ^= ((input >> (4*1)) & 0xf) << (Mibs::IPERMUTATION[1] * 4);
+        output ^= ((input >> (4*2)) & 0xf) << (Mibs::IPERMUTATION[2] * 4);
+        output ^= ((input >> (4*3)) & 0xf) << (Mibs::IPERMUTATION[3] * 4);
+        output ^= ((input >> (4*4)) & 0xf) << (Mibs::IPERMUTATION[4] * 4);
+        output ^= ((input >> (4*5)) & 0xf) << (Mibs::IPERMUTATION[5] * 4);
+        output ^= ((input >> (4*6)) & 0xf) << (Mibs::IPERMUTATION[6] * 4);
+        output ^= ((input >> (4*7)) & 0xf) << (Mibs::IPERMUTATION[7] * 4);
         
         let mut x = output;
 

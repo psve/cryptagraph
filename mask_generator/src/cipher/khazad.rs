@@ -76,9 +76,15 @@ impl Cipher for Khazad {
      */
     fn linear_layer(&self, input: u64) -> u64{
         let mut output = 0;
-        for i in 0..8 {
-            output ^= Khazad::PERMUTATION[i][((input >> (i*8)) & 0xff) as usize];
-        }
+        output ^= Khazad::PERMUTATION[0][((input >>  0) & 0xff) as usize];
+        output ^= Khazad::PERMUTATION[1][((input >>  8) & 0xff) as usize];
+        output ^= Khazad::PERMUTATION[2][((input >> 16) & 0xff) as usize];
+        output ^= Khazad::PERMUTATION[3][((input >> 24) & 0xff) as usize];
+        output ^= Khazad::PERMUTATION[4][((input >> 32) & 0xff) as usize];
+        output ^= Khazad::PERMUTATION[5][((input >> 40) & 0xff) as usize];
+        output ^= Khazad::PERMUTATION[6][((input >> 48) & 0xff) as usize];
+        output ^= Khazad::PERMUTATION[7][((input >> 56) & 0xff) as usize];
+
         output
     }
 
@@ -88,9 +94,15 @@ impl Cipher for Khazad {
      */
     fn linear_layer_inv(&self, input: u64) -> u64 {
         let mut output = 0;
-        for i in 0..8 {
-            output ^= Khazad::PERMUTATION[i][((input >> (i*8)) & 0xff) as usize];
-        }
+        output ^= Khazad::PERMUTATION[0][((input >>  0) & 0xff) as usize];
+        output ^= Khazad::PERMUTATION[1][((input >>  8) & 0xff) as usize];
+        output ^= Khazad::PERMUTATION[2][((input >> 16) & 0xff) as usize];
+        output ^= Khazad::PERMUTATION[3][((input >> 24) & 0xff) as usize];
+        output ^= Khazad::PERMUTATION[4][((input >> 32) & 0xff) as usize];
+        output ^= Khazad::PERMUTATION[5][((input >> 40) & 0xff) as usize];
+        output ^= Khazad::PERMUTATION[6][((input >> 48) & 0xff) as usize];
+        output ^= Khazad::PERMUTATION[7][((input >> 56) & 0xff) as usize];
+        
         output
     }
 

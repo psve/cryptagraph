@@ -4,22 +4,12 @@ use fnv::{FnvHashSet, FnvHashMap};
 use std::sync::mpsc;
 use std::sync::{Arc, Barrier};
 use time;
-use std::cmp;
 
 use cipher::*;
 use graph::MultistageGraph;
 use single_round::SortedProperties;
 use property::{PropertyType, PropertyFilter};
 use utility::ProgressBar;
-
-lazy_static! {
-    static ref COMPRESS: Vec<Vec<usize>> = vec![
-        vec![8, 8, 8, 8, 8, 8, 8, 8],
-        vec![4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
-        vec![2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
-        vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-    ];
-}
 
 lazy_static! {
     static ref THREADS: usize = num_cpus::get();
@@ -29,9 +19,11 @@ pub fn compress(x: u64, level: usize) -> u64 {
     let mut out = 0;
     let mut tmp = x;
 
-    for (i, block) in COMPRESS[level].iter().enumerate() {
-        let mask = ((1 << block) - 1) as u64;
+    let block = 1 << (3-level);
+    let mask = ((1 << block) - 1) as u64;
+    let steps = 64 / block;
 
+    for i in 0..steps {
         if tmp & mask != 0 {
             out ^= 1 << i;
         }
@@ -146,7 +138,7 @@ fn get_vertices (
                 output_sets[i].extend(set.iter());
             }
         }
-
+        
         for i in 0..rounds-1 {
             vertex_sets[i] = input_sets[i].intersection(&output_sets[i]).cloned().collect();
         }
@@ -172,8 +164,7 @@ fn add_middle_edges(
     rounds: usize, 
     level: usize)
     -> MultistageGraph {
-    let min_block = COMPRESS[level].iter()
-                                   .fold(properties.cipher.size(), |acc, &x| cmp::min(x, acc));
+    let block = 1 << (3-level);
     
     // Collect edges in parallel
     let (result_tx, result_rx) = mpsc::channel();
@@ -185,7 +176,7 @@ fn add_middle_edges(
             let result_tx = result_tx.clone();
 
             scope.spawn(move || {
-                if min_block < thread_properties.cipher.sbox().size  || 
+                if block < thread_properties.cipher.sbox().size  || 
                    thread_properties.cipher.structure() == CipherStructure::Feistel {
                     thread_properties.set_type_all();
                 } else {
@@ -249,8 +240,7 @@ fn add_outer_edges (
     input_allowed: &FnvHashSet<u64>,
     output_allowed: &FnvHashSet<u64>) 
     -> MultistageGraph {
-    let min_block = COMPRESS[level].iter()
-                                   .fold(properties.cipher.size(), |acc, &x| cmp::min(x, acc));
+    let block = 1 << (3-level);
 
     // Create graph in parallel
     let (result_tx, result_rx) = mpsc::channel();
@@ -262,7 +252,7 @@ fn add_outer_edges (
             let result_tx = result_tx.clone();
 
             scope.spawn(move || {
-                if min_block < thread_properties.cipher.sbox().size  || 
+                if block < thread_properties.cipher.sbox().size  || 
                    thread_properties.cipher.structure() == CipherStructure::Feistel {
                     thread_properties.set_type_all();
                 } else {
@@ -384,10 +374,21 @@ fn remove_dead_patterns(
                 let mut good_patterns = vec![false; thread_properties.len_patterns()];
 
                 for (property, pattern_idx) in thread_properties.into_iter() {
-                    let input = property.input;
-                    let good = filters.iter()
-                                      .fold(false, 
-                                            |acc, ref x| acc | x.contains(&compress(input, level)));
+                    if good_patterns[pattern_idx] {
+                        progress_bar.increment();
+                        continue;
+                    }
+
+                    let input = compress(property.input, level);
+                    let mut good = false;
+
+                    for f in filters {
+                        if f.contains(&input) {
+                            good = true;
+                            break;
+                        }
+                    }
+
                     good_patterns[pattern_idx] |= good;
                     progress_bar.increment();
                 }
@@ -436,10 +437,10 @@ pub fn generate_graph(
     let mut properties = SortedProperties::new(cipher, patterns, 
                                                property_type, 
                                                PropertyFilter::All);
-    let mut filters = vec![(0..(1 << COMPRESS[0].len())).collect() ; rounds+1];
+    let mut filters = vec![(0..256).collect() ; rounds+1];
     let mut graph = MultistageGraph::new(0);
 
-    for level in 1..COMPRESS.len() {
+    for level in 1..4 {
         properties.set_type_all();
         let num_app = properties.len();
         properties.set_type_input();
@@ -500,7 +501,7 @@ pub fn generate_graph(
             graph.num_edges(), 
             time::precise_time_s()-start);
 
-        if level != COMPRESS.len() - 1 {
+        if level != 3 {
             let start = time::precise_time_s();
             let good_vertices = update_filters(&mut filters, &graph);
             println!("Number of good vertices: {} [{} s]", 

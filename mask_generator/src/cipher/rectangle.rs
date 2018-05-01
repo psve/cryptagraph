@@ -65,12 +65,17 @@ impl Cipher for Rectangle {
      *
      * input    Input to be permuted.
      */
-    fn linear_layer(&self, input: u64) -> u64{
+    fn linear_layer(&self, input: u64) -> u64 {
         let mut output = 0;
 
-        for i in 0..8 {
-            output ^= Rectangle::PERMUTATION[i][((input >> (i*8)) & 0xff) as usize];
-        }
+        output ^= Rectangle::PERMUTATION[0][((input >>  0) & 0xff) as usize];
+        output ^= Rectangle::PERMUTATION[1][((input >>  8) & 0xff) as usize];
+        output ^= Rectangle::PERMUTATION[2][((input >> 16) & 0xff) as usize];
+        output ^= Rectangle::PERMUTATION[3][((input >> 24) & 0xff) as usize];
+        output ^= Rectangle::PERMUTATION[4][((input >> 32) & 0xff) as usize];
+        output ^= Rectangle::PERMUTATION[5][((input >> 40) & 0xff) as usize];
+        output ^= Rectangle::PERMUTATION[6][((input >> 48) & 0xff) as usize];
+        output ^= Rectangle::PERMUTATION[7][((input >> 56) & 0xff) as usize];
 
         output
     }
@@ -78,9 +83,14 @@ impl Cipher for Rectangle {
     fn linear_layer_inv(&self, input: u64) -> u64 {
         let mut output = 0;
 
-        for i in 0..8 {
-            output ^= Rectangle::IPERMUTATION[i][((input >> (i*8)) & 0xff) as usize];
-        }
+        output ^= Rectangle::IPERMUTATION[0][((input >>  0) & 0xff) as usize];
+        output ^= Rectangle::IPERMUTATION[1][((input >>  8) & 0xff) as usize];
+        output ^= Rectangle::IPERMUTATION[2][((input >> 16) & 0xff) as usize];
+        output ^= Rectangle::IPERMUTATION[3][((input >> 24) & 0xff) as usize];
+        output ^= Rectangle::IPERMUTATION[4][((input >> 32) & 0xff) as usize];
+        output ^= Rectangle::IPERMUTATION[5][((input >> 40) & 0xff) as usize];
+        output ^= Rectangle::IPERMUTATION[6][((input >> 48) & 0xff) as usize];
+        output ^= Rectangle::IPERMUTATION[7][((input >> 56) & 0xff) as usize];
 
         output
     }

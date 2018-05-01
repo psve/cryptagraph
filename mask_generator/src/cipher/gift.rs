@@ -63,9 +63,15 @@ impl Cipher for Gift {
      */
     fn linear_layer(&self, input: u64) -> u64{
         let mut output = 0;
-        for i in 0..8 {
-            output ^= Gift::PERMUTATION[i][((input >> (i*8)) & 0xff) as usize];
-        }
+        output ^= Gift::PERMUTATION[0][((input >>  0) & 0xff) as usize];
+        output ^= Gift::PERMUTATION[1][((input >>  8) & 0xff) as usize];
+        output ^= Gift::PERMUTATION[2][((input >> 16) & 0xff) as usize];
+        output ^= Gift::PERMUTATION[3][((input >> 24) & 0xff) as usize];
+        output ^= Gift::PERMUTATION[4][((input >> 32) & 0xff) as usize];
+        output ^= Gift::PERMUTATION[5][((input >> 40) & 0xff) as usize];
+        output ^= Gift::PERMUTATION[6][((input >> 48) & 0xff) as usize];
+        output ^= Gift::PERMUTATION[7][((input >> 56) & 0xff) as usize];
+
         output
     }
 
@@ -75,9 +81,15 @@ impl Cipher for Gift {
      */
     fn linear_layer_inv(&self, input: u64) -> u64 {
         let mut output = 0;
-        for i in 0..8 {
-            output ^= Gift::PERMUTATION_INV[i][((input >> (i*8)) & 0xff) as usize];
-        }
+        output ^= Gift::PERMUTATION_INV[0][((input >>  0) & 0xff) as usize];
+        output ^= Gift::PERMUTATION_INV[1][((input >>  8) & 0xff) as usize];
+        output ^= Gift::PERMUTATION_INV[2][((input >> 16) & 0xff) as usize];
+        output ^= Gift::PERMUTATION_INV[3][((input >> 24) & 0xff) as usize];
+        output ^= Gift::PERMUTATION_INV[4][((input >> 32) & 0xff) as usize];
+        output ^= Gift::PERMUTATION_INV[5][((input >> 40) & 0xff) as usize];
+        output ^= Gift::PERMUTATION_INV[6][((input >> 48) & 0xff) as usize];
+        output ^= Gift::PERMUTATION_INV[7][((input >> 56) & 0xff) as usize];
+
         output
     }
 
