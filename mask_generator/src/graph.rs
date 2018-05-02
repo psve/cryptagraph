@@ -1,6 +1,12 @@
 use fnv::FnvHashMap;
 use indexmap::IndexMap;
 
+/**
+A vertex of a graph. It contains a list of predecessors and a list of successors.
+
+predecessors        A map from a vertex label to a length
+successors          A map from a vertex label to a length
+*/
 #[derive(Clone, Debug)]
 pub struct Vertex {
     pub predecessors: FnvHashMap<usize, f64>,
@@ -8,6 +14,9 @@ pub struct Vertex {
 }
 
 impl Vertex {
+    /**
+    Create a new vertex without any predecessors or successors.
+    */
     fn new() -> Vertex {
         Vertex {
             predecessors: FnvHashMap::default(),
@@ -15,23 +24,43 @@ impl Vertex {
         }
     }
 
-    fn add_predecessor(&mut self, predecessor: usize, length: f64) {
+    /**
+    Add a predecessor to the vertex.
+    */
+    fn add_predecessor(&mut self, 
+                       predecessor: usize, 
+                       length: f64) {
         self.predecessors.insert(predecessor, length);
     }
 
-    fn add_successor(&mut self, successor: usize, length: f64) {
+    /**
+    Add a successor to the vertex.
+    */
+    fn add_successor(&mut self, 
+                     successor: usize, 
+                     length: f64) {
         self.successors.insert(successor, length);
     }
 }
 
 /*************************************************************************************************/
 
+/**
+A structure describing a multistage graph. 
+
+vertices    A vector where each element contains a map of vertices for the given stage. 
+*/
 #[derive(Clone)]
 pub struct MultistageGraph {
     vertices: Vec<FnvHashMap<usize, Vertex>>,
 }
 
 impl MultistageGraph {
+    /**
+    Create a new empty multistage graph with a fixed number of stages.
+    
+    stages      Number of stages in the graph.
+    */
     pub fn new(stages: usize) -> MultistageGraph {
         let vertices = vec![FnvHashMap::default(); stages];
 
@@ -40,11 +69,24 @@ impl MultistageGraph {
         }
     }
 
+    /**
+    Get the number of stages in the graph.
+    */
     pub fn stages(&self) -> usize {
         self.vertices.len()
     }
 
-    pub fn add_vertex(&mut self, stage: usize, label: usize) {    
+    /**
+    Adds a vertex to the graph. Panics if the target stage doesn't exist. 
+    Does not insert the vertex if a vertex with the same label already exists in 
+    the target stage. 
+
+    stage       The stage to add the vertex to.
+    label       The name of the vertex.
+    */
+    pub fn add_vertex(&mut self, 
+                      stage: usize, 
+                      label: usize) {    
         if !self.vertices.get(stage).expect("Stage out of range").contains_key(&label) {
             let vertex = Vertex::new();
             self.vertices.get_mut(stage)
@@ -53,7 +95,20 @@ impl MultistageGraph {
         }
     }
 
-    pub fn add_edge(&mut self, stage: usize, from: usize, to: usize, length: f64) {
+    /**
+    Adds an edge with a length to the graph. Panics if the target stage or the following
+    stage doesn't exist. If the endpoints don't exist, the edge isn't added. 
+
+    stage       The stage of the start vertex.
+    from        The label of the start vertex.
+    to          The label of the end vertex.
+    length      The length of the edge.
+    */
+    pub fn add_edge(&mut self, 
+                    stage: usize, 
+                    from: usize, 
+                    to: usize, 
+                    length: f64) {
         if self.vertices.get(stage).expect("Stage out of range").contains_key(&from) &&
            self.vertices.get(stage+1).expect("Stage out of range").contains_key(&to) {
             {
@@ -71,12 +126,23 @@ impl MultistageGraph {
         }
     }
 
+    /** 
+    Add multiple edges to the graph. Panics when edd_edge does. 
+
+    edges   A map containg tupes of the type (stage, to, from) mapping to a length.
+    */
     pub fn add_edges(&mut self, edges: &IndexMap<(usize, usize, usize), f64>) {
         for (&(stage, from, to), &length) in edges {
             self.add_edge(stage, from, to, length);
         }
     }
 
+    /**
+    Adds multiple edges to the graph, and crates vertices in the first or last stage if they
+    don't exist. Does not create vertices in other stages.
+
+    edges   A map containg tupes of the type (stage, to, from) mapping to a length.
+    */
     pub fn add_edges_and_vertices(&mut self, edges: &IndexMap<(usize, usize, usize), f64>) {
         for (&(stage, from, to), &length) in edges {
             if stage == 0 {
@@ -89,7 +155,16 @@ impl MultistageGraph {
         }
     }
 
-    pub fn remove_vertex(&mut self, stage: usize, label: usize) {
+    /**
+    Removes a vertex from the graph. All other vertices are updates such that successors and 
+    predecessors are consistent. 
+
+    stage       Stage to remove a vertex from.
+    label       Name of the vertex to remove.
+    */
+    pub fn remove_vertex(&mut self, 
+                         stage: usize, 
+                         label: usize) {
         {
             let (before, mid) = self.vertices.split_at_mut(stage);
             let (mid, after) = mid.split_at_mut(1);
@@ -122,11 +197,16 @@ impl MultistageGraph {
         self.vertices[stage].remove(&label);
     }
 
-    /* Remove any edges that aren't part of a path from source to sink. 
-     *
-     * graph    Graph to prune.
-     */
-    pub fn prune_graph(&mut self, start: usize, stop: usize) {
+    /** 
+    Remove any edges that aren't part of a path from a vertex in stage <start> to
+    a vertex in stage <stop>. 
+    
+    start       Stage to perform pruning from.
+    stop        Stage to perform pruning to.
+    */
+    pub fn prune_graph(&mut self, 
+                       start: usize, 
+                       stop: usize) {
         let mut pruned = true;
 
         while pruned {
@@ -154,22 +234,50 @@ impl MultistageGraph {
         }
     }
 
-    pub fn get_vertex(&self, stage: usize, label: usize) -> Option<&Vertex> {
+    /**
+    Get a reference to a vertex. Returns None if the vertex doesn't exist.
+
+    stage       Stage to get a vertex from.
+    label       Name of the vertex.
+    */
+    pub fn get_vertex(&self, 
+                      stage: usize, 
+                      label: usize) 
+                      -> Option<&Vertex> {
         self.vertices.get(stage).expect("Stage out of range.").get(&label)
     }
 
-    pub fn get_stage(&self, stage: usize) -> Option<&FnvHashMap<usize, Vertex>> {
-        Some(&self.vertices.get(stage).expect("Stage out of range."))
+    /**
+    Get a stage of the graph. Returns None if the stage index is out of range.
+
+    stage       Stage to get. 
+    */
+    pub fn get_stage(&self, 
+                     stage: usize) 
+                     -> Option<&FnvHashMap<usize, Vertex>> {
+        self.vertices.get(stage)
     }
 
+    /**
+    Check if a vertex exists. 
+    
+    stage       Stage to check.
+    label       Label of the vertex.
+    */
     pub fn has_vertex(&self, stage: usize, label: usize) -> bool {
         self.vertices.get(stage).expect("Stage out of range.").contains_key(&label)
     }
 
+    /**
+    Returns the number of vertices in the graph.
+    */
     pub fn num_vertices(&self) -> usize {
         self.vertices.iter().fold(0, |sum, ref x| sum + x.len())
     }
 
+    /**
+    Returns the number of edges in the graph. 
+    */
     pub fn num_edges(&self) -> usize {
         self.vertices.iter()
                      .fold(0, 

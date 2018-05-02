@@ -13,7 +13,7 @@ extern crate structopt;
 extern crate time;
 
 mod cipher;
-mod find_hulls;
+mod find_properties;
 mod graph;
 mod graph_generate;
 mod multi_round;
@@ -22,9 +22,11 @@ mod property;
 mod single_round;
 mod utility;
 
-use cipher::*;
 use options::CliArgs;
 use structopt::StructOpt;
+
+use cipher::*;
+use property::PropertyType;
 
 fn main() {
     let options = CliArgs::from_args();
@@ -46,10 +48,14 @@ fn main() {
 
 
     println!("\tCipher: {}.", cipher.name());
+    match property_type {
+        PropertyType::Linear       => println!("\tProperty: Linear"),
+        PropertyType::Differential => println!("\tProperty: Differential")
+    }
     println!("\tRounds: {}.", rounds);
     println!("\tS-box patterns: {}\n", num_patterns);
 
-    multi_round::find_approximations(cipher, property_type, rounds, num_patterns, 
-                                     file_mask_in, file_mask_out, file_graph);
+    multi_round::find_properties(cipher, property_type, rounds, num_patterns, 
+                                 file_mask_in, file_mask_out, file_graph);
 }
     
