@@ -278,7 +278,7 @@ fn add_outer_edges (
                     let length = -property.value.log2();
 
                     // First round                    
-                    if (input_allowed.len() == 0 || input_allowed.contains(&(input as u64))) {
+                    if input_allowed.len() == 0 || input_allowed.contains(&(input as u64)) {
                         match graph.get_vertex(1, output) {
                             Some(vertex_ref) => {
                                 if rounds == 2 || vertex_ref.successors.len() != 0 {
@@ -291,7 +291,7 @@ fn add_outer_edges (
                     }
 
                     // Last round
-                    if (output_allowed.len() == 0 || output_allowed.contains(&(output as u64))) {
+                    if output_allowed.len() == 0 || output_allowed.contains(&(output as u64)) {
                         match graph.get_vertex(rounds-1, input) {
                             Some(vertex_ref) => {
                                 if rounds == 2 || vertex_ref.predecessors.len() != 0 {
@@ -487,10 +487,6 @@ pub fn generate_graph(
             graph.num_edges(),
             time::precise_time_s()-start);
 
-        /*let mut name = String::from("test_step1");
-        name.push_str(&level.to_string());
-        print_to_graph_tool(&graph, &name);*/
-
         if rounds > 2 {
             let start = time::precise_time_s();
             graph.prune_graph(1, rounds);
@@ -499,10 +495,6 @@ pub fn generate_graph(
                 graph.num_edges(), 
                 time::precise_time_s()-start);
         }
-
-        /*let mut name = String::from("test_step2");
-        name.push_str(&level.to_string());
-        print_to_graph_tool(&graph, &name);*/
 
         let start = time::precise_time_s();
         let input_allowed_comp = input_allowed.iter().map(|&x| compress(x, level)).collect();
@@ -514,10 +506,6 @@ pub fn generate_graph(
             graph.num_vertices(), 
             graph.num_edges(),
             time::precise_time_s()-start);
-
-        /*let mut name = String::from("test_step3");
-        name.push_str(&level.to_string());
-        print_to_graph_tool(&graph, &name);*/
 
         let start = time::precise_time_s();
         graph.prune_graph(0, rounds+1);
