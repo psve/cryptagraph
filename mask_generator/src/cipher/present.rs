@@ -1,4 +1,5 @@
 use cipher::{Sbox, CipherStructure, Cipher};
+use property::PropertyType;
 
 /*****************************************************************
                             PRESENT
@@ -247,7 +248,12 @@ impl Cipher for Present {
     input    Input mask to the S-box layer.
     output   Output mask to the S-box layer.
     */
-    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
+    #[allow(unused_variables)]
+    fn sbox_mask_transform(&self, 
+                           input: u64, 
+                           output: u64, 
+                           property_type: PropertyType) 
+                           -> (u64, u64) {
         (input, self.linear_layer(output))
     }
 }

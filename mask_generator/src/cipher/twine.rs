@@ -1,4 +1,5 @@
 use cipher::{Sbox, CipherStructure, Cipher};
+use property::PropertyType;
 
 /*****************************************************************
                             TWINE
@@ -279,33 +280,70 @@ impl Cipher for Twine {
     input    Input mask to the S-box layer.
     output   Output mask to the S-box layer.
     */
-    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
-        let mut alpha = 0;
-        let mut tmp = 0;
+    #[allow(unused_variables)]
+    fn sbox_mask_transform(&self, 
+                           input: u64, 
+                           output: u64, 
+                           property_type: PropertyType) 
+                           -> (u64, u64) {
+        match property_type {
+            PropertyType::Linear => {
+                let mut alpha = 0;
+                let mut tmp = 0;
 
-        for i in 0..8 {
-            alpha ^= ((output >> 4*i) & 0xf) << (i*8);
-            alpha ^= ((input >> 4*i) & 0xf) << (i*8+4);
-            tmp ^= ((output >> (4*i+32)) & 0xf) << (i*8);
+                for i in 0..8 {
+                    alpha ^= ((output >> 4*i) & 0xf) << (i*8);
+                    alpha ^= ((input >> 4*i) & 0xf) << (i*8+4);
+                    tmp ^= ((output >> (4*i+32)) & 0xf) << (i*8);
+                }
+
+                tmp = self.linear_layer_inv(tmp);
+                alpha ^= tmp;
+
+                let mut beta = 0;
+                tmp = 0;
+
+                for i in 0..8 {
+                    beta ^= ((output >> (4*i+32)) & 0xf) << (i*8);
+                    beta ^= ((input >> (4*i+32)) & 0xf) << (i*8+4);
+                    tmp ^= ((output >> 4*i) & 0xf) << (i*8);
+                }
+
+                tmp = self.linear_layer(tmp);
+                beta ^= tmp;
+                beta = self.linear_layer(beta);       
+
+                (alpha, beta)
+            },
+            PropertyType::Differential => {
+                let mut delta = 0;
+                let mut tmp = 0;
+
+                for i in 0..8 {
+                    delta ^= ((output >> 4*i) & 0xf) << (i*8);
+                    delta ^= ((input >> 4*i) & 0xf) << (i*8+4);
+                    tmp ^= ((input >> (4*i+32)) & 0xf) << (i*8+4);
+                }
+
+                tmp = self.linear_layer_inv(tmp);
+                delta ^= tmp;
+
+                let mut nabla = 0;
+                tmp = 0;
+
+                for i in 0..8 {
+                    nabla ^= ((output >> (4*i+32)) & 0xf) << (i*8);
+                    nabla ^= ((input >> (4*i+32)) & 0xf) << (i*8+4);
+                    tmp ^= ((input >> 4*i) & 0xf) << (i*8+4);
+                }
+
+                tmp = self.linear_layer(tmp);
+                nabla ^= tmp;
+                nabla = self.linear_layer(nabla);       
+
+                (delta, nabla)
+            }
         }
-
-        tmp = self.linear_layer_inv(tmp);
-        alpha ^= tmp;
-
-        let mut beta = 0;
-        tmp = 0;
-
-        for i in 0..8 {
-            beta ^= ((output >> (4*i+32)) & 0xf) << (i*8);
-            beta ^= ((input >> (4*i+32)) & 0xf) << (i*8+4);
-            tmp ^= ((output >> 4*i) & 0xf) << (i*8);
-        }
-
-        tmp = self.linear_layer(tmp);
-        beta ^= tmp;
-        beta = self.linear_layer(beta);       
-
-        (alpha, beta)
     }
 }
 

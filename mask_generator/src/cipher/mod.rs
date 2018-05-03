@@ -1,3 +1,4 @@
+use property::PropertyType;
 use utility;
 
 /** 
@@ -188,10 +189,16 @@ pub trait Cipher: Sync {
     Transforms the input and output mask of the S-box layer to an
     input and output mask of a round.
     
-    input    Input mask to the S-box layer.
-    output   Output mask to the S-box layer.
+    input           Input mask to the S-box layer.
+    output          Output mask to the S-box layer.
+    property_type   Type of the property determining the transform.
     */
-    fn sbox_mask_transform(&self, input: u64, output: u64) -> (u64, u64);
+    #[allow(unused_variables)]
+    fn sbox_mask_transform(&self, 
+                           input: u64, 
+                           output: u64, 
+                           property_type: PropertyType) 
+                           -> (u64, u64);
 }
 
 mod present;

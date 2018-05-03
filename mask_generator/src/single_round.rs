@@ -320,6 +320,7 @@ generated using the Iterator trait.
 cipher                   The cipher whose round function we are considering.
 property_map             The property map for the cipher's S-box.
 sbox_patterns            A list of S-box patterns sorted by their property values.
+property_type            The type of property the iterator generates. 
 property_filter          What type of property an iterator will generate.
 */
 #[derive(Clone)]
@@ -327,6 +328,7 @@ pub struct SortedProperties<'a> {
     pub cipher: &'a Cipher,
     pub property_map: PropertyMap,
     pub sbox_patterns: Vec<SboxPattern>,
+    property_type: PropertyType,
     property_filter: PropertyFilter,
 }
 
@@ -382,6 +384,7 @@ impl<'a> SortedProperties<'a> {
                 return SortedProperties{cipher: cipher.clone(),
                                             property_map: property_map.clone(),
                                             sbox_patterns: sbox_patterns,
+                                            property_type: property_type,
                                             property_filter: property_filter}
             }
 
@@ -421,6 +424,7 @@ impl<'a> SortedProperties<'a> {
         return SortedProperties{cipher: cipher.clone(),
                                 property_map: property_map.clone(),
                                 sbox_patterns: sbox_patterns,
+                                property_type: property_type,
                                 property_filter: property_filter}
     }
 
@@ -484,6 +488,7 @@ impl<'a> IntoIterator for &'a SortedProperties<'a> {
             cipher: self.cipher,
             property_map: self.property_map.clone(),
             sbox_patterns: self.sbox_patterns.clone(),
+            property_type: self.property_type.clone(),
             property_filter: self.property_filter.clone(),
             current_pattern: 0       
         }
@@ -496,6 +501,7 @@ An iterator over properties represented by a SortedProperties struct.
 cipher              The cipher considered.
 sbox_patterns       A vector of patterns to generate properties from.
 property_map        A map from S-box property values to property input/output.
+property_type       The type of property the iterator generates. 
 property_filter     Determines whether to generate full properties or just inputs/outputs.
 current_pattern     Index of the current pattern used to generate properties.
  */
@@ -504,6 +510,7 @@ pub struct SortedPropertiesIterator<'a> {
     cipher: &'a Cipher,
     pub sbox_patterns: Vec<SboxPattern>,
     property_map: PropertyMap,
+    property_type: PropertyType,
     property_filter: PropertyFilter,
     current_pattern: usize
 }
@@ -545,7 +552,8 @@ impl<'a> Iterator for SortedPropertiesIterator<'a> {
         let mut property = property.unwrap();
         let (input, output) = self.cipher
                                   .sbox_mask_transform(property.input, 
-                                                       property.output);
+                                                       property.output,
+                                                       self.property_type);
         property.input = input;
         property.output = output;
 

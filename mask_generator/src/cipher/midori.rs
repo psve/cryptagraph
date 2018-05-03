@@ -1,4 +1,5 @@
 use cipher::{Sbox, CipherStructure, Cipher};
+use property::PropertyType;
 
 /*****************************************************************
                             Midori
@@ -181,7 +182,7 @@ impl Cipher for Midori {
 
         keys.push(k0 ^ k1);
 
-        for i in 0..(rounds/2-1) {
+        for _ in 0..(rounds/2-1) {
             keys.push(k0);
             keys.push(k1);
         }
@@ -278,7 +279,12 @@ impl Cipher for Midori {
     input    Input mask to the S-box layer.
     output   Output mask to the S-box layer.
     */
-    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
+    #[allow(unused_variables)]
+    fn sbox_mask_transform(&self, 
+                           input: u64, 
+                           output: u64, 
+                           property_type: PropertyType) 
+                           -> (u64, u64) {
         (input, self.linear_layer(output))
     }
 }

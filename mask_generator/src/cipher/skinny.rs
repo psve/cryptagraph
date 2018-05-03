@@ -1,4 +1,5 @@
 use cipher::{Sbox, CipherStructure, Cipher};
+use property::PropertyType;
 
 /*****************************************************************
                             SKINNY
@@ -150,7 +151,7 @@ impl Cipher for Skinny {
         }
 
 
-        for r in 0..rounds {
+        for _ in 0..rounds {
             keys.push(k & 0xffffffff);
 
             let mut tmp = 0;
@@ -247,7 +248,12 @@ impl Cipher for Skinny {
     input    Input mask to the S-box layer.
     output   Output mask to the S-box layer.
     */
-    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
+    #[allow(unused_variables)]
+    fn sbox_mask_transform(&self, 
+                           input: u64, 
+                           output: u64, 
+                           property_type: PropertyType) 
+                           -> (u64, u64) {
         (input, self.linear_layer(output))
     }
 }

@@ -1,4 +1,5 @@
 use cipher::{Sbox, CipherStructure, Cipher};
+use property::PropertyType;
 
 /*****************************************************************
                             MIBS
@@ -258,16 +259,36 @@ impl Cipher for Mibs {
     input    Input mask to the S-box layer.
     output   Output mask to the S-box layer.
     */
-    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
-        let output = self.linear_layer(output & 0xffffffff)
-                   ^ (self.linear_layer(output >> 32) << 32);
-        let mut alpha = output;
-        alpha ^= input << 32;
+    #[allow(unused_variables)]
+    fn sbox_mask_transform(&self, 
+                           input: u64, 
+                           output: u64, 
+                           property_type: PropertyType) 
+                           -> (u64, u64) {
+        match property_type {
+            PropertyType::Linear => {
+                let output = self.linear_layer(output & 0xffffffff)
+                           ^ (self.linear_layer(output >> 32) << 32);
+                let mut alpha = output;
+                alpha ^= input << 32;
 
-        let mut beta = output;
-        beta ^= input >> 32;        
+                let mut beta = output;
+                beta ^= input >> 32;
 
-        (alpha, beta)
+                (alpha, beta)
+            },
+            PropertyType::Differential => {
+                let output = self.linear_layer(output & 0xffffffff)
+                           ^ (self.linear_layer(output >> 32) << 32);
+                let mut delta = (input >> 32) ^ (input << 32);
+                delta ^= output & 0xffffffff;
+
+                let mut nabla = (input >> 32) ^ (input << 32);
+                nabla ^= output & 0xffffffff00000000;
+
+                (delta, nabla)
+            }
+        }
     }
 }
 

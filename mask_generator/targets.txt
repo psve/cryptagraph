@@ -11,6 +11,7 @@ PUFFIN -- Full
 RECTANGLE -- Full
 Skinny -- Full
 TWINE -- Full
+Fly -- Partial
 
 Not implemented:
 Piccolo
@@ -20,7 +21,6 @@ KATAN - How to handle AND as S-boxes
 Simon - How to handle AND as S-boxes
 
 Maybe:
-Fly
 PRINCE - Annoying huge matrix multiplication
 QARMA
 Roadrunner
