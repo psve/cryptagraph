@@ -412,7 +412,7 @@ fn prince_modification(cipher: &Cipher,
     let mut edges = IndexMap::new();
 
     for &input in graph.get_stage(stages-1).unwrap().keys() {
-        edges.insert((stages-1, input, cipher.reflection_layer(input as u64) as usize), 0.0);
+        edges.insert((stages-1, input, cipher.reflection_layer(input as u64) as usize), 1.0);
     }
 
     graph.add_edges(&edges);
