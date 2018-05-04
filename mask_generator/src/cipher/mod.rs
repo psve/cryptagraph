@@ -110,7 +110,8 @@ A structure describing a type of cipher.
 #[derive(PartialEq, Eq)]
 pub enum CipherStructure {
     Spn,
-    Feistel
+    Feistel,
+    Prince
 }
 
 /** 
@@ -152,9 +153,21 @@ pub trait Cipher: Sync {
     /** 
     Applies the inverse linear layer of the cipher.
     
-    input   The the input to the inverse linear layer. 
+    input   fn sbox_mask_transform(&self, 
+                           input: u64, 
+                           output: u64, 
+                           property_type: PropertyType) 
+The input to the inverse linear layer. 
     */
     fn linear_layer_inv(&self, input: u64) -> u64;
+
+    /**
+    Applies the reflection layer for Prince like ciphers. 
+    For all other cipher types, this can remain unimplemented. 
+
+    input   The input to the reflection layer.
+    */
+    fn reflection_layer(&self, input: u64) -> u64;
 
     /** 
     Computes a vector of round key from a cipher key.
@@ -201,38 +214,44 @@ pub trait Cipher: Sync {
                            -> (u64, u64);
 }
 
-mod present;
-mod gift;
-mod twine;
-mod puffin;
-mod skinny;
-mod midori;
-mod led;
-mod rectangle;
-mod mibs;
-mod klein;
-mod pride;
-mod khazad;
 mod fly;
+mod gift;
+mod khazad;
+mod klein;
+mod led;
+mod mantis;
+mod mibs;
+mod midori;
+mod present;
+mod pride;
+mod prince;
+mod puffin;
+mod qarma;
+mod rectangle;
+mod skinny;
+mod twine;
 
 /**
 Converts the name of a cipher to an instance of that cipher. 
 */
 pub fn name_to_cipher(name : &str) -> Option<Box<Cipher>> {
     match name {
-        "present"   => Some(Box::new(present::new())),
-        "gift"      => Some(Box::new(gift::new())),
-        "twine"     => Some(Box::new(twine::new())),
-        "puffin"    => Some(Box::new(puffin::new())),
-        "skinny"    => Some(Box::new(skinny::new())),
-        "midori"    => Some(Box::new(midori::new())),
-        "led"       => Some(Box::new(led::new())),
-        "rectangle" => Some(Box::new(rectangle::new())),
-        "mibs"      => Some(Box::new(mibs::new())),
-        "klein"     => Some(Box::new(klein::new())),
-        "pride"     => Some(Box::new(pride::new())),
-        "khazad"    => Some(Box::new(khazad::new())),
         "fly"       => Some(Box::new(fly::new())),
+        "gift"      => Some(Box::new(gift::new())),
+        "khazad"    => Some(Box::new(khazad::new())),
+        "klein"     => Some(Box::new(klein::new())),
+        "led"       => Some(Box::new(led::new())),
+        "mantis"    => Some(Box::new(mantis::new())),
+        "mibs"      => Some(Box::new(mibs::new())),
+        "midori"    => Some(Box::new(midori::new())),
+        "present"   => Some(Box::new(present::new())),
+        "pride"     => Some(Box::new(pride::new())),
+        "prince"    => Some(Box::new(prince::new())),
+        "puffin"    => Some(Box::new(puffin::new())),
+        "qarma"     => Some(Box::new(qarma::new())),
+        "rectangle" => Some(Box::new(rectangle::new())),
+        "skinny"    => Some(Box::new(skinny::new())),
+        "twine"     => Some(Box::new(twine::new())),
         _ => None
     }
 }

@@ -60,20 +60,21 @@ impl InternalSboxPattern {
         // next value in property_values
         let mut new_pattern = self.clone();
         let current_value = self.pattern[self.determined_length - 1].unwrap();
-        let corr_idx = property_values.binary_search_by(|a| a.cmp(&current_value).reverse());
+        // let corr_idx = property_values.binary_search_by(|a| a.abs().cmp(&current_value.abs()).reverse());
+        let corr_idx = property_values.iter().enumerate().find(|(_, x)| **x == current_value).map(|(i,_)| i);
 
         // This check fails if the current value was the last on the list
         // In this case, this pattern isn't generated
         match corr_idx {
-            Ok(x) => {
+            Some(x) => {
                 if x+1 < property_values.len() {
                     new_pattern.pattern[self.determined_length - 1] = Some(property_values[x+1]);
                     new_pattern.num_active += (x == 0) as usize;
 
                     match property_type {
                         PropertyType::Linear => {
-                            new_pattern.value /= (property_values[x] as f64 / trivial).powi(2);
-                            new_pattern.value *= (property_values[x+1] as f64 / trivial).powi(2);
+                            new_pattern.value /= property_values[x] as f64 / trivial;
+                            new_pattern.value *= property_values[x+1] as f64 / trivial;
                         },
                         PropertyType::Differential => {
                             new_pattern.value /= property_values[x] as f64 / trivial;
@@ -84,7 +85,7 @@ impl InternalSboxPattern {
                     extended_patterns.1 = Some(new_pattern);
                 }
             },
-            Err(_) => {}
+            None => {}
         };
 
         extended_patterns
@@ -102,7 +103,7 @@ impl Ord for InternalSboxPattern {
 
 impl PartialOrd for InternalSboxPattern {
     fn partial_cmp(&self, other: &InternalSboxPattern) -> Option<Ordering> {
-        let val_ord = self.value.log2().partial_cmp(&other.value.log2()).unwrap();
+        let val_ord = self.value.abs().partial_cmp(&other.value.abs()).unwrap();
         let active_ord = self.num_active.cmp(&other.num_active).reverse();
         let len_ord = self.determined_length.cmp(&other.determined_length);
 
@@ -355,7 +356,7 @@ impl<'a> SortedProperties<'a> {
         let mut property_values: SmallVec<[_; 128]> = property_map.map.keys().cloned().collect();
 
         // We need the values in descending order
-        property_values.sort_by(|a, b| b.cmp(&a));
+        property_values.sort_by(|a, b| b.abs().cmp(&a.abs()));
 
         // Start with a partial pattern where only the first value is determined
         let mut tmp = vec![None; cipher.num_sboxes()];
@@ -378,8 +379,8 @@ impl<'a> SortedProperties<'a> {
             if heap.is_empty() {
                 let sbox_patterns: Vec<SboxPattern>
                     = sbox_patterns.iter()
-                                          .map(|x| SboxPattern::new(cipher, x, property_type))
-                                          .collect();
+                                   .map(|x| SboxPattern::new(cipher, x, property_type))
+                                   .collect();
 
                 return SortedProperties{cipher: cipher.clone(),
                                             property_map: property_map.clone(),

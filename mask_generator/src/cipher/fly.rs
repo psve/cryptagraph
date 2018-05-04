@@ -142,7 +142,7 @@ impl Cipher for Fly {
     /** 
     Applies the inverse linear layer of the cipher.
     
-    input   The the input to the inverse linear layer. 
+    input   The input to the inverse linear layer. 
     */
     fn linear_layer_inv(&self, input: u64) -> u64 {
         let mut output = 0;
@@ -150,6 +150,17 @@ impl Cipher for Fly {
             output ^= Fly::PERMUTATION_INV[i][((input >> (i*8)) & 0xff) as usize];
         }
         output
+    }
+
+    /**
+    Applies the reflection layer for Prince like ciphers. 
+    For all other cipher types, this can remain unimplemented. 
+
+    input   The input to the reflection layer.
+    */
+    #[allow(unused_variables)]
+    fn reflection_layer(&self, input: u64) -> u64 {
+        panic!("Not implemented for this type of cipher")
     }
 
     /** 

@@ -1,5 +1,6 @@
 use fnv::FnvHashMap;
 use indexmap::IndexMap;
+use std::mem;
 
 /**
 A vertex of a graph. It contains a list of predecessors and a list of successors.
@@ -52,7 +53,7 @@ vertices    A vector where each element contains a map of vertices for the given
 */
 #[derive(Clone)]
 pub struct MultistageGraph {
-    vertices: Vec<FnvHashMap<usize, Vertex>>,
+    pub vertices: Vec<FnvHashMap<usize, Vertex>>,
 }
 
 impl MultistageGraph {
@@ -141,7 +142,7 @@ impl MultistageGraph {
     Adds multiple edges to the graph, and crates vertices in the first or last stage if they
     don't exist. Does not create vertices in other stages.
 
-    edges   A map containg tupes of the type (stage, to, from) mapping to a length.
+    edges   A map containg tupes of the type (stage, from, to) mapping to a length.
     */
     pub fn add_edges_and_vertices(&mut self, edges: &IndexMap<(usize, usize, usize), f64>) {
         for (&(stage, from, to), &length) in edges {
@@ -204,9 +205,9 @@ impl MultistageGraph {
     start       Stage to perform pruning from.
     stop        Stage to perform pruning to.
     */
-    pub fn prune_graph(&mut self, 
-                       start: usize, 
-                       stop: usize) {
+    pub fn prune(&mut self, 
+                 start: usize, 
+                 stop: usize) {
         let mut pruned = true;
 
         while pruned {
@@ -232,6 +233,19 @@ impl MultistageGraph {
                 }
             }
         }
+    }
+
+    /** 
+    Reverses the graph, i.e. all edges are reversed, and the order of the stages are reversed.
+    */
+    pub fn reverse(&mut self) {
+        self.vertices.reverse();
+        
+        for stage in self.vertices.iter_mut() {
+            for (_, vertex) in stage.iter_mut() {
+                mem::swap(&mut vertex.predecessors, &mut vertex.successors);
+            }
+        }       
     }
 
     /**

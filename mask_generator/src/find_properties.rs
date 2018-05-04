@@ -39,7 +39,7 @@ fn find_properties(graph: &MultistageGraph,
                 Some(vertex_ref) => {
                     for (&new_output, &length) in &vertex_ref.successors {
                         // Either add the new path to the current property or create a new one
-                        let new_value = 2.0f64.powf(-length);
+                        let new_value = length.powi(2);
                         let entry = new_edge_map.entry(new_output as u64)
                                                 .or_insert(Property::new(property.input,
                                                                          new_output as u64,

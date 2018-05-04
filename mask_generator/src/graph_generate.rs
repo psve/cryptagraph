@@ -215,7 +215,7 @@ fn add_middle_edges(graph: &MultistageGraph,
                 for (property, _) in thread_properties.into_iter() {
                     let input = compress(property.input, level) as usize;
                     let output = compress(property.output, level) as usize;
-                    let length = -property.value.log2();
+                    let length = property.value;
                     
                     for r in 1..rounds-1 {
                         if graph.has_vertex(r, input) && 
@@ -301,7 +301,7 @@ fn add_outer_edges (graph: &MultistageGraph,
                 for (property, _) in thread_properties.into_iter() {
                     let input = compress(property.input, level) as usize;
                     let output = compress(property.output, level) as usize;
-                    let length = -property.value.log2();
+                    let length = property.value;
 
                     // First round        
                     if input_allowed.len() == 0 || input_allowed.contains(&(input as u64)) {
@@ -347,6 +347,77 @@ fn add_outer_edges (graph: &MultistageGraph,
 
     println!("");
     base_graph
+}
+
+/**
+Special pruning for Prince-like ciphers. The last layer is also pruned with regards to the
+reflection function. 
+
+cipher      The cipher that specifies the reflection layer.
+graph       The graph to prune.
+*/
+fn prince_pruning(cipher: &Cipher,
+                  graph: &mut MultistageGraph) {
+    let mut pruned = true;
+
+    while pruned {
+        pruned = false;
+
+        let stages = graph.stages();
+        let mut reflections = FnvHashSet::default();
+        let mut remove = FnvHashSet::default();
+        {
+            reflections = graph.get_stage(stages-1).unwrap()
+                               .keys()
+                               .map(|&x| cipher.reflection_layer(x as u64))
+                               .collect();
+            remove = graph.get_stage(stages-1).unwrap()
+                          .keys()
+                          .filter(|&x| !reflections.contains(&(*x as u64)))
+                          .cloned()
+                          .collect();
+        }
+
+        for &label in &remove {
+            graph.remove_vertex(stages-1, label);
+            pruned = true;
+        }
+
+        graph.prune(0, stages);
+    }
+}
+
+/**
+Creates a Prince-like graph from a normal SPN graph, i.e. it reflects the graph and connects 
+the two halves through a reflection layer.
+
+cipher          The cipher that specifies the reflection layer.
+graph_firs      The first half of the final graph. 
+*/
+fn prince_modification(cipher: &Cipher, 
+                       graph_first: &mut MultistageGraph)
+                       -> MultistageGraph {
+    let stages = graph_first.stages();
+    
+    // Get other half of the graph
+    let mut graph_second = graph_first.clone();
+    graph_second.reverse();
+
+    // Stitch the two halfs together 
+    let mut graph = MultistageGraph::new(stages*2);
+    graph.vertices.splice(0..stages, graph_first.vertices.iter().cloned());
+    graph.vertices.splice(stages..2*stages, graph_second.vertices.iter().cloned());
+
+    // Add reflection edges
+    let mut edges = IndexMap::new();
+
+    for &input in graph.get_stage(stages-1).unwrap().keys() {
+        edges.insert((stages-1, input, cipher.reflection_layer(input as u64) as usize), 0.0);
+    }
+
+    graph.add_edges(&edges);
+    graph.prune(0, 2*stages);
+    graph
 }
 
 /**
@@ -527,16 +598,16 @@ pub fn generate_graph(cipher: Box<Cipher>,
         let start = time::precise_time_s();
         graph = get_middle_vertices(&properties, rounds, &filters[..], level);
         println!("Added vertices [{} s]", time::precise_time_s()-start);
-
-        let start = time::precise_time_s();
-        graph = add_middle_edges(&graph, &properties, rounds, level);
-        println!("Graph has {} vertices and {} edges [{} s]", 
-            graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
-
-        // Don't prune here if there are only two rounds
+        
+        // Don't add middle edges if there are only two rounds
         if rounds > 2 {
             let start = time::precise_time_s();
-            graph.prune_graph(1, rounds);
+            graph = add_middle_edges(&graph, &properties, rounds, level);
+            println!("Graph has {} vertices and {} edges [{} s]", 
+                graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
+
+            let start = time::precise_time_s();
+            graph.prune(1, rounds);
             println!("Pruned graph has {} vertices and {} edges [{} s]", 
                 graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
         }
@@ -552,7 +623,11 @@ pub fn generate_graph(cipher: Box<Cipher>,
 
         // Remove any dead vertices
         let start = time::precise_time_s();
-        graph.prune_graph(0, rounds+1);
+        if cipher.structure() == CipherStructure::Prince {
+            prince_pruning(cipher.as_ref(), &mut graph);
+        } else {
+            graph.prune(0, rounds+1);
+        }
         println!("Pruned graph has {} vertices and {} edges [{} s]", 
             graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
 
@@ -572,6 +647,13 @@ pub fn generate_graph(cipher: Box<Cipher>,
         }
 
         println!("");
+    }
+
+    if cipher.structure() == CipherStructure::Prince {
+        let start = time::precise_time_s();
+        graph = prince_modification(cipher.as_ref(), &mut graph);
+        println!("Reflected graph has {} vertices and {} edges [{} s]\n", 
+            graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
     }
     
     graph
