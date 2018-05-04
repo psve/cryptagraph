@@ -6,7 +6,7 @@ use std::sync::mpsc;
 use time;
 
 use graph::MultistageGraph;
-use property::{Property};
+use property::{Property, PropertyType};
 use utility::ProgressBar;
 
 /***********************************************************************************************/
@@ -14,10 +14,12 @@ use utility::ProgressBar;
 /**
 Find all properties for a given graph starting with a specific input value. 
 
-graph       The graph to search through.
-input       The input value to start the search from.
+graph           The graph to search through.
+property_type   The type of peroperty to find.
+input           The input value to start the search from.
 */
 fn find_properties(graph: &MultistageGraph, 
+                   property_type: PropertyType,
                    input: u64) 
                    -> IndexMap<u64, Property> {
     let rounds = graph.stages()-1;
@@ -39,7 +41,11 @@ fn find_properties(graph: &MultistageGraph,
                 Some(vertex_ref) => {
                     for (&new_output, &length) in &vertex_ref.successors {
                         // Either add the new path to the current property or create a new one
-                        let new_value = length.powi(2);
+                        let new_value = match property_type {
+                            PropertyType::Linear => length.powi(2),
+                            PropertyType::Differential => length,
+                        };
+
                         let entry = new_edge_map.entry(new_output as u64)
                                                 .or_insert(Property::new(property.input,
                                                                          new_output as u64,
@@ -63,11 +69,13 @@ fn find_properties(graph: &MultistageGraph,
 Find all properties for a given graph in parallel. 
 
 graph               The graph to search through.
+property_type       The type of peroperty to find.
 input_allowed       A set of allowed input values. Other inputs are ignored.
 output_allowed      A set of allowed output values. Other outputs are ignored.
 num_keep            The number of properties to keep. The best <num_keep> properties are kept.
 */
 pub fn parallel_find_properties(graph: &MultistageGraph,
+                                property_type: PropertyType,
                                 input_allowed: &FnvHashSet<u64>,
                                 output_allowed: &FnvHashSet<u64>,
                                 num_keep: usize) 
@@ -94,7 +102,7 @@ pub fn parallel_find_properties(graph: &MultistageGraph,
 
                 // Split input values between threads and call find_properties
                 for &input in graph.get_stage(0).unwrap().keys().skip(t).step_by(num_threads) {
-                    let properties = find_properties(&graph, input as u64);
+                    let properties = find_properties(&graph, property_type, input as u64);
                     num_found += properties.len();
                     
                     for property in properties.values() {

@@ -176,7 +176,9 @@ pub fn find_properties(cipher: Box<Cipher>,
         None => { }
     }
     
-    let result = parallel_find_properties(&graph,&input_allowed, &output_allowed, num_keep);
+    let result = parallel_find_properties(&graph,property_type, 
+                                          &input_allowed, &output_allowed, 
+                                          num_keep);
     
     println!("Search finished. [{} s]", time::precise_time_s()-start);
 
