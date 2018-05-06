@@ -1,236 +1,226 @@
 use crossbeam_utils::scoped;
+use fnv::FnvHashSet;
+use indexmap::IndexMap;
 use num_cpus;
-use fnv::{FnvHashSet, FnvHashMap};
-use std::fs::OpenOptions;
-use std::io::Write;
+use smallvec::SmallVec;
 use std::sync::mpsc;
 use std::sync::{Arc, Barrier};
 use time;
-use std::cmp;
 
 use cipher::*;
 use graph::MultistageGraph;
-use single_round::{SortedApproximations, AppType};
+use property::{PropertyType, PropertyFilter};
+use single_round::SortedProperties;
 use utility::ProgressBar;
 
+// The number of threads used for parallel calls is fixed
 lazy_static! {
-    static ref COMPRESS: Vec<Vec<usize>> = vec![
-        vec![8, 8, 8, 8, 8, 8, 8, 8],
-        vec![4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
-        vec![2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
-        vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-    ];
+    static ref THREADS: usize = num_cpus::get();
 }
 
-pub fn compress(x: u64, level: usize) -> u64 {
-    let mut out = 0;
-    let mut tmp = x;
+static COMP_PATTERN: [u64; 4] = [0x0101010101010101, 0x1111111111111111, 0x5555555555555555, 0xffffffffffffffff]; 
 
-    for (i, block) in COMPRESS[level].iter().enumerate() {
-        let mask = ((1 << block) - 1) as u64;
+/**
+"Compresses" a 64-bit value such that if a block of 2^(3-level) bits is non-zero, than that 
+block is set to the value 1.
 
-        if tmp & mask != 0 {
-            out ^= 1 << i;
-        }
-
-        tmp >>= block;
+x       The value to compress
+level   The compression level to use.
+*/
+#[inline(always)]
+pub fn compress(x: u64, 
+                level: usize) 
+                -> u64 {
+    // We use bit patterns to reduce the amount of work done
+    let mut y = x;
+    for i in 0..(3-level) {
+        y = y | (y >> (1<<i));
     }
 
-    out
+    y & COMP_PATTERN[level]
 }
 
-fn get_vertices (
-    approximations: &mut SortedApproximations, 
-    rounds: usize, 
-    filters: &Vec<FnvHashSet<u64>>,
-    level: usize) 
-    -> MultistageGraph {
-    let num_threads = num_cpus::get();
-    let barrier = Arc::new(Barrier::new(num_threads));
-    let (result_tx, result_rx) = mpsc::channel();
-    approximations.set_type_alpha();
-    let num_alpha = approximations.len();
-    approximations.set_type_beta();
-    let num_beta = approximations.len();
+/**
+Generates a graph only with vertices. The vertices are generated from the input properties in such
+a way that a vertex only exists in a round if there exists a property with that vertex as input as 
+well as a (maybe different) property with the vertex as output. Additionally, the values of the
+vertices are filtered, and input/output vertices are not added. 
 
+properties      The properties considered when generating vertices.
+rounds          The number of rounds, i.e. one less than the number of stages in the graph.
+filters         Filters used to restrict the vertices in each round.
+level           Compression level to use for vertex values. 
+*/
+fn get_middle_vertices (properties: &SortedProperties, 
+                        rounds: usize, 
+                        filters: &[FnvHashSet<u64>],
+                        level: usize) 
+                        -> MultistageGraph {
+    let barrier = Arc::new(Barrier::new(*THREADS));
+    let (result_tx, result_rx) = mpsc::channel();
+
+    // Start scoped worker threads
     scoped::scope(|scope| {
-        for t in 0..num_threads {
-            let mut thread_approximations = approximations.clone();
+        for t in 0..*THREADS {
+            let mut thread_properties = properties.clone();
             let barrier = barrier.clone();
             let result_tx = result_tx.clone();
 
             scope.spawn(move || {
-                // Annoying solution, hopefully okay
-                let tmp = thread_approximations.sbox_patterns.iter()
-                                                             .cloned()
-                                                             .skip(t)
-                                                             .step_by(num_threads)
-                                                             .collect();
-                thread_approximations.sbox_patterns = tmp;
+                // Get size of total work to do for all threads
+                thread_properties.set_type_input();
+                let num_input = properties.len();
+                thread_properties.set_type_output();
+                let num_output = properties.len();
 
-                // Collect all alpha values allowed by filters
-                let mut alpha_sets = vec![FnvHashSet::default(); rounds-1];
-                let mut progress_bar = ProgressBar::new(num_alpha);
-                thread_approximations.set_type_alpha();
+                // Split the S-box patterns equally across threads
+                // Note that this does not equally split the number of properties across threads,
+                // but hopefully it is close enough
+                let tmp = thread_properties.sbox_patterns.iter()
+                                                         .cloned()
+                                                         .skip(t)
+                                                         .step_by(*THREADS)
+                                                         .collect();
+                thread_properties.sbox_patterns = tmp;
 
-                for (approximation, _) in thread_approximations.into_iter() {
-                    let alpha = if approximation.alpha == 0 {
-                        continue
-                    } else {
-                        approximation.alpha
-                    };
+                // First, collect all input values allowed by the filters
+                // Store them in a hash set for each round
+                let mut progress_bar = ProgressBar::new(num_input);
+                let mut input_sets: SmallVec<[_; 256]> = smallvec![FnvHashSet::default(); rounds-1];
+                thread_properties.set_type_input();
 
-                    let old = compress(alpha, level - 1);
-                    let new = compress(alpha, level);
+                for (property, _) in thread_properties.into_iter() {
+                    // Get old value for filter look up
+                    let old = compress(property.input, level - 1);
 
-                    for r in 0..rounds-1 {
-                        if filters[r+1].contains(&old) {
-                            alpha_sets[r].insert(new);
+                    // Ignore input and output stages
+                    for (r, f) in filters.iter().skip(1).take(rounds-1).enumerate() {
+                        if f.contains(&old) {
+                            let new = compress(property.input, level);
+                            input_sets[r].insert(new);
                         }
                     }
 
                     progress_bar.increment();
                 }
 
+                // Synchronise threads for proper prograss bar printing
                 barrier.wait();
                 if t == 0 {
                     println!("");
                 }
 
-                // For the last round, collect all beta values
-                let mut beta_sets = vec![FnvHashSet::default(); rounds-1];
-                let mut progress_bar = ProgressBar::new(num_beta);
-                thread_approximations.set_type_beta();
+                // Second, collect all output values allowed by the filters
+                // Store them in a hash set for each round
+                let mut progress_bar = ProgressBar::new(num_output);
+                let mut output_sets: SmallVec<[_; 256]> = smallvec![FnvHashSet::default(); rounds-1];
+                thread_properties.set_type_output();
 
-                for (approximation, _) in thread_approximations.into_iter() {
-                    let beta = if approximation.beta == 0 {
-                        continue
-                    } else {
-                        approximation.beta
-                    };
+                for (property, _) in thread_properties.into_iter() {
+                    // Get old value for filter look up
+                    let old = compress(property.output, level - 1);
 
-                    let old = compress(beta, level - 1);
-                    let new = compress(beta, level);
-
-                    for r in 0..rounds-1 {
-                        if filters[r+1].contains(&old) {
-                            beta_sets[r].insert(new);
+                    // Ignore input and output stages
+                    for (r, f) in filters.iter().skip(1).take(rounds-1).enumerate() {
+                        if f.contains(&old) {
+                            let new = compress(property.output, level);
+                            output_sets[r].insert(new);
                         }
                     }
                     
                     progress_bar.increment();
                 }
                 
-                result_tx.send((alpha_sets, beta_sets)).expect("Thread could not send result");
+                result_tx.send((input_sets, output_sets)).expect("Thread could not send result");
             });
         }
     });
     println!("");
+    
+    // Last, collect sets from all threads and create graph
+    let mut graph = MultistageGraph::new(rounds+1);
+    let mut input_sets: SmallVec<[FnvHashSet<u64>; 256]> = smallvec![FnvHashSet::default(); rounds-1];
+    let mut output_sets: SmallVec<[FnvHashSet<u64>; 256]> = smallvec![FnvHashSet::default(); rounds-1];
 
-    let mut vertex_sets: Vec<FnvHashSet<u64>> = vec![FnvHashSet::default(); rounds-1];
-    {
-        let mut alpha_sets = vec![FnvHashSet::default(); rounds-1];
-        let mut beta_sets = vec![FnvHashSet::default(); rounds-1];
-
-        for _ in 0..num_threads {
-            let thread_result = result_rx.recv().expect("Main could not receive result");
-            
-            for (i, set) in thread_result.0.iter().enumerate() {
-                alpha_sets[i].extend(set.iter());
-            }
-
-            for (i, set) in thread_result.1.iter().enumerate() {
-                beta_sets[i].extend(set.iter());
-            }
-        }
-
-        for i in 0..rounds-1 {
-            vertex_sets[i] = alpha_sets[i].intersection(&beta_sets[i]).cloned().collect();
+    for _ in 0..*THREADS {
+        let thread_result = result_rx.recv().expect("Main could not receive result");
+        
+        // Get union of different thread sets
+        for i in 0..thread_result.0.len() {
+            input_sets[i].extend(thread_result.0[i].iter());
+            output_sets[i].extend(thread_result.1[i].iter());   
         }
     }
 
-    // Create graph from vertex sets
-    let mut graph = MultistageGraph::new(rounds+1);
-
+    // Add vertices that are in the intersections of input and output sets 
     for i in 0..rounds-1 {
-        for &label in &vertex_sets[i] {
+        for &label in input_sets[i].intersection(&output_sets[i]) {
             graph.add_vertex(i+1, label as usize);
         }
-
-        vertex_sets[i].clear();
     }
-
-    approximations.set_type_all();
+    
     graph
 }
 
-fn add_edges(graph: &mut MultistageGraph, edges: &FnvHashMap<(usize, usize, usize), f64>) {
-    for (&(stage, from, to), &length) in edges {
-        graph.add_edge(stage, from, to, length);
-    }
-}
+/**
+Add edges to a graph generated by get_middle_vertices. Edges represent properties, and are only 
+added if there are matching vertices in two adjacent stages. Input and output edges are ignored.
 
-fn add_edges_and_vertices(graph: &mut MultistageGraph, edges: &FnvHashMap<(usize, usize, usize), f64>) {
-    for (&(stage, from, to), &length) in edges {
-        if stage == 0 {
-            graph.add_vertex(0, from);
-        } else {
-            graph.add_vertex(stage+1, to);
-        }
-        graph.add_edge(stage, from, to, length);
-    }
-}
-
-fn add_middle_edges(
-    graph: &MultistageGraph,
-    approximations: &mut SortedApproximations, 
-    rounds: usize, 
-    level: usize)
-    -> MultistageGraph {
-    let min_block = COMPRESS[level].iter()
-                                   .fold(approximations.cipher.size(), |acc, &x| cmp::min(x, acc));
-
-
-    if min_block < approximations.cipher.sbox().size  || 
-       approximations.cipher.structure() == CipherStructure::Feistel {
-        approximations.set_type_all();
-    } else {
-        approximations.set_type_beta();
-    }
-    
-    // Collect edges in parallel
-    let num_threads = num_cpus::get();
+graph           Graph to add edges to.
+properties      The properties consideres when adding edges. 
+rounds          The number of rounds, i.e. one less than the number of stages in the graph.
+level           Compression level to use for vertex values. 
+*/
+fn add_middle_edges(graph: &MultistageGraph,
+                    properties: &SortedProperties, 
+                    rounds: usize, 
+                    level: usize)
+                    -> MultistageGraph {
+    // Block size of the compression
+    let block = 1 << (3-level);
     let (result_tx, result_rx) = mpsc::channel();
     let mut base_graph = graph.clone();
     
+    // Start scoped worker threads
     scoped::scope(|scope| {
-        for t in 0..num_threads {
-            let mut thread_approximations = approximations.clone();
+        for t in 0..*THREADS {
+            let mut thread_properties = properties.clone();
             let result_tx = result_tx.clone();
 
             scope.spawn(move || {
-                let mut progress_bar = ProgressBar::new(thread_approximations.len());
+                // For SPN ciphers, we can exploit the structure when the compressiond is 
+                // sufficiently coarse and not generate all properties explicitly 
+                if block >= thread_properties.cipher.sbox().size  && 
+                   thread_properties.cipher.structure() == CipherStructure::Spn {
+                    thread_properties.set_type_output();
+                } else {
+                    thread_properties.set_type_all();
+                }
+
+                let mut progress_bar = ProgressBar::new(thread_properties.len());
                 
-                // Annoying solution, hopefully okay
-                let tmp = thread_approximations.sbox_patterns.iter()
-                                                             .cloned()
-                                                             .skip(t)
-                                                             .step_by(num_threads)
-                                                             .collect();
-                thread_approximations.sbox_patterns = tmp;
+                // Split the S-box patterns equally across threads
+                // Note that this does not equally split the number of properties across threads,
+                // but hopefully it is close enough
+                let tmp = thread_properties.sbox_patterns.iter()
+                                                         .cloned()
+                                                         .skip(t)
+                                                         .step_by(*THREADS)
+                                                         .collect();
+                thread_properties.sbox_patterns = tmp;
 
-                // Collect edges
-                let mut edges = FnvHashMap::default();
+                // Collect all edges that have corresponding vertices in the graph
+                let mut edges = IndexMap::new();
 
-                for (approximation, _) in thread_approximations.into_iter() {    
-                    let alpha = compress(approximation.alpha, level) as usize;
-                    let beta = compress(approximation.beta, level) as usize;
-                    let length = -approximation.value.log2();
+                for (property, _) in thread_properties.into_iter() {
+                    let input = compress(property.input, level) as usize;
+                    let output = compress(property.output, level) as usize;
+                    let length = property.value;
                     
                     for r in 1..rounds-1 {
-                        if graph.get_vertex(r, alpha).is_some() && 
-                           graph.get_vertex(r+1, beta).is_some() {
-                            edges.insert((r, alpha, beta), length);
+                        if graph.has_vertex(r, input) && 
+                           graph.has_vertex(r+1, output) {
+                            edges.insert((r, input, output), length);
                         }
                     }
 
@@ -242,86 +232,102 @@ fn add_middle_edges(
         }
     });
 
-    for _ in 0..num_threads {
+    // Add edges from each thread
+    for _ in 0..*THREADS {
         let thread_result = result_rx.recv().expect("Main could not receive result");
-        add_edges(&mut base_graph, &thread_result);
+        base_graph.add_edges(&thread_result);
     }
 
     println!("");
     base_graph
 }
 
-/* Creates a linear hull graph, compressing the approximations with the specified level. 
- *
- * approximations   Approximations to use.
- * rounds           Number of rounds.
- * level       Block size of the compression.
- * vertex_maps      Map of the allowed mask values.
- */ 
-fn add_outer_edges (
-    graph: &MultistageGraph,
-    approximations: &mut SortedApproximations, 
-    rounds: usize, 
-    level: usize,
-    alpha_allowed: &FnvHashSet<u64>,
-    beta_allowed: &FnvHashSet<u64>) 
-    -> MultistageGraph {
-    let min_block = COMPRESS[level].iter()
-                                   .fold(approximations.cipher.size(), |acc, &x| cmp::min(x, acc));
+/**
+Add input/output edges to a graph generated by get_middle_vertices as well as any missing vertices
+in the first/last stage. Vertices in other stages are respected such that edges are not added if 
+they don't have a matching output/input vertex. 
 
-    if min_block < approximations.cipher.sbox().size  || 
-       approximations.cipher.structure() == CipherStructure::Feistel {
-        approximations.set_type_all();
-    } else {
-        approximations.set_type_beta();
-    }
-
-    // Create graph in parallel
-    let num_threads = num_cpus::get();
+graph           Graph to add edges to.
+properties      The properties consideres when adding edges. 
+rounds          The number of rounds, i.e. one less than the number of stages in the graph.
+level           Compression level to use for vertex values. 
+input_allowed   A set of allowed input values. Other inputs are ignored.
+output_allowed  A set of allowed output values. Other outputs are ignored.
+*/
+fn add_outer_edges (graph: &MultistageGraph,
+                    properties: &SortedProperties, 
+                    rounds: usize, 
+                    level: usize,
+                    input_allowed: &FnvHashSet<u64>,
+                    output_allowed: &FnvHashSet<u64>) 
+                    -> MultistageGraph {
+    // Block size of the compression
+    let block = 1 << (3-level);
     let (result_tx, result_rx) = mpsc::channel();
     let mut base_graph = graph.clone();
     
+    // Start scoped worker threads
     scoped::scope(|scope| {
-        for t in 0..num_threads {
-            let mut thread_approximations = approximations.clone();
+        for t in 0..*THREADS {
+            let mut thread_properties = properties.clone();
             let result_tx = result_tx.clone();
 
             scope.spawn(move || {
-                let mut progress_bar = ProgressBar::new(thread_approximations.len());
+                // For SPN ciphers, we can exploit the structure when the compressiond is 
+                // sufficiently coarse and not generate all properties explicitly 
+                if block >= thread_properties.cipher.sbox().size  && 
+                   thread_properties.cipher.structure() == CipherStructure::Spn {
+                    thread_properties.set_type_output();
+                } else {
+                    thread_properties.set_type_all();
+                }
+
+                let mut progress_bar = ProgressBar::new(thread_properties.len());
                 
-                // Annoying solution, hopefully okay
-                let tmp = thread_approximations.sbox_patterns.iter()
-                                                             .cloned()
-                                                             .skip(t)
-                                                             .step_by(num_threads)
-                                                             .collect();
-                thread_approximations.sbox_patterns = tmp;
+                // Split the S-box patterns equally across threads
+                // Note that this does not equally split the number of properties across threads,
+                // but hopefully it is close enough
+                let tmp = thread_properties.sbox_patterns.iter()
+                                                         .cloned()
+                                                         .skip(t)
+                                                         .step_by(*THREADS)
+                                                         .collect();
+                thread_properties.sbox_patterns = tmp;
 
-                // Add edges
-                let mut edges = FnvHashMap::default();
+                // Collect all edges that have corresponding output/input vertices in the 
+                // second/second to last stage
+                let mut edges = IndexMap::new();
 
-                for (approximation, _) in thread_approximations.into_iter() {
-                    let alpha = compress(approximation.alpha, level) as usize;
-                    let beta = compress(approximation.beta, level) as usize;
-                    let length = -approximation.value.log2();
+                for (property, _) in thread_properties.into_iter() {
+                    let input = compress(property.input, level) as usize;
+                    let output = compress(property.output, level) as usize;
+                    let length = property.value;
 
-                    // First round                    
-                    if (alpha_allowed.len() == 0 || alpha_allowed.contains(&(alpha as u64))) && 
-                        graph.get_vertex(1, beta).is_some() {
-                        let vertex_ref = graph.get_vertex(1, beta).unwrap();
-
-                        if rounds == 2 || vertex_ref.successors.len() != 0 {
-                            edges.insert((0, alpha, beta), length);
+                    // First round        
+                    if input_allowed.len() == 0 || input_allowed.contains(&(input as u64)) {
+                        match graph.get_vertex(1, output) {
+                            Some(vertex_ref) => {
+                                // Only insert if the output vertex has an outgoing edge,
+                                // unless there are only two rounds
+                                if rounds == 2 || vertex_ref.successors.len() != 0 {
+                                    edges.insert((0, input, output), length);
+                                }
+                            },
+                            None => {}
                         }
                     }
 
                     // Last round
-                    if (beta_allowed.len() == 0 || beta_allowed.contains(&(beta as u64))) && 
-                        graph.get_vertex(rounds-1, alpha).is_some() {
-                        let vertex_ref = graph.get_vertex(rounds-1, alpha).unwrap();
-
-                        if rounds == 2 || vertex_ref.predecessors.len() != 0 {
-                            edges.insert((rounds-1, alpha, beta), length);
+                    if output_allowed.len() == 0 || output_allowed.contains(&(output as u64)) {
+                        match graph.get_vertex(rounds-1, input) {
+                            Some(vertex_ref) => {
+                                // Only insert if the input vertex has an incoming edge,
+                                // unless there are only two rounds
+                                if rounds == 2 || vertex_ref.predecessors.len() != 0 {
+                                    edges.insert((rounds-1, input, output), length);
+                                }
+                            },
+                            None => {}
                         }
                     }
 
@@ -333,112 +339,164 @@ fn add_outer_edges (
         }
     });
 
-    for _ in 0..num_threads {
+    // Add edges and vertices from each thread
+    for _ in 0..*THREADS {
         let thread_result = result_rx.recv().expect("Main could not receive result");
-        add_edges_and_vertices(&mut base_graph, &thread_result);
+        base_graph.add_edges_and_vertices(&thread_result);
     }
 
     println!("");
     base_graph
 }
 
-/* Remove any edges that aren't part of a path from source to sink. 
- *
- * graph    Graph to prune.
- */
-fn prune_graph(graph: &mut MultistageGraph, start: usize, stop: usize) {
+/**
+Special pruning for Prince-like ciphers. The last layer is also pruned with regards to the
+reflection function. 
+
+cipher      The cipher that specifies the reflection layer.
+graph       The graph to prune.
+*/
+fn prince_pruning(cipher: &Cipher,
+                  graph: &mut MultistageGraph) {
     let mut pruned = true;
 
     while pruned {
         pruned = false;
 
-        for stage in start..stop {
-            let mut remove = Vec::new();
-
-            for (&label, vertex) in graph.get_stage(stage).unwrap() {
-                if stage == start && vertex.successors.len() == 0 {
-                    remove.push(label);
-                } else if stage == stop-1 && vertex.predecessors.len() == 0 {
-                    remove.push(label);
-                } else if (stage != start && stage != stop-1) && (vertex.successors.len() == 0 ||
-                    vertex.predecessors.len() == 0) {
-                    remove.push(label);
-                }
-            }
-
-            for label in remove {
-                graph.remove_vertex(stage, label);
-                pruned = true;
-            }
+        let stages = graph.stages();
+        let mut reflections = FnvHashSet::default();
+        let mut remove = FnvHashSet::default();
+        {
+            reflections = graph.get_stage(stages-1).unwrap()
+                               .keys()
+                               .map(|&x| cipher.reflection_layer(x as u64))
+                               .collect();
+            remove = graph.get_stage(stages-1).unwrap()
+                          .keys()
+                          .filter(|&x| !reflections.contains(&(*x as u64)))
+                          .cloned()
+                          .collect();
         }
+
+        for &label in &remove {
+            graph.remove_vertex(stages-1, label);
+            pruned = true;
+        }
+
+        graph.prune(0, stages);
     }
 }
 
-/* Update all filters with new allowed values. Returns number of vertices in the graph which
- * were inserted into the filter. 
- *
- * filters      Filters to update.
- * graph        Graph to update from.
- * vertex_maps  Map of vertex indices to values.
- */
+/**
+Creates a Prince-like graph from a normal SPN graph, i.e. it reflects the graph and connects 
+the two halves through a reflection layer.
+
+cipher          The cipher that specifies the reflection layer.
+graph_firs      The first half of the final graph. 
+*/
+fn prince_modification(cipher: &Cipher, 
+                       graph_first: &mut MultistageGraph)
+                       -> MultistageGraph {
+    let stages = graph_first.stages();
+    
+    // Get other half of the graph
+    let mut graph_second = graph_first.clone();
+    graph_second.reverse();
+
+    // Stitch the two halfs together 
+    let mut graph = MultistageGraph::new(stages*2);
+    graph.vertices.splice(0..stages, graph_first.vertices.iter().cloned());
+    graph.vertices.splice(stages..2*stages, graph_second.vertices.iter().cloned());
+
+    // Add reflection edges
+    let mut edges = IndexMap::new();
+
+    for &input in graph.get_stage(stages-1).unwrap().keys() {
+        edges.insert((stages-1, input, cipher.reflection_layer(input as u64) as usize), 0.0);
+    }
+
+    graph.add_edges(&edges);
+    graph.prune(0, 2*stages);
+    graph
+}
+
+/**
+Update all filters with new allowed values given by the current vertices in the graph. 
+Returns number of vertices in the graph which were inserted into the filter. 
+
+filters         Filters to update.
+graph           Graph to update from.
+*/
 fn update_filters(
-    filters: &mut Vec<FnvHashSet<u64>>, 
+    filters: &mut [FnvHashSet<u64>], 
     graph: &MultistageGraph)
     -> usize {
-    let stages = graph.stages();
     let mut good_vertices = 0;
 
-    for stage in 0..stages {
-        filters[stage].clear();
-        filters[stage].extend(graph.get_stage(stage).unwrap()
+    for (i, f) in filters.iter_mut().enumerate() {
+        f.clear();
+        f.extend(graph.get_stage(i).unwrap()
                                    .iter()
-                                   .filter(|(_, vertex_ref)| 
-                                        vertex_ref.successors.len() != 0 || 
-                                        vertex_ref.predecessors.len() != 0)
-                                   .map(|(alpha, _)| *alpha as u64));
-
-        good_vertices += filters[stage].len();
+                                   .map(|(input, _)| *input as u64));
+        good_vertices += f.len();
     }
 
     good_vertices
 }
 
-/* Removes patterns from a SortedApproximations which a not allowed by a set of filters.
- *
- * Filters          Filters to check.
- * approximations   Approximations to remove patterns from.
- */
-fn remove_dead_patterns(
-    filters: &Vec<FnvHashSet<u64>>, 
-    approximations: &mut SortedApproximations,
-    level: usize) {
-    let num_threads = num_cpus::get();
+/**
+Removes S-box patterns from a set of properties for which none of the resulting properties
+are allowed by the current filters. Note that the order of properties generated is not preserved.
+
+Filters         Filters to check.
+properties      Properties to remove patterns from.
+level           Compression level used for the filters.
+*/
+fn remove_dead_patterns(filters: &[FnvHashSet<u64>], 
+                        properties: &mut SortedProperties,
+                        level: usize) {
     let (result_tx, result_rx) = mpsc::channel();
     
+    // Start scoped worker threads
     scoped::scope(|scope| {
-        for t in 0..num_threads {
-            let mut thread_approximations = approximations.clone();
+        for t in 0..*THREADS {
+            let mut thread_properties = properties.clone();
             let result_tx = result_tx.clone();
 
             scope.spawn(move || {
-                thread_approximations.set_type_alpha();
-                let mut progress_bar = ProgressBar::new(thread_approximations.len());
+                thread_properties.set_type_input();
+                let mut progress_bar = ProgressBar::new(thread_properties.len());
                 
-                // Annoying solution, hopefully okay
-                let tmp = thread_approximations.sbox_patterns.iter()
-                                                             .cloned()
-                                                             .skip(t)
-                                                             .step_by(num_threads)
-                                                             .collect();
-                thread_approximations.sbox_patterns = tmp;
+                // Split the S-box patterns equally across threads
+                // Note that this does not equally split the number of properties across threads,
+                // but hopefully it is close enough
+                let tmp = thread_properties.sbox_patterns.iter()
+                                                         .cloned()
+                                                         .skip(t)
+                                                         .step_by(*THREADS)
+                                                         .collect();
+                thread_properties.sbox_patterns = tmp;
 
-                let mut good_patterns = vec![false; thread_approximations.len_patterns()];
+                // Find patterns to keep
+                let mut good_patterns = vec![false; thread_properties.len_patterns()];
 
-                for (approximation, pattern_idx) in thread_approximations.into_iter() {
-                    let alpha = approximation.alpha;
-                    let good = filters.iter()
-                                      .fold(false, 
-                                            |acc, ref x| acc | x.contains(&compress(alpha, level)));
+                for (property, pattern_idx) in thread_properties.into_iter() {
+                    // Skip if pattern is already marked good
+                    if good_patterns[pattern_idx] {
+                        progress_bar.increment();
+                        continue;
+                    }
+
+                    let input = compress(property.input, level);
+                    let mut good = false;
+
+                    for f in filters {
+                        if f.contains(&input) {
+                            good = true;
+                            break;
+                        }
+                    }
+
                     good_patterns[pattern_idx] |= good;
                     progress_bar.increment();
                 }
@@ -448,7 +506,7 @@ fn remove_dead_patterns(
 
                 for (i, keep) in good_patterns.iter().enumerate() {
                     if *keep {
-                        new_patterns.push(thread_approximations.sbox_patterns[i].clone());
+                        new_patterns.push(thread_properties.sbox_patterns[i].clone());
                     }
                 }
 
@@ -457,145 +515,146 @@ fn remove_dead_patterns(
         }
     });
 
+    // Collect patterns from each thread and update properties
     let mut new_patterns = Vec::new();
 
-    for _ in 0..num_threads {
+    for _ in 0..*THREADS {
         let mut thread_result = result_rx.recv().expect("Main could not receive result");
         new_patterns.append(&mut thread_result);
     }
     println!("");
 
-    approximations.sbox_patterns = new_patterns;
-    approximations.set_type_all();
+    properties.sbox_patterns = new_patterns;
+    properties.set_type_all();
 }
 
-/* Creates a graph that represents the linear hull over a number of rounds for a given cipher and 
- * set of approximations. 
- * 
- * cipher       Cipher to consider.
- * rounds       Number of rounds.
- * patterns     Number of patterns to generate for approximations.
- */
-pub fn generate_graph(
-    cipher: &Cipher, 
-    rounds: usize, 
-    patterns: usize,
-    alpha_allowed: &FnvHashSet<u64>,
-    beta_allowed: &FnvHashSet<u64>) 
-    -> MultistageGraph {
-    let mut approximations = SortedApproximations::new(cipher, patterns, AppType::All);
-    let mut filters = vec![(0..(1 << COMPRESS[0].len())).collect() ; rounds+1];
+/**
+Initialise filters. The resulting filters allow all values with a block size of 8.
+
+rounds      One less than the number of filters to generate.
+*/
+fn init_filter(rounds: usize) 
+               -> SmallVec<[FnvHashSet<u64>; 256]> {
+    let mut sequence = FnvHashSet::default();
+
+    // Generate all 64-bit values where the first bit of each byte is either zero or one
+    for i in 1..256 {
+        let x = (((i >> 0) & 0x1) << 0)
+              ^ (((i >> 1) & 0x1) << 8)
+              ^ (((i >> 2) & 0x1) << 16)
+              ^ (((i >> 3) & 0x1) << 24)
+              ^ (((i >> 4) & 0x1) << 32)
+              ^ (((i >> 5) & 0x1) << 40)
+              ^ (((i >> 6) & 0x1) << 48)
+              ^ (((i >> 7) & 0x1) << 56);
+
+        sequence.insert(x);
+    }
+
+    // Using smallvec here assuming most ciphers don't have a large number of rounds
+    let output: SmallVec<[_; 256]> = smallvec![sequence ; rounds+1];
+    output
+}
+
+/** 
+Creates a graph that represents the set of characteristics over a number of rounds for a 
+given cipher and set of properties. 
+
+cipher              The cipher to consider.
+property_type       The property type to consider.
+rounds              The number of rounds.
+patterns            The number of S-box patterns to generate.
+input_allowed       A set of allowed input values for the properties. 
+                    If empty, all values are allowed.
+output_allowed      A set of allowed output values for the properties. 
+                    If empty, all values are allowed.
+*/
+pub fn generate_graph(cipher: Box<Cipher>, 
+                      property_type: PropertyType,
+                      rounds: usize, 
+                      patterns: usize,
+                      input_allowed: &FnvHashSet<u64>,
+                      output_allowed: &FnvHashSet<u64>) 
+                      -> MultistageGraph {
+    // Generate the set of properties to consider
+    let mut properties = SortedProperties::new(cipher.as_ref(), patterns, 
+                                               property_type, PropertyFilter::All);
+    let mut filters = init_filter(rounds);
     let mut graph = MultistageGraph::new(0);
 
-    for level in 1..COMPRESS.len() {
-        approximations.set_type_all();
-        let num_app = approximations.len();
-        approximations.set_type_alpha();
-        let num_alpha = approximations.len();
-        approximations.set_type_beta();
-        let num_beta = approximations.len();
+    // Iteratively generate graphs with finer compression functions
+    for level in 1..4 {
+        // Get total number of properties considered
+        properties.set_type_all();
+        let num_app = properties.len();
+        properties.set_type_input();
+        let num_input = properties.len();
+        properties.set_type_output();
+        let num_output = properties.len();
 
         println!("Level {}.", level);
-        println!("{} approximations ({} alpha, {} beta).", num_app, num_alpha, num_beta);
+        println!("{} properties ({} input, {} output).", num_app, num_input, num_output);
 
         let start = time::precise_time_s();
-        graph = get_vertices(&mut approximations, rounds, &filters, level);
+        graph = get_middle_vertices(&properties, rounds, &filters[..], level);
         println!("Added vertices [{} s]", time::precise_time_s()-start);
-
-        let start = time::precise_time_s();
-        graph = add_middle_edges(&graph, &mut approximations, rounds, level);
-        println!("Graph has {} vertices and {} edges [{} s]", 
-            graph.num_vertices(), 
-            graph.num_edges(),
-            time::precise_time_s()-start);
-
-        /*let mut name = String::from("test_step1");
-        name.push_str(&level.to_string());
-        print_to_graph_tool(&graph, &name);*/
-
+        
+        // Don't add middle edges if there are only two rounds
         if rounds > 2 {
             let start = time::precise_time_s();
-            prune_graph(&mut graph, 1, rounds);
+            graph = add_middle_edges(&graph, &properties, rounds, level);
+            println!("Graph has {} vertices and {} edges [{} s]", 
+                graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
+
+            let start = time::precise_time_s();
+            graph.prune(1, rounds);
             println!("Pruned graph has {} vertices and {} edges [{} s]", 
-                graph.num_vertices(), 
-                graph.num_edges(), 
-                time::precise_time_s()-start);
+                graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
         }
 
-        /*let mut name = String::from("test_step2");
-        name.push_str(&level.to_string());
-        print_to_graph_tool(&graph, &name);*/
-
         let start = time::precise_time_s();
-        let alpha_allowed_comp = alpha_allowed.iter().map(|&x| compress(x, level)).collect();
-        let beta_allowed_comp = beta_allowed.iter().map(|&x| compress(x, level)).collect();
+        let input_allowed_comp = input_allowed.iter().map(|&x| compress(x, level)).collect();
+        let output_allowed_comp = output_allowed.iter().map(|&x| compress(x, level)).collect();
 
-        graph = add_outer_edges(&mut graph, &mut approximations, rounds, level, 
-                                &alpha_allowed_comp, &beta_allowed_comp);
+        graph = add_outer_edges(&mut graph, &properties, rounds, level, 
+                                &input_allowed_comp, &output_allowed_comp);
         println!("Graph has {} vertices and {} edges [{} s]", 
-            graph.num_vertices(), 
-            graph.num_edges(),
-            time::precise_time_s()-start);
+            graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
 
-        /*let mut name = String::from("test_step3");
-        name.push_str(&level.to_string());
-        print_to_graph_tool(&graph, &name);*/
-
+        // Remove any dead vertices
         let start = time::precise_time_s();
-        prune_graph(&mut graph, 0, rounds+1);
+        if cipher.structure() == CipherStructure::Prince {
+            prince_pruning(cipher.as_ref(), &mut graph);
+        } else {
+            graph.prune(0, rounds+1);
+        }
         println!("Pruned graph has {} vertices and {} edges [{} s]", 
-            graph.num_vertices(), 
-            graph.num_edges(), 
-            time::precise_time_s()-start);
+            graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
 
-        if level != COMPRESS.len() - 1 {
+        // Update filters and remove dead patterns if we havn't generated the final graph
+        if level != 3 {
             let start = time::precise_time_s();
-            let good_vertices = update_filters(&mut filters, &graph);
+            let good_vertices = update_filters(&mut filters[..], &graph);
             println!("Number of good vertices: {} [{} s]", 
-                good_vertices,
-                time::precise_time_s()-start);
+                good_vertices, time::precise_time_s()-start);
 
             let start = time::precise_time_s();
-            let patterns_before = approximations.len_patterns();
-            remove_dead_patterns(&filters, &mut approximations, level);
-            let patterns_after = approximations.len_patterns();
+            let patterns_before = properties.len_patterns();
+            remove_dead_patterns(&filters[..], &mut properties, level);
+            let patterns_after = properties.len_patterns();
             println!("Removed {} dead patterns [{} s]", 
-                patterns_before - patterns_after, 
-                time::precise_time_s()-start);
+                patterns_before - patterns_after, time::precise_time_s()-start);
         }
 
         println!("");
     }
+
+    if cipher.structure() == CipherStructure::Prince {
+        let start = time::precise_time_s();
+        graph = prince_modification(cipher.as_ref(), &mut graph);
+        println!("Reflected graph has {} vertices and {} edges [{} s]\n", 
+            graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
+    }
     
     graph
-}
-
-/* Prints a graph for plotting with python graph-tool */
-pub fn print_to_graph_tool(
-    graph: &MultistageGraph,
-    path: &String) {
-    let mut path = path.clone();
-    path.push_str(".graph");
-    let mut file = OpenOptions::new()
-                               .write(true)
-                               .truncate(true)
-                               .create(true)
-                               .open(path)
-                               .expect("Could not open file.");
-
-    let stages = graph.stages();
-
-    for i in 0..stages {
-        for (j, _) in graph.get_stage(i).unwrap() {
-            write!(file, "{},{}\n", i, j).expect("Write error");
-        }
-    }        
-
-    for i in 0..stages-1 {
-        for (j, vertex_ref) in graph.get_stage(i).unwrap() {
-            for (k, _) in &vertex_ref.successors {
-                write!(file, "{},{},{},{}\n", i, j, i+1, k).expect("Write error");       
-            }
-        }
-    }   
 }

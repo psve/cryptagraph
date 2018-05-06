@@ -1,14 +1,17 @@
 use cipher::{Sbox, CipherStructure, Cipher};
+use property::PropertyType;
 
 /*****************************************************************
                             MIBS
 ******************************************************************/
 
-/* A structure representing the MIBS cipher.
- *
- * size         Size of the cipher in bits. This is fixed to 64.
- * sbox         The MIBS S-box.
- * permutation  The MIBS bit permutation.
+/** 
+A structure representing the MIBS cipher.
+
+size        Size of the cipher in bits. This is fixed to 64.
+key_size    Size of the cipher key in bits. This is fixed to 64.
+sbox        The MIBS S-box.
+isbox       The inverse MIBS S-box.
  */
 #[derive(Clone)]
 pub struct Mibs {
@@ -33,34 +36,46 @@ pub fn new() -> Mibs {
 }
 
 impl Cipher for Mibs {
-    /* Returns the design type of the cipher */
+    /** 
+    Returns the design type of the cipher. 
+    */
     fn structure(&self) -> CipherStructure {
         CipherStructure::Feistel
     }
 
-    /* Returns the size of the input to MIBS. This is always 64 bits. */
+    /** 
+    Returns the size of the cipher input in bits. 
+    */
     fn size(&self) -> usize {
         self.size
     }
-    /* Returns key-size in bits */
+
+    /** 
+    Returns key-size in bits 
+    */
     fn key_size(&self) -> usize {
         self.key_size
     }
 
-    /* Returns the number of S-boxes in MIBS. This is always 16. */
+    /** 
+    Returns the number of S-boxes in the non-linear layer. 
+    */
     fn num_sboxes(&self) -> usize {
         self.size / self.sbox.size
     }
 
-    /* Returns the MIBS S-box */
+    /** 
+    Returns the S-box of the cipher. 
+    */
     fn sbox(&self) -> &Sbox {
         &self.sbox
     }
 
-    /* Applies the bit permutation of MIBS to the input.
-     *
-     * input    Input to be permuted.
-     */
+    /** 
+    Applies the linear layer of the cipher.
+    
+    input   The input to the linear layer.
+    */
     fn linear_layer(&self, input: u64) -> u64{
         let mut x = input;
         x ^= (x & (0xf << 16)) >> 16;
@@ -82,23 +97,34 @@ impl Cipher for Mibs {
 
         let mut output = 0;
         
-        for i in 0..8 {
-            output ^= ((x >> (4*i)) & 0xf) << (Mibs::PERMUTATION[i] * 4);
-        }
+        output ^= ((x >> (4*0)) & 0xf) << (Mibs::PERMUTATION[0] * 4);
+        output ^= ((x >> (4*1)) & 0xf) << (Mibs::PERMUTATION[1] * 4);
+        output ^= ((x >> (4*2)) & 0xf) << (Mibs::PERMUTATION[2] * 4);
+        output ^= ((x >> (4*3)) & 0xf) << (Mibs::PERMUTATION[3] * 4);
+        output ^= ((x >> (4*4)) & 0xf) << (Mibs::PERMUTATION[4] * 4);
+        output ^= ((x >> (4*5)) & 0xf) << (Mibs::PERMUTATION[5] * 4);
+        output ^= ((x >> (4*6)) & 0xf) << (Mibs::PERMUTATION[6] * 4);
+        output ^= ((x >> (4*7)) & 0xf) << (Mibs::PERMUTATION[7] * 4);
 
         output
     }
 
-    /* Applies the inverse linear layer, st.
-     *
-     * I = linear_layer_inv o linear_layer
-     */
+    /** 
+    Applies the inverse linear layer of the cipher.
+    
+    input   The input to the inverse linear layer. 
+    */
     fn linear_layer_inv(&self, input: u64) -> u64 {
         let mut output = 0;
-
-        for i in 0..8 {
-            output ^= ((input >> (4*i)) & 0xf) << (Mibs::IPERMUTATION[i] * 4);
-        }
+        
+        output ^= ((input >> (4*0)) & 0xf) << (Mibs::IPERMUTATION[0] * 4);
+        output ^= ((input >> (4*1)) & 0xf) << (Mibs::IPERMUTATION[1] * 4);
+        output ^= ((input >> (4*2)) & 0xf) << (Mibs::IPERMUTATION[2] * 4);
+        output ^= ((input >> (4*3)) & 0xf) << (Mibs::IPERMUTATION[3] * 4);
+        output ^= ((input >> (4*4)) & 0xf) << (Mibs::IPERMUTATION[4] * 4);
+        output ^= ((input >> (4*5)) & 0xf) << (Mibs::IPERMUTATION[5] * 4);
+        output ^= ((input >> (4*6)) & 0xf) << (Mibs::IPERMUTATION[6] * 4);
+        output ^= ((input >> (4*7)) & 0xf) << (Mibs::IPERMUTATION[7] * 4);
         
         let mut x = output;
 
@@ -122,7 +148,23 @@ impl Cipher for Mibs {
         x
     }
 
-    /* Computes a vector of round key from a cipher key*/    
+    /**
+    Applies the reflection layer for Prince like ciphers. 
+    For all other cipher types, this can remain unimplemented. 
+
+    input   The input to the reflection layer.
+    */
+    #[allow(unused_variables)]
+    fn reflection_layer(&self, input: u64) -> u64 {
+        panic!("Not implemented for this type of cipher")
+    }
+
+    /** 
+    Computes a vector of round key from a cipher key.
+
+    rounds      Number of rounds to generate keys for.
+    key         The master key to expand.
+    */
     fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u64> {
         if key.len() * 8 != self.key_size {
             panic!("invalid key-length");
@@ -147,7 +189,12 @@ impl Cipher for Mibs {
         keys
     }
 
-    /* Performs encryption */
+    /** 
+    Performs encryption with the cipher. 
+    
+    input       Plaintext to be encrypted.
+    round_keys  Round keys generated by the key-schedule.
+    */
     fn encrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64 {
         let mut output = input;
 
@@ -176,7 +223,12 @@ impl Cipher for Mibs {
         output
     }
 
-    /* Performs decryption */
+    /** 
+    Performs decryption with the cipher. 
+    
+    input       Ciphertext to be decrypted.
+    round_keys  Round keys generated by the key-schedule.
+    */
     fn decrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64 {
         let mut output = input;
 
@@ -204,28 +256,50 @@ impl Cipher for Mibs {
         (output >> 32) ^ (output << 32)
     }
 
-    /* Returns the string "MIBS". */
+    /** 
+    Returns the name of the cipher. 
+    */
     fn name(&self) -> String {
         String::from("MIBS")
     }
     
-    /* Transforms the input and output mask of the S-box layer to an
-     * input and output mask of a round.
-     *
-     * input    Input mask to the S-box layer.
-     * output   Output mask to the S-box layer.
-     */
+    /** 
+    Transforms the input and output mask of the S-box layer to an
+    input and output mask of a round.
+    
+    input    Input mask to the S-box layer.
+    output   Output mask to the S-box layer.
+    */
+    #[allow(unused_variables)]
+    fn sbox_mask_transform(&self, 
+                           input: u64, 
+                           output: u64, 
+                           property_type: PropertyType) 
+                           -> (u64, u64) {
+        match property_type {
+            PropertyType::Linear => {
+                let output = self.linear_layer(output & 0xffffffff)
+                           ^ (self.linear_layer(output >> 32) << 32);
+                let mut alpha = output;
+                alpha ^= input << 32;
 
-    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
-        let output = self.linear_layer(output & 0xffffffff)
-                   ^ (self.linear_layer(output >> 32) << 32);
-        let mut alpha = output;
-        alpha ^= input << 32;
+                let mut beta = output;
+                beta ^= input >> 32;
 
-        let mut beta = output;
-        beta ^= input >> 32;        
+                (alpha, beta)
+            },
+            PropertyType::Differential => {
+                let output = self.linear_layer(output & 0xffffffff)
+                           ^ (self.linear_layer(output >> 32) << 32);
+                let mut delta = (input >> 32) ^ (input << 32);
+                delta ^= output & 0xffffffff;
 
-        (alpha, beta)
+                let mut nabla = (input >> 32) ^ (input << 32);
+                nabla ^= output & 0xffffffff00000000;
+
+                (delta, nabla)
+            }
+        }
     }
 }
 

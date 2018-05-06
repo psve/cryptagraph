@@ -1,5 +1,20 @@
 use cipher::{Sbox, CipherStructure, Cipher};
+use property::PropertyType;
 
+/*****************************************************************
+                            TWINE
+******************************************************************/
+
+/** 
+A structure representing the TWINE cipher.
+
+size                Size of the cipher in bits. This is fixed to 64.
+key_size            Size of the cipher key in bits. This is fixed to 80.
+sbox                The TWINE S-box.
+permutation         The TWINE permutation.
+inverse             The inverse TWINE permutation.
+constants           Round constants. 
+*/
 #[derive(Clone)]
 pub struct Twine {
     size: usize,
@@ -27,54 +42,114 @@ pub fn new() -> Twine {
 }
 
 impl Cipher for Twine {
-    /* Returns the design type of the cipher */
+    /** 
+    Returns the design type of the cipher. 
+    */
     fn structure(&self) -> CipherStructure {
         CipherStructure::Feistel
     }
 
-    /* Returns the size of the input to TWINE. This is always 64 bits. */
+    /** 
+    Returns the size of the cipher input in bits. 
+    */
     fn size(&self) -> usize {
         self.size
     }
-    /* Returns key-size in bits */
+
+    /** 
+    Returns key-size in bits 
+    */
     fn key_size(&self) -> usize {
         self.key_size
     }
 
-    /* Returns the number of S-boxes in TWINE. This is always 8. */
+    /** 
+    Returns the number of S-boxes in the non-linear layer. 
+    */
     fn num_sboxes(&self) -> usize {
         self.size / self.sbox.size
     }
 
-    /* Returns Feistel function of TWINE represented as an S-box */
+    /** 
+    Returns the S-box of the cipher. 
+    */
     fn sbox(&self) -> &Sbox {
         &self.sbox
     }
 
-    /* Applies the nibble permutation of TWINE to the input.
-     *
-     * input    Input to be permuted.
-     */
+    /** 
+    Applies the linear layer of the cipher.
+    
+    input   The input to the linear layer.
+    */
     fn linear_layer(&self, input: u64) -> u64{
         let mut output = 0;
-
-        for i in 0..16 {
-            output ^= ((input >> (i*4)) & 0xf) << (self.permutation[i]*4);
-        }
+        
+        output ^= ((input >> ( 0*4)) & 0xf) << (self.permutation[ 0]*4);
+        output ^= ((input >> ( 1*4)) & 0xf) << (self.permutation[ 1]*4);
+        output ^= ((input >> ( 2*4)) & 0xf) << (self.permutation[ 2]*4);
+        output ^= ((input >> ( 3*4)) & 0xf) << (self.permutation[ 3]*4);
+        output ^= ((input >> ( 4*4)) & 0xf) << (self.permutation[ 4]*4);
+        output ^= ((input >> ( 5*4)) & 0xf) << (self.permutation[ 5]*4);
+        output ^= ((input >> ( 6*4)) & 0xf) << (self.permutation[ 6]*4);
+        output ^= ((input >> ( 7*4)) & 0xf) << (self.permutation[ 7]*4);
+        output ^= ((input >> ( 8*4)) & 0xf) << (self.permutation[ 8]*4);
+        output ^= ((input >> ( 9*4)) & 0xf) << (self.permutation[ 9]*4);
+        output ^= ((input >> (10*4)) & 0xf) << (self.permutation[10]*4);
+        output ^= ((input >> (11*4)) & 0xf) << (self.permutation[11]*4);
+        output ^= ((input >> (12*4)) & 0xf) << (self.permutation[12]*4);
+        output ^= ((input >> (13*4)) & 0xf) << (self.permutation[13]*4);
+        output ^= ((input >> (14*4)) & 0xf) << (self.permutation[14]*4);
+        output ^= ((input >> (15*4)) & 0xf) << (self.permutation[15]*4);
 
         output
     }
+
+    /** 
+    Applies the inverse linear layer of the cipher.
     
+    input   The input to the inverse linear layer. 
+    */
     fn linear_layer_inv(&self, input: u64) -> u64 {
         let mut output = 0;
 
-        for i in 0..16 {
-            output ^= ((input >> (i*4)) & 0xf) << (self.inverse[i]*4);
-        }
+        output ^= ((input >> ( 0*4)) & 0xf) << (self.inverse[ 0]*4);
+        output ^= ((input >> ( 1*4)) & 0xf) << (self.inverse[ 1]*4);
+        output ^= ((input >> ( 2*4)) & 0xf) << (self.inverse[ 2]*4);
+        output ^= ((input >> ( 3*4)) & 0xf) << (self.inverse[ 3]*4);
+        output ^= ((input >> ( 4*4)) & 0xf) << (self.inverse[ 4]*4);
+        output ^= ((input >> ( 5*4)) & 0xf) << (self.inverse[ 5]*4);
+        output ^= ((input >> ( 6*4)) & 0xf) << (self.inverse[ 6]*4);
+        output ^= ((input >> ( 7*4)) & 0xf) << (self.inverse[ 7]*4);
+        output ^= ((input >> ( 8*4)) & 0xf) << (self.inverse[ 8]*4);
+        output ^= ((input >> ( 9*4)) & 0xf) << (self.inverse[ 9]*4);
+        output ^= ((input >> (10*4)) & 0xf) << (self.inverse[10]*4);
+        output ^= ((input >> (11*4)) & 0xf) << (self.inverse[11]*4);
+        output ^= ((input >> (12*4)) & 0xf) << (self.inverse[12]*4);
+        output ^= ((input >> (13*4)) & 0xf) << (self.inverse[13]*4);
+        output ^= ((input >> (14*4)) & 0xf) << (self.inverse[14]*4);
+        output ^= ((input >> (15*4)) & 0xf) << (self.inverse[15]*4);
 
         output
     }
 
+    /**
+    Applies the reflection layer for Prince like ciphers. 
+    For all other cipher types, this can remain unimplemented. 
+
+    input   The input to the reflection layer.
+    */
+    #[allow(unused_variables)]
+    fn reflection_layer(&self, input: u64) -> u64 {
+        panic!("Not implemented for this type of cipher")
+    }
+
+    /** 
+    Computes a vector of round key from a cipher key.
+
+    rounds      Number of rounds to generate keys for.
+    key         The master key to expand.
+    */
     fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u64> {
         if key.len() * 8 != self.key_size {
             panic!("invalid key-length");
@@ -138,7 +213,12 @@ impl Cipher for Twine {
         keys
     }
 
-    /* Performs encryption */
+    /** 
+    Performs encryption with the cipher. 
+    
+    input       Plaintext to be encrypted.
+    round_keys  Round keys generated by the key-schedule.
+    */
     fn encrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64 {
         let mut output = input;
 
@@ -165,7 +245,12 @@ impl Cipher for Twine {
         output
     }
 
-    /* Performs decryption */
+    /** 
+    Performs decryption with the cipher. 
+    
+    input       Ciphertext to be decrypted.
+    round_keys  Round keys generated by the key-schedule.
+    */
     fn decrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64 {
         let mut output = input;
 
@@ -192,43 +277,84 @@ impl Cipher for Twine {
         output
     }
 
+    /** 
+    Returns the name of the cipher. 
+    */
     fn name(&self) -> String {
         String::from("TWINE")
     }
 
-    /* Transforms the input and output mask of the S-box layer to an
-     * input and output mask of a round.
-     *
-     * input    Input mask to the S-box layer.
-     * output   Output mask to the S-box layer.
-     */
-    fn sbox_mask_transform(& self, input: u64, output: u64) -> (u64, u64) {
-        let mut alpha = 0;
-        let mut tmp = 0;
+    /** 
+    Transforms the input and output mask of the S-box layer to an
+    input and output mask of a round.
+    
+    input    Input mask to the S-box layer.
+    output   Output mask to the S-box layer.
+    */
+    #[allow(unused_variables)]
+    fn sbox_mask_transform(&self, 
+                           input: u64, 
+                           output: u64, 
+                           property_type: PropertyType) 
+                           -> (u64, u64) {
+        match property_type {
+            PropertyType::Linear => {
+                let mut alpha = 0;
+                let mut tmp = 0;
 
-        for i in 0..8 {
-            alpha ^= ((output >> 4*i) & 0xf) << (i*8);
-            alpha ^= ((input >> 4*i) & 0xf) << (i*8+4);
-            tmp ^= ((output >> (4*i+32)) & 0xf) << (i*8);
+                for i in 0..8 {
+                    alpha ^= ((output >> 4*i) & 0xf) << (i*8);
+                    alpha ^= ((input >> 4*i) & 0xf) << (i*8+4);
+                    tmp ^= ((output >> (4*i+32)) & 0xf) << (i*8);
+                }
+
+                tmp = self.linear_layer_inv(tmp);
+                alpha ^= tmp;
+
+                let mut beta = 0;
+                tmp = 0;
+
+                for i in 0..8 {
+                    beta ^= ((output >> (4*i+32)) & 0xf) << (i*8);
+                    beta ^= ((input >> (4*i+32)) & 0xf) << (i*8+4);
+                    tmp ^= ((output >> 4*i) & 0xf) << (i*8);
+                }
+
+                tmp = self.linear_layer(tmp);
+                beta ^= tmp;
+                beta = self.linear_layer(beta);       
+
+                (alpha, beta)
+            },
+            PropertyType::Differential => {
+                let mut delta = 0;
+                let mut tmp = 0;
+
+                for i in 0..8 {
+                    delta ^= ((output >> 4*i) & 0xf) << (i*8);
+                    delta ^= ((input >> 4*i) & 0xf) << (i*8+4);
+                    tmp ^= ((input >> (4*i+32)) & 0xf) << (i*8+4);
+                }
+
+                tmp = self.linear_layer_inv(tmp);
+                delta ^= tmp;
+
+                let mut nabla = 0;
+                tmp = 0;
+
+                for i in 0..8 {
+                    nabla ^= ((output >> (4*i+32)) & 0xf) << (i*8);
+                    nabla ^= ((input >> (4*i+32)) & 0xf) << (i*8+4);
+                    tmp ^= ((input >> 4*i) & 0xf) << (i*8+4);
+                }
+
+                tmp = self.linear_layer(tmp);
+                nabla ^= tmp;
+                nabla = self.linear_layer(nabla);       
+
+                (delta, nabla)
+            }
         }
-
-        tmp = self.linear_layer_inv(tmp);
-        alpha ^= tmp;
-
-        let mut beta = 0;
-        tmp = 0;
-
-        for i in 0..8 {
-            beta ^= ((output >> (4*i+32)) & 0xf) << (i*8);
-            beta ^= ((input >> (4*i+32)) & 0xf) << (i*8+4);
-            tmp ^= ((output >> 4*i) & 0xf) << (i*8);
-        }
-
-        tmp = self.linear_layer(tmp);
-        beta ^= tmp;
-        beta = self.linear_layer(beta);       
-
-        (alpha, beta)
     }
 }
 

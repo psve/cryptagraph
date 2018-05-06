@@ -1,67 +1,61 @@
 #![feature(iterator_step_by)]
 
 #[macro_use] extern crate lazy_static;
-extern crate time;
-extern crate structopt;
+#[macro_use] extern crate smallvec;
 #[macro_use] extern crate structopt_derive;
-extern crate rand;
-extern crate num_cpus;
+
 extern crate crossbeam_utils;
 extern crate fnv;
+extern crate indexmap;
+extern crate num_cpus;
+extern crate rand;
+extern crate structopt;
+extern crate time;
 
 mod cipher;
-mod utility;
-mod single_round;
-mod multi_round;
-mod approximation;
-mod find_hulls;
-mod options;
+mod find_properties;
 mod graph;
 mod graph_generate;
+mod multi_round;
+mod options;
+mod property;
+mod single_round;
+mod utility;
 
-use cipher::*;
 use options::CliArgs;
 use structopt::StructOpt;
 
-/* Performs the hull set search. 
- *
- * cipher                   The cipher to investigate.
- * rounds                   The number of rounds.
- * pattern_add              The number of single round S-box patterns to add in each pruning round.
- * pruning_rounds           Number of rounds to perform pruning. 
- * false_positive           The false positive rate to use for Bloom filters.
- * file_name                File name prefix to use for output. 
- */
-fn run_search(
-    cipher: &Cipher, 
-    rounds: usize, 
-    num_patterns: usize, 
-    file_mask_in: Option<String>,
-    file_mask_out: Option<String>,
-    file_graph: Option<String>) {
-    println!("\tCipher: {}.", cipher.name());
-    println!("\tRounds: {}.", rounds);
-    println!("\tS-box patterns: {}\n", num_patterns);
-
-    multi_round::find_approximations(cipher, rounds, num_patterns, 
-                                     file_mask_in, file_mask_out, file_graph);
-}
+use cipher::*;
+use property::PropertyType;
 
 fn main() {
     let options = CliArgs::from_args();
 
-    let rounds = options.rounds.expect("Number of rounds must be specified in this mode.");
-    let num_patterns = options.num_patterns.expect("Number of patterns must be specified in this mode.");
+    let cipher = match name_to_cipher(options.cipher.as_ref()) {
+        Some(c) => c,
+        None    => {
+            println!("Cipher not supported. Check --help for supported ciphers.");
+            return;
+        }
+    };
+
+    let property_type = options.property_type;
+    let rounds = options.rounds;
+    let num_patterns = options.num_patterns;
     let file_mask_in = options.file_mask_in;
     let file_mask_out = options.file_mask_out;
     let file_graph = options.file_graph;
 
-    let cipher = match name_to_cipher(options.cipher.as_ref()) {
-        Some(c) => c,
-        None    => panic!("Cipher must be one of: present, gift, twine, puffin, skinny, midori, led, rectangle, mibs")
-    };
 
-    run_search(cipher.as_ref(), rounds, num_patterns, 
-               file_mask_in, file_mask_out, file_graph);
+    println!("\tCipher: {}.", cipher.name());
+    match property_type {
+        PropertyType::Linear       => println!("\tProperty: Linear"),
+        PropertyType::Differential => println!("\tProperty: Differential")
+    }
+    println!("\tRounds: {}.", rounds);
+    println!("\tS-box patterns: {}\n", num_patterns);
+
+    multi_round::find_properties(cipher, property_type, rounds, num_patterns, 
+                                 file_mask_in, file_mask_out, file_graph);
 }
     
