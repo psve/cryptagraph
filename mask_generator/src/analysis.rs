@@ -98,10 +98,6 @@ impl LAT {
             }
         }
     }
-
-    pub fn lookup_alpha(&self, a : u64) -> &Vec<Approximation> {
-        self.map_alpha.get(a as usize).unwrap()
-    }
 }
 
 impl MaskLAT {
@@ -157,7 +153,7 @@ impl MaskLAT {
 
         for alpha in masks.iter() {
             let beta = cipher.linear_layer_inv(*alpha);
-            assert!(cipher.linear_layer(beta) == *alpha);
+            assert_eq!(cipher.linear_layer(beta), *alpha);
             betas.push(beta);
         }
 
@@ -179,7 +175,7 @@ impl MaskLAT {
                         let vector = mlat.map_alpha.get_mut(alpha).unwrap();
                         vector.push(MaskApproximation{
                             alpha : *alpha,
-                            beta  : cipher.linear_layer(*beta), // NOTE: apply linear layer again
+                            beta  : cipher.linear_layer(*beta), // NOTE: applies linear layer again
                             corr  : corr
                         });
                     }

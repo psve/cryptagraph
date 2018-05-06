@@ -43,14 +43,14 @@ pub fn step(
         let sign  = if parity(*alpha ^ key) == 1 { -1.0 } else { 1.0 };
         let apaths = pool_old.paths.get(alpha).unwrap();
 
+        debug!("{:} {:x} {:x}", sign, *alpha, key);
+
         //// println!("ALPHA : {:} {:x} {:x}", sign, *alpha, key);
 
         for approx in lat.lookup_alpha(*alpha).iter() {
             assert!(approx.alpha == *alpha);
 
             let delta = corr * sign * approx.corr;
-
-            //// println!("APPROX : {:x} -> {:x}, delta {:}", approx.alpha, approx.beta, delta);
 
             // add relation to accumulator
 
@@ -62,16 +62,10 @@ pub fn step(
                 }
             };
 
-            if acc * acc < 0.000000000000000000000000000001 {
-                continue;
-            }
-
             let paths = match pool_new.paths.get(&approx.beta) {
                 None => 0,
                 Some(c) => *c
             };
-
-            //// println!("POST : {:} {:}", acc, delta);
 
             // write back to pool
 
