@@ -1,8 +1,16 @@
+#![feature(iterator_step_by)]
+
+#[macro_use] extern crate lazy_static;
+#[macro_use] extern crate smallvec;
+#[macro_use] extern crate structopt_derive;
+
 extern crate structopt;
 extern crate rand;
 extern crate fnv;
-
-#[macro_use] extern crate structopt_derive;
+extern crate crossbeam_utils;
+extern crate indexmap;
+extern crate num_cpus;
+extern crate time;
 
 macro_rules! debug {
     ($($arg:tt)*) => (if cfg!(debug_assertions) { println!($($arg)*) })
@@ -13,15 +21,19 @@ mod cipher;
 mod utility;
 mod analysis;
 mod approximation;
+mod find_properties;
+mod graph;
+mod graph_generate;
+mod multi_round;
+mod options;
+mod property;
 mod single_round;
 
 use rand::{OsRng, Rng};
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
-
 use structopt::StructOpt;
-
 use cipher::*;
 use pool::MaskPool;
 
@@ -116,6 +128,10 @@ fn main() {
         rng.fill_bytes(&mut key);
         let keys = cipher.key_schedule(options.rounds, &key);
 
+        for key in &keys {
+            debug!("Round-Key {:016x}", key);
+        }
+
         // initalize pool with chosen alpha
 
         pool_old.clear();
@@ -138,11 +154,16 @@ fn main() {
 
             // swap pools
 
+            debug!("# {} {}", pool_old.size(), pool_new.size());
+
             {
                 let tmp  = pool_old;
                 pool_old = pool_new;
                 pool_new = tmp;
+                pool_new.clear();
             }
+
+            debug!("# {} {}", pool_old.size(), pool_new.size());
         }
 
         for beta in &betas {

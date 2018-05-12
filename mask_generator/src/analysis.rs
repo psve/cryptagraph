@@ -2,6 +2,8 @@ use cipher::{Cipher, Sbox};
 use std::collections::{HashMap};
 use approximation::{Approximation};
 
+static FLOAT_TINY : f64 = 0.00000000000000000000000000000000001;
+
 /* Linear Approximation Table over some component.
  *
  * Maps (alpha, beta) -> correlation
@@ -49,6 +51,8 @@ impl LAT {
         for (alpha, row) in sbox.lat.iter().enumerate() {
             for (beta, hits) in row.iter().enumerate() {
 
+                debug!("Hits: a:{:016x} b:{:016x}, {}", alpha, beta, hits);
+
                 // handle balanced
 
                 let corr = 2.0 * ((*hits as f64) / (values as f64)) - 1.0;
@@ -57,7 +61,7 @@ impl LAT {
                     let entry = lat.lat.get_mut(alpha).unwrap();
                     if *hits == balance {
                         entry.push(None);
-                        continue;
+                        continue; // do not add to enumeration maps (below)
                     }
                     entry.push(Some(corr));
                 }
@@ -66,20 +70,20 @@ impl LAT {
 
                 {
                     let entry = lat.map_alpha.get_mut(alpha).unwrap();
-                    entry.push(Approximation::new(alpha as u64, beta as u64, None));
+                    entry.push(Approximation::new(alpha as u64, beta as u64, Some(corr)));
                 }
 
                 // add to beta map
 
                 {
                     let entry = lat.map_beta.get_mut(beta).unwrap();
-                    entry.push(Approximation::new(alpha as u64, beta as u64, None));
+                    entry.push(Approximation::new(alpha as u64, beta as u64, Some(corr)));
                 }
             }
 
             // assert lat filled
 
-            assert!({
+            debug_assert!({
                 let entry = lat.lat.get_mut(alpha).unwrap();
                 entry.len() == values
             })
@@ -102,7 +106,7 @@ impl LAT {
 
 impl MaskLAT {
 
-    /* Takes a LAT of a compontent function and
+    /* Takes a LAT of a component function and
      * computes the correlation of parities over the bricklayer function.
      */
     fn correlation(
@@ -115,7 +119,7 @@ impl MaskLAT {
         let mut alpha      = alpha;
         let mut beta       = beta;
 
-        assert!(cipher.sbox().size * cipher.num_sboxes() == 64);
+        assert_eq!(cipher.sbox().size * cipher.num_sboxes(), 64);
 
         let w = cipher.sbox().size;
         let m = (1 << w) - 1;
@@ -124,18 +128,22 @@ impl MaskLAT {
             match lat.lookup(alpha & m, beta & m) {
                 None    => { return None; }
                 Some(c) => {
+                    assert!(c*c > 0.0);
                     corr *= c;
                 }
             }
-
             beta  >>= w;
             alpha >>= w;
         }
 
-        assert!(beta == 0);
-        assert!(alpha == 0);
+        assert_eq!(beta, 0);
+        assert_eq!(alpha, 0);
 
-        return Some(corr);
+        if corr * corr < FLOAT_TINY {
+            None
+        } else {
+            Some(corr)
+        }
     }
 
     /* Constructs a LAT over the bricklayer function
@@ -147,8 +155,14 @@ impl MaskLAT {
 
         let lat = LAT::new(cipher.sbox());
 
-        // assuming SPN; compute possible "betas" for alpha set
-
+        /* Assuming SPN; compute possible "betas" for alpha set
+         *
+         * Alpha ^ Key Addition -> Substitution -> Linear
+         *
+         * We move backwards to obtain:
+         *
+         * Alpha ^ Key Addition -> Substitution ^ Beta <- Linear <- Alpha
+         */
         let mut betas = vec![];
 
         for alpha in masks.iter() {
@@ -172,12 +186,20 @@ impl MaskLAT {
                 match MaskLAT::correlation(cipher, &lat, *alpha, *beta) {
                     None       => (), // zero correlation
                     Some(corr) => {
+                        assert!(corr*corr > 0.0);
                         let vector = mlat.map_alpha.get_mut(alpha).unwrap();
+                        /* NOTE:
+                         *   Applies linear layer to beta
+                         *   to speed up computation of
+                         *   new maskset (subset of Alpha)
+                         */
+                        let nalpha = cipher.linear_layer(*beta);
                         vector.push(MaskApproximation{
                             alpha : *alpha,
-                            beta  : cipher.linear_layer(*beta), // NOTE: applies linear layer again
+                            beta  : nalpha,
                             corr  : corr
                         });
+                        debug!("Full-Approximation: {:016x} <-> {:016x} : {}", *alpha, nalpha, corr);
                     }
                 }
             }

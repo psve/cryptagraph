@@ -2,6 +2,8 @@ use analysis::MaskLAT;
 use std::collections::HashMap;
 use utility::parity;
 
+static FLOAT_TINY : f64 = 0.00000000000000000000000000000000001;
+
 #[derive(Clone)]
 pub struct MaskPool {
     pub masks: HashMap<u64, f64>,
@@ -38,33 +40,43 @@ pub fn step(
     key      : u64,
 ) {
     pool_new.clear();
+
+    // propergate mask set
+
     for (alpha, corr) in &pool_old.masks {
 
-        let sign  = if parity(*alpha ^ key) == 1 { -1.0 } else { 1.0 };
-        let apaths = pool_old.paths.get(alpha).unwrap();
+        // filter zero correlation
 
-        debug!("{:} {:x} {:x}", sign, *alpha, key);
+        if (*corr) * (*corr) < FLOAT_TINY {
+            continue;
+        }
 
-        //// println!("ALPHA : {:} {:x} {:x}", sign, *alpha, key);
+        let sign   = if parity(*alpha ^ key) == 1 { -1.0 } else { 1.0 };
+        let apaths = *pool_old.paths.get(alpha).unwrap();
+
+        debug_assert!(apaths > 0);
+        debug_assert!((*corr) * (*corr) > 0.0);
+
+        debug!("{:} {:x} {:x} {}", sign, *alpha, key, *corr);
 
         for approx in lat.lookup_alpha(*alpha).iter() {
-            assert!(approx.alpha == *alpha);
+            debug_assert_eq!(approx.alpha, *alpha);
 
-            let delta = corr * sign * approx.corr;
+            let delta = sign * (approx.corr * corr);
 
             // add relation to accumulator
 
             let acc  = match pool_new.masks.get(&approx.beta) {
                 None    => delta,
                 Some(c) => {
-                    //// println!("LOAD : <- {:}", c);
+                    debug!("HH {:} {}", c, delta);
                     c + delta
                 }
             };
 
             let paths = match pool_new.paths.get(&approx.beta) {
-                None => 0,
-                Some(c) => *c
+                None    => apaths,
+                Some(c) => *c + apaths
             };
 
             // write back to pool
@@ -76,7 +88,7 @@ pub fn step(
 
             pool_new.paths.insert(
                 approx.beta,
-                paths + apaths,
+                paths
             );
         };
     };
