@@ -47,11 +47,11 @@ pub fn step(
 
         // filter zero correlation
 
-        if (*corr) * (*corr) < FLOAT_TINY {
+        /*if (*corr) * (*corr) < FLOAT_TINY {
             continue;
-        }
+        }*/
 
-        let sign   = if parity(*alpha ^ key) == 1 { -1.0 } else { 1.0 };
+        let sign   = if parity(*alpha & key) == 1 { -1.0 } else { 1.0 };
         let apaths = *pool_old.paths.get(alpha).unwrap();
 
         debug_assert!(apaths > 0);
