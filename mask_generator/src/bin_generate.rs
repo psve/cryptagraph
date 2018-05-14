@@ -42,6 +42,7 @@ fn main() {
     let property_type = options.property_type;
     let rounds = options.rounds;
     let num_patterns = options.num_patterns;
+    let percentage = options.percentage;
     let file_mask_in = options.file_mask_in;
     let file_mask_out = options.file_mask_out;
     let file_graph = options.file_graph;
@@ -55,7 +56,7 @@ fn main() {
     println!("\tRounds: {}.", rounds);
     println!("\tS-box patterns: {}\n", num_patterns);
 
-    multi_round::find_properties(cipher, property_type, rounds, num_patterns, 
+    multi_round::find_properties(cipher, property_type, rounds, num_patterns, percentage,
                                  file_mask_in, file_mask_out, file_graph);
 }
     

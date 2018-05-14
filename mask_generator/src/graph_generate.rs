@@ -364,8 +364,8 @@ fn prince_pruning(cipher: &Cipher,
         pruned = false;
 
         let stages = graph.stages();
-        let mut reflections = FnvHashSet::default();
-        let mut remove = FnvHashSet::default();
+        let reflections: FnvHashSet<_>;
+        let remove: FnvHashSet<_>;
         {
             reflections = graph.get_stage(stages-1).unwrap()
                                .keys()

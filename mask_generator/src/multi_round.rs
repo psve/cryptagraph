@@ -4,7 +4,7 @@ use std::io::{Write, BufReader, BufRead};
 use time;
 
 use cipher::Cipher;
-use find_properties::parallel_find_properties;
+use find_properties::{parallel_find_properties, restricted_graph};
 use graph::MultistageGraph;
 use graph_generate::generate_graph;
 use property::PropertyType;
@@ -143,6 +143,7 @@ pub fn find_properties(cipher: Box<Cipher>,
                        property_type: PropertyType,
                        rounds: usize, 
                        patterns: usize,
+                       percentage: Option<f64>,
                        file_mask_in: Option<String>,
                        file_mask_out: Option<String>,
                        file_graph: Option<String>) {
@@ -159,8 +160,10 @@ pub fn find_properties(cipher: Box<Cipher>,
         }
     };
 
-    let graph = generate_graph(cipher, property_type, rounds, 
-                               patterns, &input_allowed, &output_allowed);
+    println!("\n--------------------------------------- GRAPH GENERATION ---------------------------------------\n");
+
+    let mut graph = generate_graph(cipher, property_type, rounds, 
+                                   patterns, &input_allowed, &output_allowed);
 
     match file_graph {
         Some(path) => {
@@ -175,12 +178,34 @@ pub fn find_properties(cipher: Box<Cipher>,
         },
         None => { }
     }
+
+    if percentage.is_some() {
+        println!("\n-------------------------------------- GRAPH RESTRICTION ---------------------------------------\n");
+        println!("Finding restricted version of graph before search -- {} runs.", rounds/2);
+
+        for i in (0..rounds/2).rev() {
+            let stages = graph.stages();
+            graph = restricted_graph(&graph, property_type, percentage.unwrap(), i, stages-i-1);
+        }
     
-    let result = parallel_find_properties(&graph,property_type, 
+    println!("");
+    }
+
+    println!("\n---------------------------------------- GRAPH SEARCH ------------------------------------------\n");
+
+    let (result, min_value, paths) = parallel_find_properties(&graph,property_type, 
                                           &input_allowed, &output_allowed, 
                                           num_keep);
     
+    println!("\n------------------------------------------ RESULTS ---------------------------------------------\n");
+
     println!("Search finished. [{} s]", time::precise_time_s()-start);
+
+    if result.len() > 0 {
+        println!("Smallest value: {}", min_value.log2());
+        println!("Largest value:  {}\n", result[0].value.log2());
+        println!("Total number of trails:  {}", paths);
+    }
 
     for &property in &result {
         if property.input == 0 && property.output == 0 {

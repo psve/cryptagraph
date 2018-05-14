@@ -6,7 +6,7 @@ pub struct CliArgs {
     #[structopt(short = "c", long = "cipher")]
     /**
     Name of the cipher to analyse. Current available ciphers are: 
-    gift, khazad, klein, led, mibs, midori, pride, puffin, rectangle, skinny, twine
+    fly, gift, khazad, klein, led, mantis, mibs, midori, present, pride, prince, puffin, qarma, rectangle, skinny, twine
     */
     pub cipher: String,
 
@@ -28,6 +28,12 @@ pub struct CliArgs {
     The number of S-box patterns to generate. The number of patterns determine how many different properties over a single round are analysed. 
     */
     pub num_patterns: usize,
+
+    #[structopt(short = "x", long = "percentage")]
+    /**
+    If provided, this parameter is used to restrict the graph before searching for properties. 
+    */
+    pub percentage: Option<f64>,
 
     #[structopt(short = "i", long = "mask_in")]
     /**

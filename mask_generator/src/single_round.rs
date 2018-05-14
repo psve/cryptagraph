@@ -73,8 +73,8 @@ impl InternalSboxPattern {
 
                     match property_type {
                         PropertyType::Linear => {
-                            new_pattern.value /= property_values[x] as f64 / trivial;
-                            new_pattern.value *= property_values[x+1] as f64 / trivial;
+                            new_pattern.value /= (property_values[x] as f64 / trivial).powi(2);
+                            new_pattern.value *= (property_values[x+1] as f64 / trivial).powi(2);
                         },
                         PropertyType::Differential => {
                             new_pattern.value /= property_values[x] as f64 / trivial;
@@ -153,7 +153,7 @@ enum PatternStatus {
 An external interface to InternalSboxPattern. The pattern only stores the active S-box positions.
 
 pattern     A vector describing the S-box index and its property value.
-property    Type of property represented by the pattern.
+property    Current property represented by the pattern.
 mask        A bit mask corresponding to a single S-box.
 counter     A vector of counters keep track of the current property in each S-box.
 status      The patterns current status. 
