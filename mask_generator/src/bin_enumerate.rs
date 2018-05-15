@@ -31,8 +31,7 @@ mod single_round;
 
 use rand::{OsRng, Rng};
 use std::fs::File;
-use std::io::BufRead;
-use std::io::BufReader;
+use std::io::{BufRead, BufReader, Write};
 use structopt::StructOpt;
 use cipher::*;
 use pool::MaskPool;
@@ -43,11 +42,11 @@ pub struct CliArgs {
     #[structopt(short = "c", long = "cipher", help = "Name of cipher to analyse.")]
     pub cipher: String,
 
-    #[structopt(short = "i", long = "input", help = "Input mask / parity (hex)")]
-    pub input: String,
+    #[structopt(short = "a", long = "alpha", help = "Input mask / parity (hex)")]
+    pub alpha: String,
 
-    #[structopt(short = "o", long = "output", help = "Output mask / parity (hex)")]
-    pub output: String,
+    #[structopt(short = "b", long = "beta", help = "Output masks (file path)")]
+    pub beta: String,
 
     #[structopt(short = "r", long = "rounds", help = "Number of rounds to enumerate")]
     pub rounds: usize,
@@ -57,6 +56,9 @@ pub struct CliArgs {
 
     #[structopt(short = "m", long = "masks", help = "Path to file of masks")]
     pub masks: String,
+
+    #[structopt(short = "o", long = "output", help = "Pattern to save correlations: save.cipher.keys.input.output.corrs")]
+    pub output: Option<String>,
 }
 
 
@@ -88,12 +90,9 @@ fn main() {
         None => panic!("failed to load mask set")
     };
 
-    let alphas = match load_masks(&options.input) {
-        Some(m) => m,
-        None => panic!("failed to load mask set")
-    };
+    let alpha = u64::from_str_radix(&options.alpha, 16).unwrap();
 
-    let betas = match load_masks(&options.output) {
+    let betas = match load_masks(&options.beta) {
         Some(m) => m,
         None => panic!("failed to load mask set")
     };
@@ -121,23 +120,40 @@ fn main() {
     let mut rng = OsRng::new().unwrap();
     let mut key = vec![0; cipher.key_size() / 8];
 
-    for _ in 0..options.keys {
+    // open output files
+
+    let mut outputs = vec![];
+    for beta in &betas {
+        outputs.push(
+            File::create(
+                match &options.output {
+                    Some(prefix) => format!(
+                        "{}.{}.{}.{:x}.{:x}.corrs",
+                        prefix,
+                        options.cipher,
+                        options.keys,
+                        alpha,
+                        beta
+                    ),
+                    None => String::from("/dev/null")
+                }
+            ).unwrap()
+        )
+    }
+
+    for n in 0..options.keys {
+
+        println!("key: {}", n);
 
         // generate rounds keys
 
         rng.fill_bytes(&mut key);
         let keys = cipher.key_schedule(options.rounds, &key);
 
-        for key in &keys {
-            debug!("Round-Key {:016x}", key);
-        }
-
         // initalize pool with chosen alpha
 
         pool_old.clear();
-        for alpha in &alphas {
-            pool_old.add(*alpha);
-        }
+        pool_old.add(alpha);
 
         for rkey in keys.iter() {
 
@@ -154,28 +170,29 @@ fn main() {
 
             // swap pools
 
-            debug!("# {} {}", pool_old.size(), pool_new.size());
-
             {
                 let tmp  = pool_old;
                 pool_old = pool_new;
                 pool_new = tmp;
                 pool_new.clear();
             }
-
-            debug!("# {} {}", pool_old.size(), pool_new.size());
         }
 
-        for beta in &betas {
-            match pool_old.masks.get(&beta) {
-                Some(c) => println!("{:x} : {:}", beta, *c),
-                None    => ()
+        for (i, beta) in betas.iter().enumerate() {
+
+            let corr = match pool_old.masks.get(&beta) {
+                Some(c) => *c,
+                None    => 0.0
             };
 
+            outputs[i].write_fmt(format_args!("{:}\n", corr)).unwrap();
+
+            /*
             debug!("> paths[{:x}] = {:}", beta, match pool_old.paths.get(&beta) {
                 Some(c) => *c,
                 None    => 0
             });
+            */
         }
     }
 }
