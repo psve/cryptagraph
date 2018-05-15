@@ -51,8 +51,6 @@ impl LAT {
         for (alpha, row) in sbox.lat.iter().enumerate() {
             for (beta, hits) in row.iter().enumerate() {
 
-                debug!("Hits: a:{:016x} b:{:016x}, {}", alpha, beta, hits);
-
                 // handle balanced
 
                 let corr = 2.0 * ((*hits as f64) / (values as f64)) - 1.0;
