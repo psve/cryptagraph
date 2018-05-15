@@ -313,12 +313,6 @@ pub fn parallel_find_properties(graph: &MultistageGraph,
                                 output_allowed: &FnvHashSet<u64>,
                                 num_keep: usize) 
                                 -> (Vec<Property>, f64, usize) {
-    /*let threshold = match property_type {
-        PropertyType::Linear => shortest_path(graph).powi(2) * 2.0_f64.powi(-100),
-        PropertyType::Differential => shortest_path(graph) * 2.0_f64.powi(-100),
-    };
-    println!("{:?}", threshold.log2());*/
-
     let input_len = graph.get_stage(0).unwrap().len();
     println!("Finding properties ({} input values, {} edges):", 
              input_len, graph.num_edges());

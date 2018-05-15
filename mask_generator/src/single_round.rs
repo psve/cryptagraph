@@ -182,7 +182,7 @@ impl SboxPattern {
         // Get the value of an inactive S-box 
         let non_property = match property_type {
             PropertyType::Linear => cipher.sbox().linear_balance(),
-            PropertyType::Differential => cipher.sbox().differential_zero(),
+            PropertyType::Differential => 1 << cipher.sbox().size,
         };
 
         // Collect active S-box positions
