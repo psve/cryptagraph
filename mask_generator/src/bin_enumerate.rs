@@ -118,7 +118,7 @@ fn main() {
 
     let lat = analysis::MaskLAT::new(cipher.as_ref(), &masks);
 
-    println!("{}");
+    println!("");
 
     // construct pools
 
