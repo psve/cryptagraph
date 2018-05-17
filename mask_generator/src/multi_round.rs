@@ -187,8 +187,6 @@ pub fn find_properties(cipher: Box<Cipher>,
             let stages = graph.stages();
             graph = restricted_graph(&graph, property_type, percentage.unwrap(), i, stages-i-1);
         }
-    
-    println!("");
     }
 
     println!("\n---------------------------------------- GRAPH SEARCH ------------------------------------------\n");

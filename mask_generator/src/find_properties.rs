@@ -30,7 +30,9 @@ fn num_paths(graph: &MultistageGraph,
             let result_tx = result_tx.clone();
             
             scope.spawn(move || {
-                let mut progress_bar = ProgressBar::new(graph.get_stage(start).unwrap().len());
+                let mut progress_bar = ProgressBar::new(graph.get_stage(start).unwrap()
+                                                             .keys().skip(t)
+                                                             .step_by(num_threads).len());
                 let mut num_paths = 0;
 
                 for input in graph.get_stage(start).unwrap().keys().skip(t).step_by(num_threads) {
@@ -60,7 +62,10 @@ fn num_paths(graph: &MultistageGraph,
                     }
 
                     num_paths += edge_map.len();
-                    progress_bar.increment();
+
+                    if t == 0 {
+                        progress_bar.increment();
+                    }
                 }
                 
                 result_tx.send(num_paths).expect("Thread could not send result");
@@ -76,7 +81,6 @@ fn num_paths(graph: &MultistageGraph,
         num_paths += thread_result;
     }
 
-    println!("");
     num_paths
 }
 
@@ -131,7 +135,9 @@ pub fn find_middle_properties(graph: &MultistageGraph,
             let best_backward = best_backward.clone();
 
             scope.spawn(move || {
-                let mut progress_bar = ProgressBar::new(graph.get_stage(start).unwrap().len());
+                let mut progress_bar = ProgressBar::new(graph.get_stage(start).unwrap()
+                                                             .keys().skip(t)
+                                                             .step_by(num_threads).len());
                 let mut result = vec![];
 
                 // Split input values between threads and call find_properties
@@ -151,7 +157,10 @@ pub fn find_middle_properties(graph: &MultistageGraph,
                         y_value.partial_cmp(&x_value).unwrap()
                     });
                     result.truncate(num_keep);
-                    progress_bar.increment();
+
+                    if t == 0 {
+                        progress_bar.increment();
+                    }
                 }
 
                 result_tx.send(result).expect("Thread could not send result");
@@ -167,8 +176,6 @@ pub fn find_middle_properties(graph: &MultistageGraph,
         
         result.append(&mut thread_result);
     }
-
-    println!("");
 
     result.sort_by(|x, y| {
         let x_value = x.value * best_forward.get(&(x.input as usize)).unwrap() 
@@ -313,9 +320,8 @@ pub fn parallel_find_properties(graph: &MultistageGraph,
                                 output_allowed: &FnvHashSet<u64>,
                                 num_keep: usize) 
                                 -> (Vec<Property>, f64, usize) {
-    let input_len = graph.get_stage(0).unwrap().len();
     println!("Finding properties ({} input values, {} edges):", 
-             input_len, graph.num_edges());
+             graph.get_stage(0).unwrap().len(), graph.num_edges());
 
     let start = time::precise_time_s();
     let num_threads = num_cpus::get();
@@ -327,7 +333,9 @@ pub fn parallel_find_properties(graph: &MultistageGraph,
             let result_tx = result_tx.clone();
 
             scope.spawn(move || {
-                let mut progress_bar = ProgressBar::new(input_len);
+                let mut progress_bar = ProgressBar::new(graph.get_stage(0).unwrap()
+                                                             .keys().skip(t)
+                                                             .step_by(num_threads).len());
                 let rounds = graph.stages()-1;
                 let mut result = vec![];
                 let mut min_value = 1.0_f64;
@@ -356,7 +364,10 @@ pub fn parallel_find_properties(graph: &MultistageGraph,
                         None => { }
                     }
                     result.truncate(num_keep);
-                    progress_bar.increment();
+
+                    if t == 0 {
+                        progress_bar.increment();
+                    }
                 }
 
                 result_tx.send((result, min_value, num_found, paths)).expect("Thread could not send result");
@@ -378,8 +389,6 @@ pub fn parallel_find_properties(graph: &MultistageGraph,
         num_found += thread_result.2;
         paths += thread_result.3;
     }
-
-    println!("");
 
     result.sort_by(|a, b| b.value.partial_cmp(&a.value).unwrap());
     result.truncate(num_keep);

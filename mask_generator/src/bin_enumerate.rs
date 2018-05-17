@@ -11,6 +11,7 @@ extern crate crossbeam_utils;
 extern crate indexmap;
 extern crate num_cpus;
 extern crate time;
+extern crate itertools;
 
 macro_rules! debug {
     ($($arg:tt)*) => (if cfg!(debug_assertions) { println!($($arg)*) })
@@ -117,8 +118,6 @@ fn main() {
     println!("Calculating full approximation table");
 
     let lat = analysis::MaskLAT::new(cipher.as_ref(), &masks);
-
-    println!("");
 
     // construct pools
 

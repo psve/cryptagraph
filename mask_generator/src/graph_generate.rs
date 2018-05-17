@@ -67,12 +67,6 @@ fn get_middle_vertices (properties: &SortedProperties,
             let result_tx = result_tx.clone();
 
             scope.spawn(move || {
-                // Get size of total work to do for all threads
-                thread_properties.set_type_input();
-                let num_input = properties.len();
-                thread_properties.set_type_output();
-                let num_output = properties.len();
-
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
@@ -82,12 +76,13 @@ fn get_middle_vertices (properties: &SortedProperties,
                                                          .step_by(*THREADS)
                                                          .collect();
                 thread_properties.sbox_patterns = tmp;
-
+                
                 // First, collect all input values allowed by the filters
                 // Store them in a hash set for each round
-                let mut progress_bar = ProgressBar::new(num_input);
                 let mut input_sets: SmallVec<[_; 256]> = smallvec![FnvHashSet::default(); rounds-1];
+                {
                 thread_properties.set_type_input();
+                let mut progress_bar = ProgressBar::new(thread_properties.len());
 
                 for (property, _) in thread_properties.into_iter() {
                     // Get old value for filter look up
@@ -101,20 +96,21 @@ fn get_middle_vertices (properties: &SortedProperties,
                         }
                     }
 
-                    progress_bar.increment();
+                    if t == 0 {
+                        progress_bar.increment();
+                    }
                 }
 
-                // Synchronise threads for proper prograss bar printing
+                // Synchronise threads for proper progress bar printing
                 barrier.wait();
-                if t == 0 {
-                    println!("");
                 }
 
                 // Second, collect all output values allowed by the filters
                 // Store them in a hash set for each round
-                let mut progress_bar = ProgressBar::new(num_output);
                 let mut output_sets: SmallVec<[_; 256]> = smallvec![FnvHashSet::default(); rounds-1];
+                {
                 thread_properties.set_type_output();
+                let mut progress_bar = ProgressBar::new(thread_properties.len());
 
                 for (property, _) in thread_properties.into_iter() {
                     // Get old value for filter look up
@@ -128,14 +124,16 @@ fn get_middle_vertices (properties: &SortedProperties,
                         }
                     }
                     
-                    progress_bar.increment();
+                    if t == 0 {
+                        progress_bar.increment();
+                    }
+                }   
                 }
                 
                 result_tx.send((input_sets, output_sets)).expect("Thread could not send result");
             });
         }
     });
-    println!("");
     
     // Last, collect sets from all threads and create graph
     let mut graph = MultistageGraph::new(rounds+1);
@@ -197,7 +195,6 @@ fn add_middle_edges(graph: &MultistageGraph,
                     thread_properties.set_type_all();
                 }
 
-                let mut progress_bar = ProgressBar::new(thread_properties.len());
                 
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
@@ -211,6 +208,7 @@ fn add_middle_edges(graph: &MultistageGraph,
 
                 // Collect all edges that have corresponding vertices in the graph
                 let mut edges = IndexMap::new();
+                let mut progress_bar = ProgressBar::new(thread_properties.len());
 
                 for (property, _) in thread_properties.into_iter() {
                     let input = compress(property.input, level) as usize;
@@ -224,7 +222,9 @@ fn add_middle_edges(graph: &MultistageGraph,
                         }
                     }
 
-                    progress_bar.increment();
+                    if t == 0 {
+                        progress_bar.increment();
+                    }
                 }
                 
                 result_tx.send(edges).expect("Thread could not send result");
@@ -238,7 +238,6 @@ fn add_middle_edges(graph: &MultistageGraph,
         base_graph.add_edges(&thread_result);
     }
 
-    println!("");
     base_graph
 }
 
@@ -282,7 +281,6 @@ fn add_outer_edges (graph: &MultistageGraph,
                     thread_properties.set_type_all();
                 }
 
-                let mut progress_bar = ProgressBar::new(thread_properties.len());
                 
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
@@ -297,6 +295,7 @@ fn add_outer_edges (graph: &MultistageGraph,
                 // Collect all edges that have corresponding output/input vertices in the 
                 // second/second to last stage
                 let mut edges = IndexMap::new();
+                let mut progress_bar = ProgressBar::new(thread_properties.len());
 
                 for (property, _) in thread_properties.into_iter() {
                     let input = compress(property.input, level) as usize;
@@ -331,7 +330,9 @@ fn add_outer_edges (graph: &MultistageGraph,
                         }
                     }
 
-                    progress_bar.increment();
+                    if t == 0 {
+                        progress_bar.increment();
+                    }
                 }
 
                 result_tx.send(edges).expect("Thread could not send result");
@@ -345,7 +346,6 @@ fn add_outer_edges (graph: &MultistageGraph,
         base_graph.add_edges_and_vertices(&thread_result);
     }
 
-    println!("");
     base_graph
 }
 
@@ -381,7 +381,10 @@ fn anchor_ends(cipher: &Cipher,
             let end_labels = end_labels.clone();
 
             scope.spawn(move || {
-                let mut progress_bar = ProgressBar::new(start_labels.len() + end_labels.len());
+                let mut progress_bar = ProgressBar::new(start_labels.iter().skip(t)
+                                                                    .step_by(*THREADS).len() + 
+                                                        end_labels.iter().skip(t)
+                                                                  .step_by(*THREADS).len());
                 let mut edges = IndexMap::new();
                 
                 // Find input anchors 
@@ -394,7 +397,9 @@ fn anchor_ends(cipher: &Cipher,
                         edges.insert((0, input as usize, label), value);
                     }
 
-                    progress_bar.increment();
+                    if t == 0 {
+                        progress_bar.increment();
+                    }
                 }
                 
                 // Find output anchors
@@ -407,7 +412,9 @@ fn anchor_ends(cipher: &Cipher,
                         edges.insert((stages-2, label, output as usize), value);
                     }
 
-                    progress_bar.increment();
+                    if t == 0 {
+                        progress_bar.increment();
+                    }
                 }
 
                 result_tx.send(edges).expect("Thread could not send result");
@@ -420,7 +427,6 @@ fn anchor_ends(cipher: &Cipher,
         let thread_result = result_rx.recv().expect("Main could not receive result");
         graph.add_edges_and_vertices(&thread_result);
     }
-    println!("");
 }
 
 /**
@@ -539,7 +545,6 @@ fn remove_dead_patterns(filters: &[FnvHashSet<u64>],
 
             scope.spawn(move || {
                 thread_properties.set_type_input();
-                let mut progress_bar = ProgressBar::new(thread_properties.len());
                 
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
@@ -553,11 +558,14 @@ fn remove_dead_patterns(filters: &[FnvHashSet<u64>],
 
                 // Find patterns to keep
                 let mut good_patterns = vec![false; thread_properties.len_patterns()];
+                let mut progress_bar = ProgressBar::new(thread_properties.len());
 
                 for (property, pattern_idx) in thread_properties.into_iter() {
                     // Skip if pattern is already marked good
                     if good_patterns[pattern_idx] {
-                        progress_bar.increment();
+                        if t == 0 {
+                            progress_bar.increment();
+                        }
                         continue;
                     }
 
@@ -572,7 +580,10 @@ fn remove_dead_patterns(filters: &[FnvHashSet<u64>],
                     }
 
                     good_patterns[pattern_idx] |= good;
-                    progress_bar.increment();
+                    
+                    if t == 0 {
+                        progress_bar.increment();
+                    }
                 }
 
                 // Keep only good patterns
@@ -596,7 +607,6 @@ fn remove_dead_patterns(filters: &[FnvHashSet<u64>],
         let mut thread_result = result_rx.recv().expect("Main could not receive result");
         new_patterns.append(&mut thread_result);
     }
-    println!("");
 
     properties.sbox_patterns = new_patterns;
     properties.set_type_all();
@@ -689,11 +699,9 @@ pub fn generate_graph(cipher: Box<Cipher>,
         }
 
         let start = time::precise_time_s();
-        let input_allowed_comp = input_allowed.iter().map(|&x| compress(x, level)).collect();
-        let output_allowed_comp = output_allowed.iter().map(|&x| compress(x, level)).collect();
 
         graph = add_outer_edges(&mut graph, &properties, rounds, level, 
-                                &input_allowed_comp, &output_allowed_comp);
+                                &FnvHashSet::default(), &FnvHashSet::default());
         println!("Graph has {} vertices and {} edges [{} s]", 
             graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
 

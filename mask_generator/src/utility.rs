@@ -41,7 +41,8 @@ percentage      The current progress in percent.
 */
 pub struct ProgressBar {
     current_items: f64,
-    item_size: f64
+    item_size: f64,
+    used: bool,
 }
 
 impl ProgressBar {
@@ -55,7 +56,8 @@ impl ProgressBar {
 
         ProgressBar {
             current_items: 0.0,
-            item_size: item_size
+            item_size: item_size,
+            used: false,
         }
     }
 
@@ -71,6 +73,16 @@ impl ProgressBar {
             print!("=");
             io::stdout().flush().ok().expect("Could not flush stdout");
             self.current_items -= 1.0;
+        }
+
+        self.used = true;
+    }
+}
+
+impl Drop for ProgressBar {
+    fn drop(&mut self) {
+        if self.used {
+            println!("");
         }
     }
 }
