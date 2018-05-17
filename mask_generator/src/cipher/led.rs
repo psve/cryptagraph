@@ -191,7 +191,7 @@ impl Cipher for Led {
         }
 
         // All keys are identical
-        vec![k; rounds]
+        vec![k; rounds+1]
     }
 
     /** 
@@ -304,14 +304,14 @@ mod tests {
     fn encryption_test() {
         let cipher = cipher::name_to_cipher("led").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(9, &key);
+        let round_keys = cipher.key_schedule(8, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0x897c0a3001042c93;
 
         assert_eq!(ciphertext, cipher.encrypt(plaintext, &round_keys));
 
         let key = [0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10];
-        let round_keys = cipher.key_schedule(9, &key);
+        let round_keys = cipher.key_schedule(8, &key);
         let plaintext = 0xfedcba9876543210;
         let ciphertext = 0x85cf3983e155300a;
 
@@ -322,14 +322,14 @@ mod tests {
     fn decryption_test() {
         let cipher = cipher::name_to_cipher("led").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(9, &key);
+        let round_keys = cipher.key_schedule(8, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0x897c0a3001042c93;
 
         assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
 
         let key = [0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10];
-        let round_keys = cipher.key_schedule(9, &key);
+        let round_keys = cipher.key_schedule(8, &key);
         let plaintext = 0xfedcba9876543210;
         let ciphertext = 0x85cf3983e155300a;
 
@@ -340,14 +340,14 @@ mod tests {
     fn encryption_decryption_test() {
         let cipher = cipher::name_to_cipher("led").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(9, &key);
+        let round_keys = cipher.key_schedule(8, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 
         assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
 
         let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-        let round_keys = cipher.key_schedule(9, &key);
+        let round_keys = cipher.key_schedule(8, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 

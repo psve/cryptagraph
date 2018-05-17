@@ -267,6 +267,17 @@ impl Cipher for Puffin {
                            -> (u64, u64) {
         (input, self.linear_layer(output))
     }
+
+    /**
+     * Pre-whiteing key used?
+     * (rounds + 1) round keys
+     *
+     * This is the case for most ciphers
+     */
+    #[inline(always)]
+    fn whitening(&self) -> bool { 
+        false 
+    }
 }
 
 

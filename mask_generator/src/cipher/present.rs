@@ -51,8 +51,6 @@ impl Cipher for Present {
         CipherStructure::Spn
     }
 
-    fn whitening(&self) -> bool { false }
-
     /**
     Returns the size of the cipher input in bits.
     */
@@ -155,7 +153,7 @@ impl Cipher for Present {
         s1 <<= 8;
         s1 |= key[9] as u64;
 
-        for r in 0..rounds {
+        for r in 0..(rounds+1) {
             // extract round key
             keys.push(s0);
 
@@ -280,14 +278,14 @@ mod tests {
     fn encryption_test() {
         let cipher = cipher::name_to_cipher("present").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(32, &key);
+        let round_keys = cipher.key_schedule(31, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0x5579c1387b228445;
 
         assert_eq!(ciphertext, cipher.encrypt(plaintext, &round_keys));
 
         let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-        let round_keys = cipher.key_schedule(32, &key);
+        let round_keys = cipher.key_schedule(31, &key);
         let plaintext = 0xffffffffffffffff;
         let ciphertext = 0x3333dcd3213210d2;
 
@@ -298,14 +296,14 @@ mod tests {
     fn decryption_test() {
         let cipher = cipher::name_to_cipher("present").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(32, &key);
+        let round_keys = cipher.key_schedule(31, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0x5579c1387b228445;
 
         assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
 
         let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-        let round_keys = cipher.key_schedule(32, &key);
+        let round_keys = cipher.key_schedule(31, &key);
         let plaintext = 0xffffffffffffffff;
         let ciphertext = 0x3333dcd3213210d2;
 
@@ -316,14 +314,14 @@ mod tests {
     fn encryption_decryption_test() {
         let cipher = cipher::name_to_cipher("present").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(32, &key);
+        let round_keys = cipher.key_schedule(31, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 
         assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
 
         let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-        let round_keys = cipher.key_schedule(32, &key);
+        let round_keys = cipher.key_schedule(31, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 

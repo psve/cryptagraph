@@ -221,7 +221,7 @@ impl Cipher for Pride {
 
         keys.push(k0);
 
-        for r in 0..rounds {
+        for r in 0..(rounds+1) {
             let mut roundkey = 0;
 
             roundkey ^= k1 & 0xff00ff00ff00ff00;
@@ -241,6 +241,8 @@ impl Cipher for Pride {
         }
         
         keys.push(k0);
+        keys[1] ^= keys[0];
+        keys.remove(0);
 
         keys   
     }
@@ -259,12 +261,9 @@ impl Cipher for Pride {
             output ^= self.iperm[i][((input >> (i*8)) & 0xff) as usize];
         }
 
-        // Whitening key
-        output ^= round_keys[0];
-
         for i in 0..19 {
             // Add round key
-            output ^= round_keys[i+1];
+            output ^= round_keys[i];
 
             // Apply S-box
             let mut tmp = 0;
@@ -278,7 +277,7 @@ impl Cipher for Pride {
         }
 
         // Add round key
-        output ^= round_keys[20];
+        output ^= round_keys[19];
 
         // Apply S-box
         let mut tmp = 0;
@@ -288,7 +287,7 @@ impl Cipher for Pride {
         }
 
         // Whitening key
-        output = tmp ^ round_keys[21];
+        output = tmp ^ round_keys[20];
 
         // Final permutation
         let mut tmp = 0;
@@ -315,7 +314,7 @@ impl Cipher for Pride {
         }
 
         // Whitening key
-        output ^= round_keys[21];
+        output ^= round_keys[20];
 
         // Apply S-box
         let mut tmp = 0;
@@ -325,7 +324,7 @@ impl Cipher for Pride {
         }
         
         // Add round key
-        output = tmp ^ round_keys[20];
+        output = tmp ^ round_keys[19];
 
         for i in 0..19 {
             // Linear layer
@@ -339,11 +338,8 @@ impl Cipher for Pride {
             }
 
             // Add round key
-            output = tmp ^ round_keys[20-(i+1)];
+            output = tmp ^ round_keys[18-i];
         }
-
-        // Whitening key
-        output ^= round_keys[0];
 
         // Final permutation
         let mut tmp = 0;
@@ -389,7 +385,7 @@ mod tests {
         let cipher = cipher::name_to_cipher("pride").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(20, &key);
+        let round_keys = cipher.key_schedule(19, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0x82b4109fcc70bd1f;
 
@@ -397,7 +393,7 @@ mod tests {
 
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(20, &key);
+        let round_keys = cipher.key_schedule(19, &key);
         let plaintext = 0xffffffffffffffff;
         let ciphertext = 0xd70e60680a17b956;
 
@@ -405,7 +401,7 @@ mod tests {
 
         let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(20, &key);
+        let round_keys = cipher.key_schedule(19, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0x28f19f97f5e846a9;
 
@@ -413,7 +409,7 @@ mod tests {
 
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-        let round_keys = cipher.key_schedule(20, &key);
+        let round_keys = cipher.key_schedule(19, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0xd123ebaf368fce62;
 
@@ -421,7 +417,7 @@ mod tests {
 
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10];
-        let round_keys = cipher.key_schedule(20, &key);
+        let round_keys = cipher.key_schedule(19, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = 0xd1372929712d336e;
 
@@ -433,7 +429,7 @@ mod tests {
         let cipher = cipher::name_to_cipher("pride").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(20, &key);
+        let round_keys = cipher.key_schedule(19, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0x82b4109fcc70bd1f;
 
@@ -441,7 +437,7 @@ mod tests {
 
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(20, &key);
+        let round_keys = cipher.key_schedule(19, &key);
         let plaintext = 0xffffffffffffffff;
         let ciphertext = 0xd70e60680a17b956;
 
@@ -449,7 +445,7 @@ mod tests {
 
         let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(20, &key);
+        let round_keys = cipher.key_schedule(19, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0x28f19f97f5e846a9;
 
@@ -457,7 +453,7 @@ mod tests {
 
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-        let round_keys = cipher.key_schedule(20, &key);
+        let round_keys = cipher.key_schedule(19, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0xd123ebaf368fce62;
 
@@ -465,7 +461,7 @@ mod tests {
 
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10];
-        let round_keys = cipher.key_schedule(20, &key);
+        let round_keys = cipher.key_schedule(19, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = 0xd1372929712d336e;
 
@@ -477,7 +473,7 @@ mod tests {
         let cipher = cipher::name_to_cipher("pride").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(20, &key);
+        let round_keys = cipher.key_schedule(19, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 
@@ -485,7 +481,7 @@ mod tests {
 
         let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-        let round_keys = cipher.key_schedule(20, &key);
+        let round_keys = cipher.key_schedule(19, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 

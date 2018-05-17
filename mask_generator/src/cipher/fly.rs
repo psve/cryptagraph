@@ -185,7 +185,7 @@ impl Cipher for Fly {
             k1 |= key[i+8] as u64;
         }
 
-        for r in 0..rounds {
+        for r in 0..(rounds+1) {
             if r % 2 == 0 {
                 keys.push(k0)
             } else {

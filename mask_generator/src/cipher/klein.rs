@@ -200,7 +200,7 @@ impl Cipher for Klein {
             k0 |= key[i+4] as u64;
         }
 
-        for r in 0..rounds {
+        for r in 0..(rounds+1) {
             keys.push(k0 ^ (k1 << 32));
 
             k0 = ((k0 << 8) & 0xffffff00) ^ ((k0 >> 24) & 0x000000ff);
@@ -311,28 +311,28 @@ mod tests {
     fn encryption_test() {
         let cipher = cipher::name_to_cipher("klein").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(13, &key);
+        let round_keys = cipher.key_schedule(12, &key);
         let plaintext = 0xffffffffffffffff;
         let ciphertext = 0xcdc0b51f14722bbe;
 
         assert_eq!(ciphertext, cipher.encrypt(plaintext, &round_keys));
 
         let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-        let round_keys = cipher.key_schedule(13, &key);
+        let round_keys = cipher.key_schedule(12, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0x6456764e8602e154;
 
         assert_eq!(ciphertext, cipher.encrypt(plaintext, &round_keys));
 
         let key = [0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef];
-        let round_keys = cipher.key_schedule(13, &key);
+        let round_keys = cipher.key_schedule(12, &key);
         let plaintext = 0xffffffffffffffff;
         let ciphertext = 0x592356c4997176c8;
 
         assert_eq!(ciphertext, cipher.encrypt(plaintext, &round_keys));
 
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(13, &key);
+        let round_keys = cipher.key_schedule(12, &key);
         let plaintext = 0x1234567890abcdef;
         let ciphertext = 0x629f9d6dff95800e;
 
@@ -343,28 +343,28 @@ mod tests {
     fn decryption_test() {
         let cipher = cipher::name_to_cipher("klein").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(13, &key);
+        let round_keys = cipher.key_schedule(12, &key);
         let plaintext = 0xffffffffffffffff;
         let ciphertext = 0xcdc0b51f14722bbe;
 
         assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
 
         let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-        let round_keys = cipher.key_schedule(13, &key);
+        let round_keys = cipher.key_schedule(12, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0x6456764e8602e154;
 
         assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
 
         let key = [0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef];
-        let round_keys = cipher.key_schedule(13, &key);
+        let round_keys = cipher.key_schedule(12, &key);
         let plaintext = 0xffffffffffffffff;
         let ciphertext = 0x592356c4997176c8;
 
         assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
 
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(13, &key);
+        let round_keys = cipher.key_schedule(12, &key);
         let plaintext = 0x1234567890abcdef;
         let ciphertext = 0x629f9d6dff95800e;
 
@@ -375,14 +375,14 @@ mod tests {
     fn encryption_decryption_test() {
         let cipher = cipher::name_to_cipher("klein").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(32, &key);
+        let round_keys = cipher.key_schedule(12, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 
         assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
 
         let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-        let round_keys = cipher.key_schedule(32, &key);
+        let round_keys = cipher.key_schedule(12, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 

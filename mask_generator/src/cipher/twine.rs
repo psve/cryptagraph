@@ -356,6 +356,17 @@ impl Cipher for Twine {
             }
         }
     }
+
+    /**
+     * Pre-whiteing key used?
+     * (rounds + 1) round keys
+     *
+     * This is the case for most ciphers
+     */
+    #[inline(always)]
+    fn whitening(&self) -> bool { 
+        false 
+    }
 }
 
 #[cfg(test)]

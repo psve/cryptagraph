@@ -301,6 +301,17 @@ impl Cipher for Mibs {
             }
         }
     }
+
+    /**
+     * Pre-whiteing key used?
+     * (rounds + 1) round keys
+     *
+     * This is the case for most ciphers
+     */
+    #[inline(always)]
+    fn whitening(&self) -> bool { 
+        false 
+    }
 }
 
 

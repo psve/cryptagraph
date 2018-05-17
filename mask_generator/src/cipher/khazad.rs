@@ -156,7 +156,7 @@ impl Cipher for Khazad {
         keys.push(k0);
         keys.push(k1);
 
-        for r in 0..rounds {
+        for r in 0..(rounds+1) {
             // Apply S-box
             let mut tmp = 0;
 
@@ -177,6 +177,8 @@ impl Cipher for Khazad {
             keys.push(tmp);
         }
 
+        keys.remove(0);
+        keys.remove(0);
         keys
     }
 
@@ -188,7 +190,7 @@ impl Cipher for Khazad {
     */
     fn encrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64 {
         let mut output = input;
-        output ^= round_keys[2];
+        output ^= round_keys[0];
 
         for i in 1..8 {
             // Apply S-box
@@ -202,7 +204,7 @@ impl Cipher for Khazad {
             output = self.linear_layer(tmp);
 
             // Add round key
-            output ^= round_keys[i+2];
+            output ^= round_keys[i];
         }
 
         // Apply S-box
@@ -213,7 +215,7 @@ impl Cipher for Khazad {
         }
 
         // Add round key
-        output = tmp ^ round_keys[10];
+        output = tmp ^ round_keys[8];
         output
     }
 
@@ -225,7 +227,7 @@ impl Cipher for Khazad {
     */
     fn decrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64 {
         let mut output = input;
-        output ^= round_keys[10];
+        output ^= round_keys[8];
 
         for i in 1..8 {
             // Apply S-box
@@ -239,7 +241,7 @@ impl Cipher for Khazad {
             output = self.linear_layer(tmp);
 
             // Add round key
-            output ^= self.linear_layer(round_keys[10-i]);
+            output ^= self.linear_layer(round_keys[8-i]);
         }
 
         // Apply S-box
@@ -250,7 +252,7 @@ impl Cipher for Khazad {
         }
 
         // Add round key
-        output = tmp ^ round_keys[2];
+        output = tmp ^ round_keys[0];
         output
     }
 
@@ -288,7 +290,7 @@ mod tests {
         let cipher = cipher::name_to_cipher("khazad").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80];
-        let round_keys = cipher.key_schedule(9, &key);
+        let round_keys = cipher.key_schedule(8, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0x3f0e19ac32cea449 ;
 
@@ -296,7 +298,7 @@ mod tests {
 
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40];
-        let round_keys = cipher.key_schedule(9, &key);
+        let round_keys = cipher.key_schedule(8, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0xd14a8b12c12622bd;
 
@@ -304,7 +306,7 @@ mod tests {
 
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(9, &key);
+        let round_keys = cipher.key_schedule(8, &key);
         let plaintext = 0x0400000000000000; 
         let ciphertext = 0x7e15dcf0d2759f84;
 
@@ -316,7 +318,7 @@ mod tests {
         let cipher = cipher::name_to_cipher("khazad").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80];
-        let round_keys = cipher.key_schedule(9, &key);
+        let round_keys = cipher.key_schedule(8, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0x3f0e19ac32cea449 ;
 
@@ -324,7 +326,7 @@ mod tests {
 
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40];
-        let round_keys = cipher.key_schedule(9, &key);
+        let round_keys = cipher.key_schedule(8, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0xd14a8b12c12622bd;
 
@@ -332,7 +334,7 @@ mod tests {
 
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(9, &key);
+        let round_keys = cipher.key_schedule(8, &key);
         let plaintext = 0x0400000000000000; 
         let ciphertext = 0x7e15dcf0d2759f84;
 
@@ -344,7 +346,7 @@ mod tests {
         let cipher = cipher::name_to_cipher("khazad").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(9, &key);
+        let round_keys = cipher.key_schedule(8, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 
@@ -352,7 +354,7 @@ mod tests {
 
         let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-        let round_keys = cipher.key_schedule(9, &key);
+        let round_keys = cipher.key_schedule(8, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 

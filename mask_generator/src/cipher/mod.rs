@@ -223,7 +223,9 @@ pub trait Cipher: Sync {
      * This is the case for most ciphers
      */
     #[inline(always)]
-    fn whitening(&self) -> bool { true }
+    fn whitening(&self) -> bool { 
+        true 
+    }
 }
 
 mod fly;
