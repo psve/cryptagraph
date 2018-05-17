@@ -102,6 +102,13 @@ impl Sbox {
     pub fn differential_zero(&self) -> i16 {
         0
     }
+
+    /**
+    Returns a bitmask the corresponds to the S-box size.
+    */
+    pub fn mask(&self) -> u64 {
+        (1 << self.size) - 1
+    }
 }
 
 /**
@@ -153,11 +160,7 @@ pub trait Cipher: Sync {
     /** 
     Applies the inverse linear layer of the cipher.
     
-    input   fn sbox_mask_transform(&self, 
-                           input: u64, 
-                           output: u64, 
-                           property_type: PropertyType) 
-The input to the inverse linear layer. 
+    input   The input to the inverse linear layer. 
     */
     fn linear_layer_inv(&self, input: u64) -> u64;
 
