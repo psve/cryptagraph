@@ -358,7 +358,9 @@ graph           The graph to modify.
 */
 fn anchor_ends(cipher: &Cipher,
                property_type: PropertyType,
-               graph: &mut MultistageGraph) {
+               graph: &mut MultistageGraph,
+               input_allowed: &FnvHashSet<u64>,
+               output_allowed: &FnvHashSet<u64>) {
     let (result_tx, result_rx) = mpsc::channel();
     let mask_map = MaskMap::new(cipher, property_type);
     let stages = graph.stages();
@@ -394,7 +396,9 @@ fn anchor_ends(cipher: &Cipher,
                     let inputs = mask_map.get_best_inputs(cipher, output, num_anchor);
 
                     for (input, value) in inputs {
-                        edges.insert((0, input as usize, label), value);
+                        if input_allowed.len() == 0 || input_allowed.contains(&input) {
+                            edges.insert((0, input as usize, label), value);
+                        }
                     }
 
                     if t == 0 {
@@ -409,7 +413,10 @@ fn anchor_ends(cipher: &Cipher,
 
                     for (output, value) in outputs {
                         let output = cipher.linear_layer(output);
-                        edges.insert((stages-2, label, output as usize), value);
+
+                        if output_allowed.len() == 0 || output_allowed.contains(&output) {
+                            edges.insert((stages-2, label, output as usize), value);
+                        }
                     }
 
                     if t == 0 {
@@ -745,7 +752,8 @@ pub fn generate_graph(cipher: Box<Cipher>,
             graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
 
     let start = time::precise_time_s();
-    anchor_ends(cipher.as_ref(), property_type, &mut graph);
+    anchor_ends(cipher.as_ref(), property_type, &mut graph,
+                &input_allowed, &output_allowed);
     println!("Anchored graph has {} vertices and {} edges [{} s]\n", 
             graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
 
