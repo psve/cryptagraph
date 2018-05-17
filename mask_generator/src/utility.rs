@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-/** 
+/**
 Finds the parity of <input, alpha> ^ <outout, beta>, where <_,_> is the inner product
 over F_2. Taken from http://www.graphics.stanford.edu/~seander/bithacks.html#ParityMultiply
 
@@ -9,10 +9,10 @@ output  Output value.
 alpha   Input mask.
 beta    Output mask.
 */
-pub fn parity_masks(input: u64, 
-                    output: u64, 
-                    alpha: u64, 
-                    beta: u64) 
+pub fn parity_masks(input: u64,
+                    output: u64,
+                    alpha: u64,
+                    beta: u64)
                     -> u64 {
     let mut y = (input & alpha) | ((output & beta) << 32);
 
@@ -63,9 +63,10 @@ impl ProgressBar {
     Increment the current progress of the progress bar. The progress bar prints if
     a new step was reached.
     */
+    #[inline(always)]
     pub fn increment(&mut self) {
         self.current_items += self.item_size;
-        
+
         while self.current_items >= 1.0 {
             print!("=");
             io::stdout().flush().ok().expect("Could not flush stdout");

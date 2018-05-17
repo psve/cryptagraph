@@ -35,6 +35,7 @@ use std::io::{BufRead, BufReader, Write};
 use structopt::StructOpt;
 use cipher::*;
 use pool::MaskPool;
+use utility::{parity, ProgressBar};
 
 #[derive(Clone, StructOpt)]
 #[structopt(name = "Hull Enumeration")]
@@ -104,18 +105,27 @@ fn main() {
         None    => panic!("unsupported cipher")
     };
 
+    println!("Target cipher: {}", cipher.name());
+
+    match &options.output {
+        Some(prefix) => println!("Saving results to {}.xyz.corr", prefix),
+        None => println!("Results will not be saved!")
+    };
+
     // calculate LAT for masks between rounds (cipher dependent)
 
-    println!("> calculating approximation table");
+    println!("Calculating full approximation table");
 
     let lat = analysis::MaskLAT::new(cipher.as_ref(), &masks);
+
+    println!("{}");
 
     // construct pools
 
     let mut pool_old = MaskPool::new();
     let mut pool_new = MaskPool::new();
 
-    println!("> enumerating keys");
+    println!("Enumerating keys");
 
     let mut rng = OsRng::new().unwrap();
     let mut key = vec![0; cipher.key_size() / 8];
@@ -141,25 +151,33 @@ fn main() {
         )
     }
 
-    for n in 0..options.keys {
+    let round_keys = if cipher.whitening() {
+        options.rounds + 1
+    } else {
+        options.rounds
+    };
 
-        println!("key: {}", n);
+    let mut bar = ProgressBar::new(options.keys);
+
+    for _ in 0..options.keys {
+
+        bar.increment();
 
         // generate rounds keys
 
         rng.fill_bytes(&mut key);
-        let keys = cipher.key_schedule(options.rounds, &key);
+        let keys = cipher.key_schedule(round_keys, &key);
 
         // initalize pool with chosen alpha
 
         pool_old.clear();
         pool_old.add(alpha);
 
-        for rkey in keys.iter() {
+        for round in 1..options.rounds {
 
             // "clock" all patterns one round
 
-            pool::step(&lat, &mut pool_new, &pool_old, *rkey);
+            pool::step(&lat, &mut pool_new, &pool_old, keys[round]);
 
             // check for early termination
 
@@ -178,21 +196,20 @@ fn main() {
             }
         }
 
+
         for (i, beta) in betas.iter().enumerate() {
 
             let corr = match pool_old.masks.get(&beta) {
-                Some(c) => *c,
+                Some(c) =>
+                    if cipher.whitening() && parity(beta & keys[options.rounds]) == 1  {
+                        - (*c)
+                    } else {
+                        *c
+                    },
                 None    => 0.0
             };
 
             outputs[i].write_fmt(format_args!("{:}\n", corr)).unwrap();
-
-            /*
-            debug!("> paths[{:x}] = {:}", beta, match pool_old.paths.get(&beta) {
-                Some(c) => *c,
-                None    => 0
-            });
-            */
         }
     }
 }

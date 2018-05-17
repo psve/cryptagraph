@@ -1,6 +1,7 @@
 use cipher::{Cipher, Sbox};
 use std::collections::{HashMap};
 use approximation::{Approximation};
+use utility::{ProgressBar};
 
 static FLOAT_TINY : f64 = 0.00000000000000000000000000000000001;
 
@@ -89,6 +90,7 @@ impl LAT {
         lat
     }
 
+    #[inline(always)]
     pub fn lookup(&self, a : u64, b : u64) -> Option<f64> {
         match self.lat.get(a as usize) {
             None      => None,
@@ -107,6 +109,7 @@ impl MaskLAT {
     /* Takes a LAT of a component function and
      * computes the correlation of parities over the bricklayer function.
      */
+    #[inline(always)]
     fn correlation(
         cipher : &Cipher,
         lat    : &LAT,
@@ -117,7 +120,7 @@ impl MaskLAT {
         let mut alpha      = alpha;
         let mut beta       = beta;
 
-        assert_eq!(cipher.sbox().size * cipher.num_sboxes(), 64);
+        debug_assert_eq!(cipher.sbox().size * cipher.num_sboxes(), 64);
 
         let w = cipher.sbox().size;
         let m = (1 << w) - 1;
@@ -126,7 +129,7 @@ impl MaskLAT {
             match lat.lookup(alpha & m, beta & m) {
                 None    => { return None; }
                 Some(c) => {
-                    assert!(c*c > 0.0);
+                    debug_assert!(c*c > 0.0);
                     corr *= c;
                 }
             }
@@ -134,8 +137,8 @@ impl MaskLAT {
             alpha >>= w;
         }
 
-        assert_eq!(beta, 0);
-        assert_eq!(alpha, 0);
+        debug_assert_eq!(beta, 0);
+        debug_assert_eq!(alpha, 0);
 
         if corr * corr < FLOAT_TINY {
             None
@@ -179,12 +182,15 @@ impl MaskLAT {
             mlat.map_alpha.insert(*alpha, vec![]);
         }
 
+        let mut bar = ProgressBar::new(masks.len());
+
         for alpha in masks.iter() {
+            bar.increment();
             for beta in betas.iter() {
                 match MaskLAT::correlation(cipher, &lat, *alpha, *beta) {
                     None       => (), // zero correlation
                     Some(corr) => {
-                        assert!(corr*corr > 0.0);
+                        debug_assert!(corr*corr > 0.0);
                         let vector = mlat.map_alpha.get_mut(alpha).unwrap();
                         /* NOTE:
                          *   Applies linear layer to beta
