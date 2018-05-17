@@ -20,12 +20,10 @@ impl MaskPool {
 
     pub fn clear(&mut self) {
         self.masks.clear();
-        // self.paths.clear();
     }
 
     pub fn add(&mut self, mask: u64) {
         self.masks.insert(mask, 1.0);
-        // self.paths.insert(mask, 1);
     }
 
     pub fn size(&self) -> usize {
