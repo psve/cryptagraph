@@ -1,5 +1,5 @@
 use crossbeam_utils::scoped;
-use fnv::FnvHashSet;
+use fnv::{FnvHashSet, FnvHashMap};
 use indexmap::IndexMap;
 use num_cpus;
 use smallvec::SmallVec;
@@ -9,7 +9,7 @@ use time;
 
 use cipher::*;
 use graph::MultistageGraph;
-use property::{PropertyType, PropertyFilter};
+use property::{PropertyType, PropertyFilter, MaskMap};
 use single_round::SortedProperties;
 use utility::ProgressBar;
 
@@ -350,6 +350,80 @@ fn add_outer_edges (graph: &MultistageGraph,
 }
 
 /**
+Adds good edges from to/from each vertex in the second/second to last layer.
+
+cipher          The cipher being analysed.
+property_type   The type of property being analysed.
+graph           The graph to modify.
+*/
+fn anchor_ends(cipher: &Cipher,
+               property_type: PropertyType,
+               graph: &mut MultistageGraph) {
+    let (result_tx, result_rx) = mpsc::channel();
+    let mask_map = MaskMap::new(cipher, property_type);
+    let stages = graph.stages();
+    let start_labels: Vec<_> = graph.get_stage(1).unwrap().keys().cloned().collect();
+    let end_labels: Vec<_> = graph.get_stage(stages-2).unwrap().keys().cloned().collect();
+
+    // Determine number of anchors to add
+    let limit = 0.max((1 << 16) 
+        - (graph.get_stage(0).unwrap().len() 
+         + graph.get_stage(stages-1).unwrap().len()) as i64);
+    let num_anchor = limit as usize / (start_labels.len() + end_labels.len());
+    println!("Adding {:?} anchors per end vertex.", num_anchor);
+
+    // Start scoped worker threads
+    scoped::scope(|scope| {
+        for t in 0..*THREADS {
+            let result_tx = result_tx.clone();
+            let mask_map = mask_map.clone();
+            let start_labels = start_labels.clone();
+            let end_labels = end_labels.clone();
+
+            scope.spawn(move || {
+                let mut progress_bar = ProgressBar::new(start_labels.len() + end_labels.len());
+                let mut edges = IndexMap::new();
+                
+                // Find input anchors 
+                for &label in start_labels.iter().skip(t).step_by(*THREADS) {
+                    // Invert input to get output
+                    let output = cipher.linear_layer_inv(label as u64);
+                    let inputs = mask_map.get_best_inputs(cipher, output, num_anchor);
+
+                    for (input, value) in inputs {
+                        edges.insert((0, input as usize, label), value);
+                    }
+
+                    progress_bar.increment();
+                }
+                
+                // Find output anchors
+                for &label in end_labels.iter().skip(t).step_by(*THREADS) {
+                    let input = label as u64;
+                    let outputs = mask_map.get_best_outputs(cipher, input, num_anchor);
+
+                    for (output, value) in outputs {
+                        let output = cipher.linear_layer(output);
+                        edges.insert((stages-2, label, output as usize), value);
+                    }
+
+                    progress_bar.increment();
+                }
+
+                result_tx.send(edges).expect("Thread could not send result");
+            });
+        }
+    });
+
+    // Add edges and vertices from each thread
+    for _ in 0..*THREADS {
+        let thread_result = result_rx.recv().expect("Main could not receive result");
+        graph.add_edges_and_vertices(&thread_result);
+    }
+    println!("");
+}
+
+/**
 Special pruning for Prince-like ciphers. The last layer is also pruned with regards to the
 reflection function. 
 
@@ -576,6 +650,8 @@ pub fn generate_graph(cipher: Box<Cipher>,
                       input_allowed: &FnvHashSet<u64>,
                       output_allowed: &FnvHashSet<u64>) 
                       -> MultistageGraph {
+    let rounds = rounds - 2;
+
     // Generate the set of properties to consider
     let mut properties = SortedProperties::new(cipher.as_ref(), patterns, 
                                                property_type, PropertyFilter::All);
@@ -649,12 +725,33 @@ pub fn generate_graph(cipher: Box<Cipher>,
         println!("");
     }
 
+    // Extending and anchoring
+    let rounds = rounds + 2;
+    graph.vertices.insert(0, FnvHashMap::default());
+    graph.vertices.push(FnvHashMap::default());
+
+    let start = time::precise_time_s();
+    graph = add_outer_edges(&mut graph, &properties, rounds, 3,
+                            &input_allowed, &output_allowed);
+    println!("Extended graph has {} vertices and {} edges [{} s]\n", 
+            graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
+
+    let start = time::precise_time_s();
+    anchor_ends(cipher.as_ref(), property_type, &mut graph);
+    println!("Anchored graph has {} vertices and {} edges [{} s]\n", 
+            graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
+
+    graph.prune(0, rounds+1);
+    println!("Final graph has {} vertices and {} edges", 
+            graph.num_vertices(), graph.num_edges());
+
+    // Reflecting in case of Prince type ciphers
     if cipher.structure() == CipherStructure::Prince {
         let start = time::precise_time_s();
         graph = prince_modification(cipher.as_ref(), &mut graph);
         println!("Reflected graph has {} vertices and {} edges [{} s]\n", 
             graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
     }
-    
+
     graph
 }

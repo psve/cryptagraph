@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
 use cipher::Cipher;
-use property::{Property, PropertyType, PropertyFilter, PropertyMap};
+use property::{Property, PropertyType, PropertyFilter, ValueMap};
 
 /** 
 An internal representation of a partial S-box pattern. An S-box pattern describes a
@@ -209,12 +209,12 @@ impl SboxPattern {
     /**
     Generates the next property matching the S-box pattern. 
 
-    property_map        A map from S-box values to inputs/outputs.
+    value_map        A map from S-box values to inputs/outputs.
     property_filter     A filter determining whether to produce full properties, or only
                         inputs/outputs.
     */
     fn next(&mut self, 
-            property_map: &PropertyMap,
+            value_map: &ValueMap,
             property_filter: &PropertyFilter) 
             -> Option<Property> {
         // If there are no active S-boxes in the pattern, it is already empty
@@ -231,9 +231,9 @@ impl SboxPattern {
         if self.status == PatternStatus::New {
             for &(i, x) in &self.pattern {
                 let sbox_property = match property_filter {
-                    PropertyFilter::All   => property_map.get(&x).unwrap()[0],
-                    PropertyFilter::Input => property_map.get_input(&x).unwrap()[0],
-                    PropertyFilter::Output  => property_map.get_output(&x).unwrap()[0]
+                    PropertyFilter::All   => value_map.get(&x).unwrap()[0],
+                    PropertyFilter::Input => value_map.get_input(&x).unwrap()[0],
+                    PropertyFilter::Output  => value_map.get_output(&x).unwrap()[0]
                 };
 
                 let input = sbox_property.input;
@@ -255,9 +255,9 @@ impl SboxPattern {
             let idx = self.pattern[i].0;
             let val = self.pattern[i].1;
             let modulus = match property_filter {
-                PropertyFilter::All    => property_map.len_of(val),
-                PropertyFilter::Input  => property_map.len_of_input(val),
-                PropertyFilter::Output => property_map.len_of_output(val)
+                PropertyFilter::All    => value_map.len_of(val),
+                PropertyFilter::Input  => value_map.len_of_input(val),
+                PropertyFilter::Output => value_map.len_of_output(val)
             };
 
             self.counter[i] = (self.counter[i] + 1) % modulus;
@@ -270,9 +270,9 @@ impl SboxPattern {
 
             // Update current position
             let app = match property_filter {
-                PropertyFilter::All    => property_map.get(&val).unwrap()[self.counter[i]],
-                PropertyFilter::Input  => property_map.get_input(&val).unwrap()[self.counter[i]],
-                PropertyFilter::Output => property_map.get_output(&val).unwrap()[self.counter[i]]
+                PropertyFilter::All    => value_map.get(&val).unwrap()[self.counter[i]],
+                PropertyFilter::Input  => value_map.get_input(&val).unwrap()[self.counter[i]],
+                PropertyFilter::Output => value_map.get_output(&val).unwrap()[self.counter[i]]
             };
 
             self.property.input = 
@@ -292,22 +292,22 @@ impl SboxPattern {
     /** 
     Returns the number of properties described by this pattern 
     */
-    fn num_app(&self, property_map: &PropertyMap) -> usize {
-        self.pattern.iter().fold(1, |acc, &(_, x)| acc * property_map.len_of(x))
+    fn num_app(&self, value_map: &ValueMap) -> usize {
+        self.pattern.iter().fold(1, |acc, &(_, x)| acc * value_map.len_of(x))
     }
 
     /** 
     Returns the number of inputs described by this pattern 
     */
-    fn num_input(&self, property_map: &PropertyMap) -> usize {
-        self.pattern.iter().fold(1, |acc, &(_, x)| acc * property_map.len_of_input(x))
+    fn num_input(&self, value_map: &ValueMap) -> usize {
+        self.pattern.iter().fold(1, |acc, &(_, x)| acc * value_map.len_of_input(x))
     }
 
     /** 
     Returns the number of outputs described by this pattern 
     */
-    fn num_output(&self, property_map: &PropertyMap) -> usize {
-        self.pattern.iter().fold(1, |acc, &(_, x)| acc * property_map.len_of_output(x))
+    fn num_output(&self, value_map: &ValueMap) -> usize {
+        self.pattern.iter().fold(1, |acc, &(_, x)| acc * value_map.len_of_output(x))
     }
 }
 
@@ -319,7 +319,7 @@ ascending order of their value. The actual properties are lazily
 generated using the Iterator trait.
 
 cipher                   The cipher whose round function we are considering.
-property_map             The property map for the cipher's S-box.
+value_map                The property map for the cipher's S-box.
 sbox_patterns            A list of S-box patterns sorted by their property values.
 property_type            The type of property the iterator generates. 
 property_filter          What type of property an iterator will generate.
@@ -327,7 +327,7 @@ property_filter          What type of property an iterator will generate.
 #[derive(Clone)]
 pub struct SortedProperties<'a> {
     pub cipher: &'a Cipher,
-    pub property_map: PropertyMap,
+    pub value_map: ValueMap,
     pub sbox_patterns: Vec<SboxPattern>,
     property_type: PropertyType,
     property_filter: PropertyFilter,
@@ -352,8 +352,8 @@ impl<'a> SortedProperties<'a> {
                property_filter: PropertyFilter) 
                -> SortedProperties {
         // Generate property map and get S-box property values
-        let property_map = PropertyMap::new(cipher, property_type);
-        let mut property_values: SmallVec<[_; 128]> = property_map.map.keys().cloned().collect();
+        let value_map = ValueMap::new(cipher, property_type);
+        let mut property_values: SmallVec<[_; 128]> = value_map.map.keys().cloned().collect();
 
         // We need the values in descending order
         property_values.sort_by(|a, b| b.abs().cmp(&a.abs()));
@@ -383,7 +383,7 @@ impl<'a> SortedProperties<'a> {
                                    .collect();
 
                 return SortedProperties{cipher: cipher.clone(),
-                                            property_map: property_map.clone(),
+                                            value_map: value_map.clone(),
                                             sbox_patterns: sbox_patterns,
                                             property_type: property_type,
                                             property_filter: property_filter}
@@ -423,7 +423,7 @@ impl<'a> SortedProperties<'a> {
                                   .collect();
 
         return SortedProperties{cipher: cipher.clone(),
-                                property_map: property_map.clone(),
+                                value_map: value_map.clone(),
                                 sbox_patterns: sbox_patterns,
                                 property_type: property_type,
                                 property_filter: property_filter}
@@ -437,9 +437,9 @@ impl<'a> SortedProperties<'a> {
 
         for pattern in &self.sbox_patterns {
             let combinations = match self.property_filter {
-                PropertyFilter::All    => pattern.num_app(&self.property_map),
-                PropertyFilter::Input  => pattern.num_input(&self.property_map),
-                PropertyFilter::Output => pattern.num_output(&self.property_map),
+                PropertyFilter::All    => pattern.num_app(&self.value_map),
+                PropertyFilter::Input  => pattern.num_input(&self.value_map),
+                PropertyFilter::Output => pattern.num_output(&self.value_map),
             };
 
             len += combinations;
@@ -487,7 +487,7 @@ impl<'a> IntoIterator for &'a SortedProperties<'a> {
     fn into_iter(self) -> Self::IntoIter {
         SortedPropertiesIterator { 
             cipher: self.cipher,
-            property_map: self.property_map.clone(),
+            value_map: self.value_map.clone(),
             sbox_patterns: self.sbox_patterns.clone(),
             property_type: self.property_type.clone(),
             property_filter: self.property_filter.clone(),
@@ -501,7 +501,7 @@ An iterator over properties represented by a SortedProperties struct.
 
 cipher              The cipher considered.
 sbox_patterns       A vector of patterns to generate properties from.
-property_map        A map from S-box property values to property input/output.
+value_map           A map from S-box property values to property input/output.
 property_type       The type of property the iterator generates. 
 property_filter     Determines whether to generate full properties or just inputs/outputs.
 current_pattern     Index of the current pattern used to generate properties.
@@ -510,7 +510,7 @@ current_pattern     Index of the current pattern used to generate properties.
 pub struct SortedPropertiesIterator<'a> {
     cipher: &'a Cipher,
     pub sbox_patterns: Vec<SboxPattern>,
-    property_map: PropertyMap,
+    value_map: ValueMap,
     property_type: PropertyType,
     property_filter: PropertyFilter,
     current_pattern: usize
@@ -536,7 +536,7 @@ impl<'a> Iterator for SortedPropertiesIterator<'a> {
 
         while property.is_none() {
             let pattern = &mut self.sbox_patterns[self.current_pattern];
-            property = match pattern.next(&self.property_map, &self.property_filter) {
+            property = match pattern.next(&self.value_map, &self.property_filter) {
                 Some(x) => Some(x),
                 None => {
                     self.current_pattern += 1;

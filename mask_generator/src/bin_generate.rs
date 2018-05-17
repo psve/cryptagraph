@@ -7,6 +7,7 @@
 extern crate crossbeam_utils;
 extern crate fnv;
 extern crate indexmap;
+extern crate itertools;
 extern crate num_cpus;
 extern crate rand;
 extern crate structopt;

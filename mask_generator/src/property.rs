@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::str::FromStr;
 use std::cmp::Ordering;
 use std::fmt;
@@ -30,12 +31,13 @@ pub enum PropertyFilter {
     Output
 }
 
-/* A structure representing a property (e.g. linear approximation or differential).
- *
- * input    The input value of the property.
- * output   The output value of the property.
- * value    The value of the property.
- */
+/** 
+A structure representing a property (e.g. linear approximation or differential).
+
+input    The input value of the property.
+output   The output value of the property.
+value    The value of the property.
+*/
 #[derive(Copy, Clone)]
 pub struct Property {
     pub input: u64,
@@ -45,10 +47,11 @@ pub struct Property {
 }
 
 impl Property {
-    /* Generates a new property.
-     *
-     * input    The input mask.
-     * output     The output mask.
+    /** 
+    Generates a new property.
+    
+    input    The input mask.
+    output     The output mask.
      */
     pub fn new(
         input: u64, output: u64, 
@@ -102,25 +105,27 @@ impl fmt::Debug for Property {
 
 
 
-/* A structure that represents a property of an S-box as map from values to matching properties.
- *
- * map          The mapping from the values to a vector of properties that have this value.
- * input_map    Same as map, but where only the input of the property is kept.
- * output_map   Same as map, but where only the output of the property is kept.
- */
+/** 
+A structure that represents a property of an S-box as map from values to matching properties.
+
+map          The mapping from the values to a vector of properties that have this value.
+input_map    Same as map, but where only the input of the property is kept.
+output_map   Same as map, but where only the output of the property is kept.
+*/
 #[derive(Clone)]
-pub struct PropertyMap {
+pub struct ValueMap {
     pub map: FnvHashMap<i16, Vec<Property>>,
     input_map: FnvHashMap<i16, Vec<Property>>,
     output_map: FnvHashMap<i16, Vec<Property>>,
 }
 
-impl PropertyMap {
-    /* Generate a new property map from an S-box.
-     *
-     * sbox     The S-box used as the generator.
-     */
-    pub fn new(cipher: &Cipher, property_type: PropertyType) -> PropertyMap {
+impl ValueMap {
+    /** 
+    Generate a new property map from an S-box.
+    
+    sbox     The S-box used as the generator.
+    */
+    pub fn new(cipher: &Cipher, property_type: PropertyType) -> ValueMap {
         let mut map = FnvHashMap::default();
         let mut input_map = FnvHashMap::default();
         let mut output_map = FnvHashMap::default();
@@ -132,12 +137,12 @@ impl PropertyMap {
             PropertyType::Differential => cipher.sbox().differential_zero(),
         };
 
-        let property_map = match property_type {
+        let value_map = match property_type {
             PropertyType::Linear => cipher.sbox().lat.clone(),
             PropertyType::Differential => cipher.sbox().ddt.clone(),
         };
 
-        for (input, row) in property_map.iter().enumerate() {
+        for (input, row) in value_map.iter().enumerate() {
             for (output, element) in row.iter().enumerate() {
                 // If the property is not balanced, we add it to the map
                 if *element as i16 != non_property {
@@ -167,49 +172,241 @@ impl PropertyMap {
             outputs.dedup();
         }
 
-        PropertyMap {
+        ValueMap {
             map: map, 
             input_map: input_map, 
             output_map: output_map
         }
     }
 
-    /* Getter to avoid unecessary syntax. Simply reimplements FnvHashMap::get */
+    /** 
+    Getter to avoid unecessary syntax. Simply reimplements FnvHashMap::get .
+    */
     pub fn get(&self, k: &i16) -> Option<&Vec<Property>> {
         self.map.get(k)
     }
 
-    /* Getter for the input map */
+    /** 
+    Getter for the input map.
+    */
     pub fn get_input(&self, k: &i16) -> Option<&Vec<Property>> {
         self.input_map.get(k)
     }
 
-    /* Getter for the output map */
+    /** 
+    Getter for the output map.
+    */
     pub fn get_output(&self, k: &i16) -> Option<&Vec<Property>> {
         self.output_map.get(k)
     }
 
-    /* Gets the number of properties that has a certain value.
-     *
-     * value    The target property value.
-     */
+    /** 
+    Gets the number of properties that has a certain value.
+    
+    value    The target property value.
+    */
     pub fn len_of(&self, value: i16) -> usize {
         self.get(&value).unwrap().len()
     }
 
-    /* Gets the number of inputs that has a value.
-     *
-     * value    The target property value.
-     */
+    /** 
+    Gets the number of inputs that has a value.
+    
+    value    The target property value.
+    */
     pub fn len_of_input(&self, value: i16) -> usize {
         self.get_input(&value).unwrap().len()
     }
 
-    /* Gets the number of outputs that has a certain value.
-     *
-     * value    The target property value.
-     */
+    /** 
+    Gets the number of outputs that has a certain value.
+    
+    value    The target property value.
+    */
     pub fn len_of_output(&self, value: i16) -> usize {
         self.get_output(&value).unwrap().len()
+    }
+}
+
+/**
+A structure representing a mapping from S-box inputs/outputs to outputs/inputs and 
+corresponding property values. The maps are sorted in descending order by value.
+
+input_map       Map from inputs to outputs.
+output_map      Map from outputs to inputs.
+property_type   The type of property the map represents.
+*/
+#[derive(Clone)]
+pub struct MaskMap {
+    pub input_map: FnvHashMap<u64, Vec<(u64, i16)>>,
+    pub output_map: FnvHashMap<u64, Vec<(u64, i16)>>,
+    property_type: PropertyType,
+}
+
+impl MaskMap {
+    pub fn new(cipher: &Cipher,
+               property_type: PropertyType) 
+               -> MaskMap {
+        let non_property = match property_type {
+            PropertyType::Linear => cipher.sbox().linear_balance(),
+            PropertyType::Differential => cipher.sbox().differential_zero(),
+        };
+
+        // Get the corresponding property table
+        let table = match property_type {
+            PropertyType::Linear => &(cipher.sbox().lat),
+            PropertyType::Differential => &(cipher.sbox().ddt),
+        };
+
+        // Collect data into two maps
+        let mut input_map = FnvHashMap::default();
+        let mut output_map = FnvHashMap::default();
+
+        for r in 1..table.len() {
+            for c in 1..table[r].len() {
+                let x = ((table[r][c] as i16) - non_property).abs();
+                if x != 0 {
+                    let entry = input_map.entry(r as u64).or_insert(Vec::new());
+                    entry.push((c as u64, x));
+
+                    let entry = output_map.entry(c as u64).or_insert(Vec::new());
+                    entry.push((r as u64, x));
+                }
+            }
+        }
+
+        for v in input_map.values_mut() {
+            v.sort_by(|x, y| y.1.cmp(&x.1));
+        }
+
+        for v in output_map.values_mut() {
+            v.sort_by(|x, y| y.1.cmp(&x.1));
+        }
+
+        MaskMap {
+            input_map: input_map,
+            output_map: output_map,
+            property_type: property_type,
+        }
+    }
+
+    /**
+    Given an output of an S-box layer, returns the best inputs. 
+
+    cipher      Cipher to consider.
+    output      Output of the S-box layer.
+    limit       Maximum number of inputs to generate.
+    */
+    pub fn get_best_inputs(&self,
+                           cipher: &Cipher,
+                           output: u64,
+                           limit: usize)
+                           -> Vec<(u64, f64)> {
+        let mask = cipher.sbox().mask();
+        let trivial = match self.property_type {
+            PropertyType::Linear => (1 << (cipher.sbox().size-1)) as f64,
+            PropertyType::Differential => (1 << cipher.sbox().size) as f64
+        };
+
+        // Extract active positions and output values
+        let mut active = Vec::new();
+
+        for i in 0..cipher.num_sboxes() {
+            let x = (output >> (i*cipher.sbox().size)) & mask;
+
+            if x != 0 {
+                active.push(((i*cipher.sbox().size), x));
+            }
+        }
+
+        // Crate iterator over good inputs
+        let mut good_inputs: Vec<Vec<_>> = Vec::new();
+
+        for &(_, x) in &active {
+            match self.output_map.get(&x) {
+                Some(ref v) => good_inputs.push(v.iter().take(2).cloned().collect()),
+                None => return Vec::new()
+            }
+        }
+
+        let mut inputs = Vec::new();
+
+        for parts in good_inputs.iter().multi_cartesian_product().take(limit) {
+            let mut input = 0;
+            let mut value = 1.0;
+            
+            for (i, (sbox_idx, _)) in active.iter().enumerate() {
+                input ^= parts[i].0 << sbox_idx;
+                value *= parts[i].1 as f64 / trivial;
+            }
+
+            if self.property_type == PropertyType::Linear {
+                value = value.powi(2);
+            }
+
+            inputs.push((input, value));
+        }
+
+        inputs
+    }
+
+    /**
+    Given an input of an S-box layer, returns the best outputs. 
+
+    cipher      Cipher to consider.
+    input       Input of the S-box layer.
+    limit       Maximum number of outputs to generate.
+    */
+    pub fn get_best_outputs(&self,
+                           cipher: &Cipher,
+                           input: u64,
+                           limit: usize)
+                           -> Vec<(u64, f64)> {
+        let mask = cipher.sbox().mask();
+        let trivial = match self.property_type {
+            PropertyType::Linear => (1 << (cipher.sbox().size-1)) as f64,
+            PropertyType::Differential => (1 << cipher.sbox().size) as f64
+        };
+
+        // Extract active positions and output values
+        let mut active = Vec::new();
+
+        for i in 0..cipher.num_sboxes() {
+            let x = (input >> (i*cipher.sbox().size)) & mask;
+
+            if x != 0 {
+                active.push(((i*cipher.sbox().size), x));
+            }
+        }
+
+        // Crate iterator over good outputs
+        let mut good_outputs: Vec<Vec<_>> = Vec::new();
+
+        for &(_, x) in &active {
+            match self.input_map.get(&x) {
+                Some(ref v) => good_outputs.push(v.iter().take(2).cloned().collect()),
+                None => return Vec::new()
+            }
+        }
+
+        let mut outputs = Vec::new();
+
+        for parts in good_outputs.iter().multi_cartesian_product().take(limit) {
+            let mut output = 0;
+            let mut value = 1.0;
+            
+            for (i, (sbox_idx, _)) in active.iter().enumerate() {
+                output ^= parts[i].0 << sbox_idx;
+                value *= parts[i].1 as f64 / trivial;
+            }
+
+            if self.property_type == PropertyType::Linear {
+                value = value.powi(2);
+            }
+
+            outputs.push((output, value));
+        }
+
+        outputs
     }
 }
