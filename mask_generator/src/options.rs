@@ -35,6 +35,12 @@ pub struct CliArgs {
     */
     pub percentage: Option<f64>,
 
+    #[structopt(short = "a", long = "anchors")]
+    /**
+    If provided, this parameter parameter overrides the default number of anchors. The number of anchors is 2^(<a>). 
+    */
+    pub anchors: Option<usize>,
+
     #[structopt(short = "i", long = "mask_in")]
     /**
     Prefix of a path to a set of two files which restrict the input and output values of the property. The two files are assumed to be <file_mask_in>.input and <file_mask_in>.output.

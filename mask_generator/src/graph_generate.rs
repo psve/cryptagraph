@@ -1,6 +1,7 @@
 use crossbeam_utils::scoped;
 use fnv::{FnvHashSet, FnvHashMap};
 use indexmap::{IndexMap, IndexSet};
+use itertools::interleave;
 use num_cpus;
 use smallvec::SmallVec;
 use std::sync::mpsc;
@@ -492,20 +493,28 @@ graph           The graph to modify.
 fn anchor_ends(cipher: &Cipher,
                property_type: PropertyType,
                graph: &mut MultistageGraph,
+               anchors: Option<usize>,
                input_allowed: &FnvHashSet<u64>,
                output_allowed: &FnvHashSet<u64>) {
     let (result_tx, result_rx) = mpsc::channel();
     let mask_map = MaskMap::new(cipher, property_type);
     let stages = graph.stages();
-    let start_labels: Vec<_> = graph.get_stage(1).unwrap().keys().cloned().collect();
-    let end_labels: Vec<_> = graph.get_stage(stages-2).unwrap().keys().cloned().collect();
+    let start_labels: Vec<_> = graph.get_stage(1).unwrap().keys()
+                                    .map(|&x| (x, 0)).collect();
+    let end_labels: Vec<_> = graph.get_stage(stages-2).unwrap().keys()
+                                  .map(|&x| (x, stages-2)).collect();
 
     // Determine number of anchors to add
-    let limit = 0.max((1 << 16) 
+    let num_labels = start_labels.len() + end_labels.len();
+    let max_anchors = match anchors {
+        Some(x) => 1 << x,
+        None    => 1 << 17
+    };
+    let limit = 0.max(max_anchors
         - (graph.get_stage(0).unwrap().len() 
          + graph.get_stage(stages-1).unwrap().len()) as i64);
-    let num_anchor = limit as usize / (start_labels.len() + end_labels.len());
-    println!("Adding {:?} anchors per end vertex.", num_anchor);
+    let num_anchor = (limit as f64 / num_labels as f64).ceil() as usize;
+    println!("Adding {:?} anchors.", limit);
 
     // Start scoped worker threads
     scoped::scope(|scope| {
@@ -522,36 +531,32 @@ fn anchor_ends(cipher: &Cipher,
                                                                   .step_by(*THREADS).len());
                 let mut edges = IndexMap::new();
                 
-                // Find input anchors 
-                for &label in start_labels.iter().skip(t).step_by(*THREADS) {
-                    // Invert input to get output
-                    let output = cipher.linear_layer_inv(label as u64);
-                    let inputs = mask_map.get_best_inputs(cipher, output, num_anchor);
 
-                    for (input, value) in inputs {
-                        if input_allowed.len() == 0 || input_allowed.contains(&input) {
-                            edges.insert((0, input as usize, label), value);
+                for (label, stage) in interleave(start_labels, end_labels).take(limit as usize)
+                                        .skip(t).step_by(*THREADS) {
+                    if stage == 0 {
+                        // Invert input to get output
+                        let output = cipher.linear_layer_inv(label as u64);
+                        let inputs = mask_map.get_best_inputs(cipher, output, num_anchor);
+
+                        for (input, value) in inputs {
+                            if input_allowed.len() == 0 || input_allowed.contains(&input) {
+                                edges.insert((0, input as usize, label), value);
+                            }
+                        }
+                    } else {
+                        let input = label as u64;
+                        let outputs = mask_map.get_best_outputs(cipher, input, num_anchor);
+
+                        for (output, value) in outputs {
+                            let output = cipher.linear_layer(output);
+
+                            if output_allowed.len() == 0 || output_allowed.contains(&output) {
+                                edges.insert((stages-2, label, output as usize), value);
+                            }
                         }
                     }
-
-                    if t == 0 {
-                        progress_bar.increment();
-                    }
-                }
-                
-                // Find output anchors
-                for &label in end_labels.iter().skip(t).step_by(*THREADS) {
-                    let input = label as u64;
-                    let outputs = mask_map.get_best_outputs(cipher, input, num_anchor);
-
-                    for (output, value) in outputs {
-                        let output = cipher.linear_layer(output);
-
-                        if output_allowed.len() == 0 || output_allowed.contains(&output) {
-                            edges.insert((stages-2, label, output as usize), value);
-                        }
-                    }
-
+                    
                     if t == 0 {
                         progress_bar.increment();
                     }
@@ -797,6 +802,7 @@ pub fn generate_graph(cipher: Box<Cipher>,
                       property_type: PropertyType,
                       rounds: usize, 
                       patterns: usize,
+                      anchors: Option<usize>,
                       input_allowed: &FnvHashSet<u64>,
                       output_allowed: &FnvHashSet<u64>) 
                       -> MultistageGraph {
@@ -848,15 +854,17 @@ pub fn generate_graph(cipher: Box<Cipher>,
             println!("Added vertices [{} s]", time::precise_time_s()-start);
             
             // Don't add middle edges if there are only two rounds
-            let start = time::precise_time_s();
-            graph = add_middle_edges(&graph, &properties, rounds, level);
-            println!("Graph has {} vertices and {} edges [{} s]", 
-                graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
+            if rounds > 2 {
+                let start = time::precise_time_s();
+                graph = add_middle_edges(&graph, &properties, rounds, level);
+                println!("Graph has {} vertices and {} edges [{} s]", 
+                    graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
 
-            let start = time::precise_time_s();
-            graph.prune(1, rounds);
-            println!("Pruned graph has {} vertices and {} edges [{} s]", 
-                graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
+                let start = time::precise_time_s();
+                graph.prune(1, rounds);
+                println!("Pruned graph has {} vertices and {} edges [{} s]", 
+                    graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);                
+            }
 
             let start = time::precise_time_s();
 
@@ -906,7 +914,7 @@ pub fn generate_graph(cipher: Box<Cipher>,
                 graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
 
         let start = time::precise_time_s();
-        anchor_ends(cipher.as_ref(), property_type, &mut graph,
+        anchor_ends(cipher.as_ref(), property_type, &mut graph, anchors,
                     &input_allowed, &output_allowed);
         println!("Anchored graph has {} vertices and {} edges [{} s]\n", 
                 graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);

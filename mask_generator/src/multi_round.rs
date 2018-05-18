@@ -144,6 +144,7 @@ pub fn find_properties(cipher: Box<Cipher>,
                        rounds: usize, 
                        patterns: usize,
                        percentage: Option<f64>,
+                       anchors: Option<usize>,
                        file_mask_in: Option<String>,
                        file_mask_out: Option<String>,
                        file_graph: Option<String>) {
@@ -162,8 +163,8 @@ pub fn find_properties(cipher: Box<Cipher>,
 
     println!("\n--------------------------------------- GRAPH GENERATION ---------------------------------------\n");
 
-    let mut graph = generate_graph(cipher, property_type, rounds, 
-                                   patterns, &input_allowed, &output_allowed);
+    let mut graph = generate_graph(cipher, property_type, rounds, patterns, 
+                                   anchors, &input_allowed, &output_allowed);
 
     match file_graph {
         Some(path) => {
