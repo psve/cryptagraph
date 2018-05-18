@@ -148,7 +148,9 @@ impl MultistageGraph {
         for (&(stage, from, to), &length) in edges {
             if stage == 0 {
                 self.add_vertex(0, from);
-            } else {
+            } 
+
+            if stage == self.vertices.len()-2 {
                 self.add_vertex(stage+1, to);
             }
 
