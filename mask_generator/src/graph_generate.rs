@@ -811,6 +811,14 @@ pub fn generate_graph(cipher: Box<Cipher>,
                                                property_type, PropertyFilter::All);
     let mut graph = MultistageGraph::new(0);
     
+    // Change allowed inputs/outputs for Prince-like ciphers
+    let mut input_allowed = input_allowed.clone();
+    let mut output_allowed = output_allowed.clone();
+    if cipher.structure() == CipherStructure::Prince {
+        input_allowed = input_allowed.union(&output_allowed).cloned().collect();
+        output_allowed = FnvHashSet::default();
+    }
+
     if rounds == 1 {
         let start = time::precise_time_s();
         graph = one_round(&mut properties);
