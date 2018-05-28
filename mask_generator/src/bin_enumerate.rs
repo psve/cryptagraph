@@ -150,12 +150,6 @@ fn main() {
         )
     }
 
-    let round_keys = if cipher.whitening() {
-        options.rounds + 1
-    } else {
-        options.rounds
-    };
-
     let mut bar = ProgressBar::new(options.keys);
 
     for _ in 0..options.keys {
@@ -165,15 +159,14 @@ fn main() {
         // generate rounds keys
 
         rng.fill_bytes(&mut key);
-        let keys = cipher.key_schedule(round_keys, &key);
+        let keys = cipher.key_schedule(options.rounds, &key);
 
         // initalize pool with chosen alpha
 
         pool_old.clear();
         pool_old.add(alpha);
 
-        for round in 1..options.rounds {
-
+        for round in 0..options.rounds {
             // "clock" all patterns one round
 
             pool::step(&lat, &mut pool_new, &pool_old, keys[round]);
