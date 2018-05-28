@@ -56,7 +56,12 @@ fn main() {
         PropertyType::Differential => println!("\tProperty: Differential")
     }
     println!("\tRounds: {}.", rounds);
-    println!("\tS-box patterns: {}\n", num_patterns);
+    println!("\tS-box patterns: {}", num_patterns);
+    match anchors {
+        Some(a) => println!("\tMaximum anchors: 2^{}", a),
+        None    => println!("\tMaximum anchors: 2^17"),
+    }
+    println!("");
 
     multi_round::find_properties(cipher, property_type, rounds, num_patterns, percentage, anchors,
                                  file_mask_in, file_mask_out, file_graph);
