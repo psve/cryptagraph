@@ -69,7 +69,7 @@ impl Cipher for Puffin {
     Returns key-size in bits 
     */
     fn key_size(&self) -> usize {
-        panic!("not implemented");
+        self.key_size
     }
 
     /** 
