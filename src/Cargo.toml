@@ -1,7 +1,7 @@
 [package]
-name = "mask_generator"
+name = "crytagraph"
 version = "0.1.0"
-authors = ["psve <psve@dtu.dk>"]
+authors = ["Philip Vejre <philipvejre@gmail.com>"]
 
 [dependencies]
 time = "*"
