@@ -1,16 +1,8 @@
-#![feature(iterator_step_by)]
-
-#[macro_use] extern crate lazy_static;
-#[macro_use] extern crate smallvec;
 #[macro_use] extern crate structopt_derive;
 
 extern crate structopt;
 extern crate rand;
 extern crate fnv;
-extern crate crossbeam_utils;
-extern crate indexmap;
-extern crate num_cpus;
-extern crate time;
 extern crate itertools;
 
 macro_rules! debug {
@@ -18,19 +10,16 @@ macro_rules! debug {
 }
 
 mod pool;
+#[allow(dead_code)]
 mod cipher;
 mod utility;
 mod analysis;
 mod approximation;
-mod find_properties;
-mod graph;
-mod graph_generate;
-mod multi_round;
 mod options;
+#[allow(dead_code)]
 mod property;
-mod single_round;
 
-use rand::{OsRng, Rng};
+use rand::{OsRng, RngCore};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use structopt::StructOpt;

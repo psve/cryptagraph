@@ -1,5 +1,5 @@
 use cipher::{Cipher, Sbox};
-use std::collections::{HashMap};
+use fnv::FnvHashMap;
 use approximation::{Approximation};
 use utility::{ProgressBar};
 
@@ -28,7 +28,7 @@ pub struct MaskApproximation {
  * The linear layer has been applied to the { beta } set.
  */
 pub struct MaskLAT {
-    map_alpha: HashMap<u64, Vec<MaskApproximation>>,
+    map_alpha: FnvHashMap<u64, Vec<MaskApproximation>>,
 }
 
 impl LAT {
@@ -175,7 +175,7 @@ impl MaskLAT {
         // construct full mask lat
 
         let mut mlat = MaskLAT {
-            map_alpha : HashMap::new(),
+            map_alpha : FnvHashMap::default(),
         };
 
         for alpha in masks.iter() {

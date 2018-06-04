@@ -1,20 +1,16 @@
 use analysis::MaskLAT;
-use std::collections::HashMap;
+use fnv::FnvHashMap;
 use utility::parity;
-
-static FLOAT_TINY : f64 = 0.00000000000000000000000000000000001;
 
 #[derive(Clone)]
 pub struct MaskPool {
-    pub masks: HashMap<u64, f64>,
-    // pub paths: HashMap<u64, usize>,
+    pub masks: FnvHashMap<u64, f64>,
 }
 
 impl MaskPool {
     pub fn new() -> MaskPool {
         MaskPool{
-            masks: HashMap::new(),
-            // paths: HashMap::new(),
+            masks: FnvHashMap::default(),
         }
     }
 
@@ -24,10 +20,6 @@ impl MaskPool {
 
     pub fn add(&mut self, mask: u64) {
         self.masks.insert(mask, 1.0);
-    }
-
-    pub fn size(&self) -> usize {
-        self.masks.len()
     }
 }
 
@@ -43,16 +35,7 @@ pub fn step(
 
     for (alpha, corr) in &pool_old.masks {
 
-        // filter zero correlation
-
-        /*if (*corr) * (*corr) < FLOAT_TINY {
-            continue;
-        }*/
-
         let sign   = if parity(*alpha & key) == 1 { -1.0 } else { 1.0 };
-
-        // let apaths = *pool_old.paths.get(alpha).unwrap();
-        // debug_assert!(apaths > 0);
 
         for approx in lat.lookup_alpha(*alpha).iter() {
             debug_assert_eq!(approx.alpha, *alpha);
@@ -66,26 +49,12 @@ pub fn step(
                 Some(c) => delta + c
             };
 
-            /*
-            let paths = match pool_new.paths.get(&approx.beta) {
-                None    => apaths,
-                Some(c) => *c + apaths
-            };
-            */
-
             // write back to pool
 
             pool_new.masks.insert(
                 approx.beta,
                 acc
             );
-
-            /*
-            pool_new.paths.insert(
-                approx.beta,
-                paths
-            );
-            */
         };
     };
 }
