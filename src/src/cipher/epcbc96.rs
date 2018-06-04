@@ -2,28 +2,26 @@ use cipher::{Sbox, CipherStructure, Cipher};
 use property::PropertyType;
 
 /*****************************************************************
-                            PRESENT
+                            EPCBC96
 ******************************************************************/
 
 /**
-A structure representing the PRESENT cipher.
+A structure representing the EPCBC96 cipher.
 
 size        Size of the cipher in bits. This is fixed to 64.
 key_size    Size of cipher key in bits. This is fixed to 80.
-sbox        The PRESENT S-box.
-isbox       The inverse PRESENT S-box.
+sbox        The EPCBC96 S-box.
+isbox       The inverse EPCBC96 S-box.
  */
 #[derive(Clone)]
-pub struct Present {
+pub struct Epcbc96 {
     size     : usize,
     key_size : usize,
     sbox     : Sbox,
     isbox    : Sbox,
 }
 
-impl Present {
-    const PERMUTATION_INV : [[u128 ; 0x100] ; 8] = include!("present.inv.perm");
-    const PERMUTATION     : [[u128 ; 0x100] ; 8] = include!("present.perm");
+impl Epcbc96 {
     const SBOX : [u8 ; 16] = [0xc, 0x5, 0x6, 0xb,
                               0x9, 0x0, 0xa, 0xd,
                               0x3, 0xe, 0xf, 0x8,
@@ -34,16 +32,16 @@ impl Present {
                                0x0, 0x7, 0x9, 0xa];
 }
 
-pub fn new() -> Present {
-    let table: Vec<_> = From::from(&Present::SBOX[0..]);
-    let itable: Vec<_> = From::from(&Present::ISBOX[0..]);
-    Present{size: 64,
-            key_size: 80,
+pub fn new() -> Epcbc96 {
+    let table: Vec<_> = From::from(&Epcbc96::SBOX[0..]);
+    let itable: Vec<_> = From::from(&Epcbc96::ISBOX[0..]);
+    Epcbc96{size: 96,
+            key_size: 96,
             sbox: Sbox::new(4, table),
             isbox: Sbox::new(4, itable)}
 }
 
-impl Cipher for Present {
+impl Cipher for Epcbc96 {
     /**
     Returns the design type of the cipher.
     */
@@ -86,16 +84,13 @@ impl Cipher for Present {
     */
     fn linear_layer(&self, input: u128) -> u128{
         let mut output = 0;
-        output ^= Present::PERMUTATION[0][((input as u64 >>  0) & 0xff) as usize];
-        output ^= Present::PERMUTATION[1][((input as u64 >>  8) & 0xff) as usize];
-        output ^= Present::PERMUTATION[2][((input as u64 >> 16) & 0xff) as usize];
-        output ^= Present::PERMUTATION[3][((input as u64 >> 24) & 0xff) as usize];
-        output ^= Present::PERMUTATION[4][((input as u64 >> 32) & 0xff) as usize];
-        output ^= Present::PERMUTATION[5][((input as u64 >> 40) & 0xff) as usize];
-        output ^= Present::PERMUTATION[6][((input as u64 >> 48) & 0xff) as usize];
-        output ^= Present::PERMUTATION[7][((input as u64 >> 56) & 0xff) as usize];
+        
+        for i in 0..self.size-1 {
+            output ^= ((input >> i) & 0x1) << ((i*self.size/4) % (self.size-1));
+        }
+        output ^= ((input >> (self.size-1)) & 0x1) << (self.size-1);
 
-        output as u128
+        output
     }
 
     /**
@@ -105,16 +100,13 @@ impl Cipher for Present {
     */
     fn linear_layer_inv(&self, input: u128) -> u128 {
         let mut output = 0;
-        output ^= Present::PERMUTATION_INV[0][((input as u64 >>  0) & 0xff) as usize];
-        output ^= Present::PERMUTATION_INV[1][((input as u64 >>  8) & 0xff) as usize];
-        output ^= Present::PERMUTATION_INV[2][((input as u64 >> 16) & 0xff) as usize];
-        output ^= Present::PERMUTATION_INV[3][((input as u64 >> 24) & 0xff) as usize];
-        output ^= Present::PERMUTATION_INV[4][((input as u64 >> 32) & 0xff) as usize];
-        output ^= Present::PERMUTATION_INV[5][((input as u64 >> 40) & 0xff) as usize];
-        output ^= Present::PERMUTATION_INV[6][((input as u64 >> 48) & 0xff) as usize];
-        output ^= Present::PERMUTATION_INV[7][((input as u64 >> 56) & 0xff) as usize];
+        
+        for i in 0..self.size-1 {
+            output ^= ((input >> ((i*self.size/4) % (self.size-1))) & 0x1) << i;
+        }
+        output ^= ((input >> (self.size-1)) & 0x1) << (self.size-1);
 
-        output as u128
+        output
     }
 
     /**
@@ -134,57 +126,12 @@ impl Cipher for Present {
     rounds      Number of rounds to generate keys for.
     key         The master key to expand.
     */
-    fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u128> {
+    fn key_schedule(&self, _rounds : usize, key: &[u8]) -> Vec<u128> {
         if key.len() * 8 != self.key_size {
             panic!("invalid key-length");
         }
 
-        let mut keys = vec![];
-        let mut s0 : u64 = 0;
-        let mut s1 : u64 = 0;
-
-        // load key into 80-bit state (s0 || s1)
-        for i in 0..8 {
-            s0 <<= 8;
-            s0 |= key[i] as u64;
-        }
-
-        s1 |= key[8] as u64;
-        s1 <<= 8;
-        s1 |= key[9] as u64;
-
-        for r in 0..(rounds+1) {
-            // extract round key
-            keys.push(s0);
-
-            // rotate 61-bits left
-            assert!(s1 >> 16 == 0);
-
-            {
-                let mut t0 : u64 = 0;
-                t0 |= s0 << 61;
-                t0 |= s1 << (64 - (3 + 16));
-                t0 |= s0 >> 19;
-
-                s1 = (s0 >> 3) & 0xffff;
-                s0 = t0;
-            }
-
-            // apply sbox to 4 MSBs
-            {
-                let x = s0 >> 60;
-                let y = Present::SBOX[x as usize] as u64;
-                s0 &= 0x0fffffffffffffff;
-                s0 |= y << 60;
-            }
-
-            // add round constant
-            let rnd = ((r+1) & 0b11111) as u64;
-            s0 ^= rnd >> 1;
-            s1 ^= (rnd & 1) << 15;
-        }
-
-        keys.iter().map(|&x| x as u128).collect()
+        panic!("Not implemented");
     }
 
     /**
@@ -193,27 +140,8 @@ impl Cipher for Present {
     input       Plaintext to be encrypted.
     round_keys  Round keys generated by the key-schedule.
     */
-    fn encrypt(&self, input: u128, round_keys: &Vec<u128>) -> u128 {
-        let mut output = input;
-
-        output ^= round_keys[0];
-
-        for i in 1..32 {
-            // Apply S-box
-            let mut tmp = 0;
-
-            for j in 0..16 {
-                tmp ^= (self.sbox.table[((output >> (4*j)) & 0xf) as usize] as u128) << (4*j);
-            }
-
-            // Apply linear layer
-            output = self.linear_layer(tmp);
-
-            // Add round key
-            output ^= round_keys[i]
-        }
-
-        output
+    fn encrypt(&self, _input: u128, _round_keys: &Vec<u128>) -> u128 {
+        panic!("Not implemented");
     }
 
     /**
@@ -222,34 +150,15 @@ impl Cipher for Present {
     input       Ciphertext to be decrypted.
     round_keys  Round keys generated by the key-schedule.
     */
-    fn decrypt(&self, input: u128, round_keys: &Vec<u128>) -> u128 {
-        let mut output = input;
-
-        output ^= round_keys[31];
-
-        for i in 1..32 {
-            // Apply linear layer
-            output = self.linear_layer_inv(output);
-
-            // Apply S-box
-            let mut tmp = 0;
-
-            for j in 0..16 {
-                tmp ^= (self.isbox.table[((output >> (4*j)) & 0xf) as usize] as u128) << (4*j);
-            }
-
-            // Add round key
-            output = tmp ^ round_keys[31-i]
-        }
-
-        output
+    fn decrypt(&self, _input: u128, _round_keys: &Vec<u128>) -> u128 {
+        panic!("Not implemented");
     }
 
     /**
     Returns the name of the cipher.
     */
     fn name(&self) -> String {
-        String::from("PRESENT")
+        String::from("EPCBC96")
     }
 
     /**
@@ -275,8 +184,16 @@ mod tests {
     use cipher;
 
     #[test]
+    fn linear() {
+        let cipher = cipher::name_to_cipher("epcbc96").unwrap();
+        let x = 0x0123456789ab;
+
+        assert_eq!(x, cipher.linear_layer_inv(cipher.linear_layer(x)));
+    }
+
+    /*#[test]
     fn encryption_test() {
-        let cipher = cipher::name_to_cipher("present").unwrap();
+        let cipher = cipher::name_to_cipher("epcbc96").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
         let round_keys = cipher.key_schedule(31, &key);
         let plaintext = 0x0000000000000000;
@@ -294,7 +211,7 @@ mod tests {
 
     #[test]
     fn decryption_test() {
-        let cipher = cipher::name_to_cipher("present").unwrap();
+        let cipher = cipher::name_to_cipher("epcbc96").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
         let round_keys = cipher.key_schedule(31, &key);
         let plaintext = 0x0000000000000000;
@@ -312,7 +229,7 @@ mod tests {
 
     #[test]
     fn encryption_decryption_test() {
-        let cipher = cipher::name_to_cipher("present").unwrap();
+        let cipher = cipher::name_to_cipher("epcbc96").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
         let round_keys = cipher.key_schedule(31, &key);
         let plaintext = 0x0123456789abcdef;
@@ -326,5 +243,5 @@ mod tests {
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 
         assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
-    }
+    }*/
 }

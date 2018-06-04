@@ -19,7 +19,12 @@ lazy_static! {
     static ref THREADS: usize = num_cpus::get();
 }
 
-static COMP_PATTERN: [u64; 4] = [0x0101010101010101, 0x1111111111111111, 0x5555555555555555, 0xffffffffffffffff]; 
+static COMP_PATTERN: [u128; 4] = [
+    0x01010101010101010101010101010101, 
+    0x11111111111111111111111111111111, 
+    0x55555555555555555555555555555555, 
+    0xffffffffffffffffffffffffffffffff
+]; 
 
 /**
 "Compresses" a 64-bit value such that if a block of 2^(3-level) bits is non-zero, than that 
@@ -29,9 +34,9 @@ x       The value to compress
 level   The compression level to use.
 */
 #[inline(always)]
-pub fn compress(x: u64, 
+pub fn compress(x: u128, 
                 level: usize) 
-                -> u64 {
+                -> u128 {
     // We use bit patterns to reduce the amount of work done
     let mut y = x;
     for i in 0..(3-level) {
@@ -73,8 +78,8 @@ fn one_round(properties: &mut SortedProperties)
                 let mut progress_bar = ProgressBar::new(thread_properties.len());
 
                 for (property, _) in thread_properties.into_iter() {
-                    let input = property.input as usize;
-                    let output = property.output as usize;
+                    let input = property.input;
+                    let output = property.output;
                     let length = property.value;
                     edges.insert((0, input, output), length);
 
@@ -132,7 +137,7 @@ fn two_rounds(properties: &mut SortedProperties)
                 let mut progress_bar = ProgressBar::new(thread_properties.len());
 
                 for (property, _) in thread_properties.into_iter() {
-                    let input = property.input as usize;
+                    let input = property.input;
                     vertices.insert(input);
 
                     if t == 0 {
@@ -146,7 +151,7 @@ fn two_rounds(properties: &mut SortedProperties)
                 let mut progress_bar = ProgressBar::new(thread_properties.len());
 
                 for (property, _) in thread_properties.into_iter() {
-                    let output = property.output as usize;
+                    let output = property.output;
                     vertices.insert(output);
 
                     if t == 0 {
@@ -187,7 +192,7 @@ level           Compression level to use for vertex values.
 */
 fn get_middle_vertices (properties: &SortedProperties, 
                         rounds: usize, 
-                        filters: &[FnvHashSet<u64>],
+                        filters: &[FnvHashSet<u128>],
                         level: usize) 
                         -> MultistageGraph {
     let barrier = Arc::new(Barrier::new(*THREADS));
@@ -271,8 +276,8 @@ fn get_middle_vertices (properties: &SortedProperties,
     
     // Last, collect sets from all threads and create graph
     let mut graph = MultistageGraph::new(rounds+1);
-    let mut input_sets: SmallVec<[FnvHashSet<u64>; 256]> = smallvec![FnvHashSet::default(); rounds-1];
-    let mut output_sets: SmallVec<[FnvHashSet<u64>; 256]> = smallvec![FnvHashSet::default(); rounds-1];
+    let mut input_sets: SmallVec<[FnvHashSet<u128>; 256]> = smallvec![FnvHashSet::default(); rounds-1];
+    let mut output_sets: SmallVec<[FnvHashSet<u128>; 256]> = smallvec![FnvHashSet::default(); rounds-1];
 
     for _ in 0..*THREADS {
         let thread_result = result_rx.recv().expect("Main could not receive result");
@@ -287,7 +292,7 @@ fn get_middle_vertices (properties: &SortedProperties,
     // Add vertices that are in the intersections of input and output sets 
     for i in 0..rounds-1 {
         for &label in input_sets[i].intersection(&output_sets[i]) {
-            graph.add_vertex(i+1, label as usize);
+            graph.add_vertex(i+1, label);
         }
     }
     
@@ -345,8 +350,8 @@ fn add_middle_edges(graph: &MultistageGraph,
                 let mut progress_bar = ProgressBar::new(thread_properties.len());
 
                 for (property, _) in thread_properties.into_iter() {
-                    let input = compress(property.input, level) as usize;
-                    let output = compress(property.output, level) as usize;
+                    let input = compress(property.input, level);
+                    let output = compress(property.output, level);
                     let length = property.value;
                     
                     for r in 1..rounds-1 {
@@ -391,8 +396,8 @@ fn add_outer_edges (graph: &MultistageGraph,
                     properties: &SortedProperties, 
                     rounds: usize, 
                     level: usize,
-                    input_allowed: &FnvHashSet<u64>,
-                    output_allowed: &FnvHashSet<u64>) 
+                    input_allowed: &FnvHashSet<u128>,
+                    output_allowed: &FnvHashSet<u128>) 
                     -> MultistageGraph {
     // Block size of the compression
     let block = 1 << (3-level);
@@ -432,12 +437,12 @@ fn add_outer_edges (graph: &MultistageGraph,
                 let mut progress_bar = ProgressBar::new(thread_properties.len());
 
                 for (property, _) in thread_properties.into_iter() {
-                    let input = compress(property.input, level) as usize;
-                    let output = compress(property.output, level) as usize;
+                    let input = compress(property.input, level);
+                    let output = compress(property.output, level);
                     let length = property.value;
 
                     // First round        
-                    if input_allowed.len() == 0 || input_allowed.contains(&(input as u64)) {
+                    if input_allowed.len() == 0 || input_allowed.contains(&(input as u128)) {
                         match graph.get_vertex(1, output) {
                             Some(vertex_ref) => {
                                 // Only insert if the output vertex has an outgoing edge,
@@ -451,7 +456,7 @@ fn add_outer_edges (graph: &MultistageGraph,
                     }
 
                     // Last round
-                    if output_allowed.len() == 0 || output_allowed.contains(&(output as u64)) {
+                    if output_allowed.len() == 0 || output_allowed.contains(&(output as u128)) {
                         match graph.get_vertex(rounds-1, input) {
                             Some(vertex_ref) => {
                                 // Only insert if the input vertex has an incoming edge,
@@ -494,8 +499,8 @@ fn anchor_ends(cipher: &Cipher,
                property_type: PropertyType,
                graph: &mut MultistageGraph,
                anchors: Option<usize>,
-               input_allowed: &FnvHashSet<u64>,
-               output_allowed: &FnvHashSet<u64>) {
+               input_allowed: &FnvHashSet<u128>,
+               output_allowed: &FnvHashSet<u128>) {
     let (result_tx, result_rx) = mpsc::channel();
     let mask_map = MaskMap::new(cipher, property_type);
     let stages = graph.stages();
@@ -536,23 +541,23 @@ fn anchor_ends(cipher: &Cipher,
                                         .skip(t).step_by(*THREADS) {
                     if stage == 0 {
                         // Invert input to get output
-                        let output = cipher.linear_layer_inv(label as u64);
+                        let output = cipher.linear_layer_inv(label as u128);
                         let inputs = mask_map.get_best_inputs(cipher, output, num_anchor);
 
                         for (input, value) in inputs {
                             if input_allowed.len() == 0 || input_allowed.contains(&input) {
-                                edges.insert((0, input as usize, label), value);
+                                edges.insert((0, input, label), value);
                             }
                         }
                     } else {
-                        let input = label as u64;
+                        let input = label as u128;
                         let outputs = mask_map.get_best_outputs(cipher, input, num_anchor);
 
                         for (output, value) in outputs {
                             let output = cipher.linear_layer(output);
 
                             if output_allowed.len() == 0 || output_allowed.contains(&output) {
-                                edges.insert((stages-2, label, output as usize), value);
+                                edges.insert((stages-2, label, output), value);
                             }
                         }
                     }
@@ -594,11 +599,11 @@ fn prince_pruning(cipher: &Cipher,
         {
             reflections = graph.get_stage(stages-1).unwrap()
                                .keys()
-                               .map(|&x| cipher.reflection_layer(x as u64))
+                               .map(|&x| cipher.reflection_layer(x as u128))
                                .collect();
             remove = graph.get_stage(stages-1).unwrap()
                           .keys()
-                          .filter(|&x| !reflections.contains(&(*x as u64)))
+                          .filter(|&x| !reflections.contains(&(*x as u128)))
                           .cloned()
                           .collect();
         }
@@ -637,7 +642,7 @@ fn prince_modification(cipher: &Cipher,
     let mut edges = IndexMap::new();
 
     for &input in graph.get_stage(stages-1).unwrap().keys() {
-        edges.insert((stages-1, input, cipher.reflection_layer(input as u64) as usize), 1.0);
+        edges.insert((stages-1, input, cipher.reflection_layer(input as u128)), 1.0);
     }
 
     graph.add_edges(&edges);
@@ -653,7 +658,7 @@ filters         Filters to update.
 graph           Graph to update from.
 */
 fn update_filters(
-    filters: &mut [FnvHashSet<u64>], 
+    filters: &mut [FnvHashSet<u128>], 
     graph: &MultistageGraph)
     -> usize {
     let mut good_vertices = 0;
@@ -662,7 +667,7 @@ fn update_filters(
         f.clear();
         f.extend(graph.get_stage(i).unwrap()
                                    .iter()
-                                   .map(|(input, _)| *input as u64));
+                                   .map(|(input, _)| *input as u128));
         good_vertices += f.len();
     }
 
@@ -677,7 +682,7 @@ Filters         Filters to check.
 properties      Properties to remove patterns from.
 level           Compression level used for the filters.
 */
-fn remove_dead_patterns(filters: &[FnvHashSet<u64>], 
+fn remove_dead_patterns(filters: &[FnvHashSet<u128>], 
                         properties: &mut SortedProperties,
                         level: usize) {
     let (result_tx, result_rx) = mpsc::channel();
@@ -763,25 +768,33 @@ Initialise filters. The resulting filters allow all values with a block size of 
 rounds      One less than the number of filters to generate.
 */
 fn init_filter(rounds: usize) 
-               -> SmallVec<[FnvHashSet<u64>; 256]> {
+               -> SmallVec<[FnvHashSet<u128>; 65536]> {
     let mut sequence = FnvHashSet::default();
 
-    // Generate all 64-bit values where the first bit of each byte is either zero or one
-    for i in 1..256 {
-        let x = (((i >> 0) & 0x1) << 0)
-              ^ (((i >> 1) & 0x1) << 8)
-              ^ (((i >> 2) & 0x1) << 16)
-              ^ (((i >> 3) & 0x1) << 24)
-              ^ (((i >> 4) & 0x1) << 32)
-              ^ (((i >> 5) & 0x1) << 40)
-              ^ (((i >> 6) & 0x1) << 48)
-              ^ (((i >> 7) & 0x1) << 56);
+    // Generate all 128-bit values where the first bit of each byte is either zero or one
+    for i in 1..65536 {
+        let x = (((i >>  0) & 0x1) << 0)
+              ^ (((i >>  1) & 0x1) << 8)
+              ^ (((i >>  2) & 0x1) << 16)
+              ^ (((i >>  3) & 0x1) << 24)
+              ^ (((i >>  4) & 0x1) << 32)
+              ^ (((i >>  5) & 0x1) << 40)
+              ^ (((i >>  6) & 0x1) << 48)
+              ^ (((i >>  7) & 0x1) << 56)
+              ^ (((i >>  8) & 0x1) << 64)
+              ^ (((i >>  9) & 0x1) << 72)
+              ^ (((i >> 10) & 0x1) << 80)
+              ^ (((i >> 11) & 0x1) << 88)
+              ^ (((i >> 12) & 0x1) << 96)
+              ^ (((i >> 13) & 0x1) << 104)
+              ^ (((i >> 14) & 0x1) << 112)
+              ^ (((i >> 15) & 0x1) << 120);
 
         sequence.insert(x);
     }
 
     // Using smallvec here assuming most ciphers don't have a large number of rounds
-    let output: SmallVec<[_; 256]> = smallvec![sequence ; rounds+1];
+    let output: SmallVec<[_; 65536]> = smallvec![sequence ; rounds+1];
     output
 }
 
@@ -803,8 +816,8 @@ pub fn generate_graph(cipher: Box<Cipher>,
                       rounds: usize, 
                       patterns: usize,
                       anchors: Option<usize>,
-                      input_allowed: &FnvHashSet<u64>,
-                      output_allowed: &FnvHashSet<u64>) 
+                      input_allowed: &FnvHashSet<u128>,
+                      output_allowed: &FnvHashSet<u128>) 
                       -> MultistageGraph {
     // Generate the set of properties to consider
     let mut properties = SortedProperties::new(cipher.as_ref(), patterns, 
@@ -939,6 +952,6 @@ pub fn generate_graph(cipher: Box<Cipher>,
         println!("Reflected graph has {} vertices and {} edges [{} s]\n", 
             graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
     }
-
+    
     graph
 }

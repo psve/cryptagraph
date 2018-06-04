@@ -162,7 +162,7 @@ status      The patterns current status.
 pub struct SboxPattern {
     pattern: Vec<(usize, i16)>,
     property: Property,
-    mask: u64,
+    mask: u128,
     counter: Vec<usize>,
     status: PatternStatus,
 }
@@ -200,7 +200,7 @@ impl SboxPattern {
         SboxPattern {
             pattern: pattern, 
             property: property,
-            mask: ((1 << cipher.sbox().size) - 1) as u64,
+            mask: ((1 << cipher.sbox().size) - 1) as u128,
             counter: counter,
             status: PatternStatus::New
         }

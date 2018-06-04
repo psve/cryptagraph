@@ -40,10 +40,10 @@ value    The value of the property.
 */
 #[derive(Copy, Clone)]
 pub struct Property {
-    pub input: u64,
-    pub output: u64,
+    pub input: u128,
+    pub output: u128,
     pub value: f64,
-    pub trails: usize,
+    pub trails: u128,
 }
 
 impl Property {
@@ -54,8 +54,8 @@ impl Property {
     output     The output mask.
      */
     pub fn new(
-        input: u64, output: u64, 
-        value: f64, trails: usize) -> Property {
+        input: u128, output: u128, 
+        value: f64, trails: u128) -> Property {
         Property {
             input: input, 
             output: output, 
@@ -99,7 +99,7 @@ impl Hash for Property {
 impl fmt::Debug for Property {
     /* Formats the property in a nice way for printing */
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({:016x},{:016x})", self.input, self.output)
+        write!(f, "({:032x},{:032x})", self.input, self.output)
     }
 }
 
@@ -150,13 +150,13 @@ impl ValueMap {
                     let key = ((*element as i16) - non_property).abs();
 
                     let entry = map.entry(key).or_insert(vec![]);
-                    entry.push(Property::new(input as u64, output as u64, 1.0, 1));
+                    entry.push(Property::new(input as u128, output as u128, 1.0, 1));
 
                     let entry = input_map.entry(key).or_insert(vec![]);
-                    entry.push(Property::new(input as u64, (output != 0) as u64, 1.0, 1));
+                    entry.push(Property::new(input as u128, (output != 0) as u128, 1.0, 1));
 
                     let entry = output_map.entry(key).or_insert(vec![]);
-                    entry.push(Property::new((input != 0) as u64, output as u64, 1.0, 1));
+                    entry.push(Property::new((input != 0) as u128, output as u128, 1.0, 1));
                 }
             }
         }
@@ -238,8 +238,8 @@ property_type   The type of property the map represents.
 */
 #[derive(Clone)]
 pub struct MaskMap {
-    pub input_map: FnvHashMap<u64, Vec<(u64, i16)>>,
-    pub output_map: FnvHashMap<u64, Vec<(u64, i16)>>,
+    pub input_map: FnvHashMap<u128, Vec<(u128, i16)>>,
+    pub output_map: FnvHashMap<u128, Vec<(u128, i16)>>,
     property_type: PropertyType,
 }
 
@@ -266,11 +266,11 @@ impl MaskMap {
             for c in 1..table[r].len() {
                 let x = ((table[r][c] as i16) - non_property).abs();
                 if x != 0 {
-                    let entry = input_map.entry(r as u64).or_insert(Vec::new());
-                    entry.push((c as u64, x));
+                    let entry = input_map.entry(r as u128).or_insert(Vec::new());
+                    entry.push((c as u128, x));
 
-                    let entry = output_map.entry(c as u64).or_insert(Vec::new());
-                    entry.push((r as u64, x));
+                    let entry = output_map.entry(c as u128).or_insert(Vec::new());
+                    entry.push((r as u128, x));
                 }
             }
         }
@@ -299,9 +299,9 @@ impl MaskMap {
     */
     pub fn get_best_inputs(&self,
                            cipher: &Cipher,
-                           output: u64,
+                           output: u128,
                            limit: usize)
-                           -> Vec<(u64, f64)> {
+                           -> Vec<(u128, f64)> {
         let mask = cipher.sbox().mask();
         let trivial = match self.property_type {
             PropertyType::Linear => (1 << (cipher.sbox().size-1)) as f64,
@@ -359,9 +359,9 @@ impl MaskMap {
     */
     pub fn get_best_outputs(&self,
                            cipher: &Cipher,
-                           input: u64,
+                           input: u128,
                            limit: usize)
-                           -> Vec<(u64, f64)> {
+                           -> Vec<(u128, f64)> {
         let mask = cipher.sbox().mask();
         let trivial = match self.property_type {
             PropertyType::Linear => (1 << (cipher.sbox().size-1)) as f64,

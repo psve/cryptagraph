@@ -2,11 +2,11 @@ use cipher::{Sbox, CipherStructure, Cipher};
 use property::PropertyType;
 
 /*****************************************************************
-                            GIFT
+                            GIFT64
 ******************************************************************/
 
 /** 
-A structure representing the GIFT cipher.
+A structure representing the GIFT64 cipher.
  
 size            Size of the cipher in bits. This is fixed to 64.
 key_size        Size of cipher key in bits. This is fixed to 128.
@@ -15,20 +15,20 @@ isbox           The inverse GIFT S-box.
 constants       Round constants.
 */
 #[derive(Clone)]
-pub struct Gift {
+pub struct Gift64 {
     size: usize,
     key_size: usize,
     sbox: Sbox,
     isbox: Sbox,
-    constants: [u64; 48],
+    constants: [u128; 48],
 }
 
-impl Gift {
-    const PERMUTATION     : [[u64 ; 0x100] ; 8] = include!("gift.perm");
-    const PERMUTATION_INV : [[u64 ; 0x100] ; 8] = include!("gift.perm.inv");
+impl Gift64 {
+    const PERMUTATION     : [[u128 ; 0x100] ; 8] = include!("gift.perm");
+    const PERMUTATION_INV : [[u128 ; 0x100] ; 8] = include!("gift.perm.inv");
 }
 
-pub fn new() -> Gift {
+pub fn new() -> Gift64 {
     let table = vec![0x1, 0xa, 0x4, 0xc, 0x6, 0xf, 0x3, 0x9,
                      0x2, 0xd, 0xb, 0x7, 0x5, 0x0, 0x8, 0xe];
     let itable = vec![0xd, 0x0, 0x8, 0x6, 0x2, 0xc, 0x4, 0xb, 
@@ -38,14 +38,14 @@ pub fn new() -> Gift {
                      0x1c,0x38,0x31,0x23,0x06,0x0d,0x1b,0x36,0x2d,0x1a,0x34,0x29,0x12,0x24,0x08,
                      0x11,0x22,0x04];
 
-    Gift{size: 64, 
+    Gift64{size: 64, 
          key_size: 128,
          sbox: Sbox::new(4, table), 
          isbox: Sbox::new(4, itable),
          constants: constants}
 }
 
-impl Cipher for Gift {
+impl Cipher for Gift64 {
     /** 
     Returns the design type of the cipher. 
     */
@@ -86,16 +86,16 @@ impl Cipher for Gift {
     
     input   The input to the linear layer.
     */
-    fn linear_layer(&self, input: u64) -> u64{
+    fn linear_layer(&self, input: u128) -> u128{
         let mut output = 0;
-        output ^= Gift::PERMUTATION[0][((input >>  0) & 0xff) as usize];
-        output ^= Gift::PERMUTATION[1][((input >>  8) & 0xff) as usize];
-        output ^= Gift::PERMUTATION[2][((input >> 16) & 0xff) as usize];
-        output ^= Gift::PERMUTATION[3][((input >> 24) & 0xff) as usize];
-        output ^= Gift::PERMUTATION[4][((input >> 32) & 0xff) as usize];
-        output ^= Gift::PERMUTATION[5][((input >> 40) & 0xff) as usize];
-        output ^= Gift::PERMUTATION[6][((input >> 48) & 0xff) as usize];
-        output ^= Gift::PERMUTATION[7][((input >> 56) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION[0][((input >>  0) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION[1][((input >>  8) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION[2][((input >> 16) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION[3][((input >> 24) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION[4][((input >> 32) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION[5][((input >> 40) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION[6][((input >> 48) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION[7][((input >> 56) & 0xff) as usize];
 
         output
     }
@@ -105,16 +105,16 @@ impl Cipher for Gift {
     
     input   The input to the inverse linear layer. 
     */
-    fn linear_layer_inv(&self, input: u64) -> u64 {
+    fn linear_layer_inv(&self, input: u128) -> u128 {
         let mut output = 0;
-        output ^= Gift::PERMUTATION_INV[0][((input >>  0) & 0xff) as usize];
-        output ^= Gift::PERMUTATION_INV[1][((input >>  8) & 0xff) as usize];
-        output ^= Gift::PERMUTATION_INV[2][((input >> 16) & 0xff) as usize];
-        output ^= Gift::PERMUTATION_INV[3][((input >> 24) & 0xff) as usize];
-        output ^= Gift::PERMUTATION_INV[4][((input >> 32) & 0xff) as usize];
-        output ^= Gift::PERMUTATION_INV[5][((input >> 40) & 0xff) as usize];
-        output ^= Gift::PERMUTATION_INV[6][((input >> 48) & 0xff) as usize];
-        output ^= Gift::PERMUTATION_INV[7][((input >> 56) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION_INV[0][((input >>  0) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION_INV[1][((input >>  8) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION_INV[2][((input >> 16) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION_INV[3][((input >> 24) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION_INV[4][((input >> 32) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION_INV[5][((input >> 40) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION_INV[6][((input >> 48) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION_INV[7][((input >> 56) & 0xff) as usize];
 
         output
     }
@@ -126,7 +126,7 @@ impl Cipher for Gift {
     input   The input to the reflection layer.
     */
     #[allow(unused_variables)]
-    fn reflection_layer(&self, input: u64) -> u64 {
+    fn reflection_layer(&self, input: u128) -> u128 {
         panic!("Not implemented for this type of cipher")
     }
 
@@ -136,7 +136,7 @@ impl Cipher for Gift {
     rounds      Number of rounds to generate keys for.
     key         The master key to expand.
     */
-    fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u64> {
+    fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u128> {
         if key.len() * 8 != self.key_size {
             panic!("invalid key-length");
         }
@@ -149,8 +149,8 @@ impl Cipher for Gift {
         for i in 0..8 {
             k1 <<= 8;
             k0 <<= 8;
-            k1 |= key[i] as u64;
-            k0 |= key[i+8] as u64;
+            k1 |= key[i] as u128;
+            k0 |= key[i+8] as u128;
         }
 
         for r in 0..rounds {
@@ -190,7 +190,7 @@ impl Cipher for Gift {
     input       Plaintext to be encrypted.
     round_keys  Round keys generated by the key-schedule.
     */
-    fn encrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64 {
+    fn encrypt(&self, input: u128, round_keys: &Vec<u128>) -> u128 {
         let mut output = input;
 
         for i in 0..28 {
@@ -198,7 +198,7 @@ impl Cipher for Gift {
             let mut tmp = 0;
 
             for j in 0..16 {
-                tmp ^= (self.sbox.table[((output >> (4*j)) & 0xf) as usize] as u64) << (4*j);
+                tmp ^= (self.sbox.table[((output >> (4*j)) & 0xf) as usize] as u128) << (4*j);
             }
 
             // Apply linear layer
@@ -217,7 +217,7 @@ impl Cipher for Gift {
     input       Ciphertext to be decrypted.
     round_keys  Round keys generated by the key-schedule.
     */
-    fn decrypt(&self, input: u64, round_keys: &Vec<u64>) -> u64 {
+    fn decrypt(&self, input: u128, round_keys: &Vec<u128>) -> u128 {
         let mut output = input;
 
         for i in 0..28 {
@@ -231,7 +231,7 @@ impl Cipher for Gift {
             let mut tmp = 0;
 
             for j in 0..16 {
-                tmp ^= (self.isbox.table[((output >> (4*j)) & 0xf) as usize] as u64) << (4*j);
+                tmp ^= (self.isbox.table[((output >> (4*j)) & 0xf) as usize] as u128) << (4*j);
             }
 
             output = tmp;
@@ -244,7 +244,7 @@ impl Cipher for Gift {
     Returns the name of the cipher. 
     */
     fn name(&self) -> String {
-        String::from("GIFT")
+        String::from("GIFT64")
     }
 
     /** 
@@ -256,10 +256,10 @@ impl Cipher for Gift {
     */
     #[allow(unused_variables)]
     fn sbox_mask_transform(&self, 
-                           input: u64, 
-                           output: u64, 
+                           input: u128, 
+                           output: u128, 
                            property_type: PropertyType) 
-                           -> (u64, u64) {
+                           -> (u128, u128) {
         (input, self.linear_layer(output))
     }
 
@@ -280,45 +280,9 @@ impl Cipher for Gift {
 mod tests {
     use cipher; 
     
-    /*#[test]
-    fn encryption_test() {
-        let cipher = cipher::name_to_cipher("present").unwrap();
-        let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(32, &key);
-        let plaintext = 0x0000000000000000;
-        let ciphertext = 0x5579c1387b228445;
-
-        assert_eq!(ciphertext, cipher.encrypt(plaintext, &round_keys));
-
-        let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-        let round_keys = cipher.key_schedule(32, &key);
-        let plaintext = 0xffffffffffffffff;
-        let ciphertext = 0x3333dcd3213210d2;
-
-        assert_eq!(ciphertext, cipher.encrypt(plaintext, &round_keys));
-    }
-
-    #[test]
-    fn decryption_test() {
-        let cipher = cipher::name_to_cipher("present").unwrap();
-        let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(32, &key);
-        let plaintext = 0x0000000000000000;
-        let ciphertext = 0x5579c1387b228445;
-
-        assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
-
-        let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-        let round_keys = cipher.key_schedule(32, &key);
-        let plaintext = 0xffffffffffffffff;
-        let ciphertext = 0x3333dcd3213210d2;
-
-        assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
-    }*/
-
     #[test]
     fn encryption_decryption_test() {
-        let cipher = cipher::name_to_cipher("gift").unwrap();
+        let cipher = cipher::name_to_cipher("gift64").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
         let round_keys = cipher.key_schedule(28, &key);
@@ -327,8 +291,8 @@ mod tests {
 
         assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
 
-        let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
+                   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
         let round_keys = cipher.key_schedule(28, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);

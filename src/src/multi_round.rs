@@ -107,7 +107,7 @@ hexadecimals, without the '0x' prefix.
 file_mask_in        Prefix of the path of the two files used.
 */
 fn read_allowed(file_mask_in: String) 
-                -> (FnvHashSet<u64>,FnvHashSet<u64>) {
+                -> (FnvHashSet<u128>,FnvHashSet<u128>) {
     let mut file_input_path = file_mask_in.clone();
     file_input_path.push_str(".input");
     let mut file_output_path = file_mask_in.clone();
@@ -115,13 +115,13 @@ fn read_allowed(file_mask_in: String)
 
     let file = File::open(file_input_path).expect("Could not open file.");
     let input_allowed = BufReader::new(file).lines()
-                            .map(|x| u64::from_str_radix(&x.expect("Error reading file."), 16)
+                            .map(|x| u128::from_str_radix(&x.expect("Error reading file."), 16)
                                          .expect("Could not parse integer. Is it in hexadecimals?"))
                             .collect();
 
     let file = File::open(file_output_path).expect("Could not open file.");
     let output_allowed = BufReader::new(file).lines()
-                           .map(|x| u64::from_str_radix(&x.expect("Error reading file."), 16)
+                           .map(|x| u128::from_str_radix(&x.expect("Error reading file."), 16)
                                         .expect("Could not parse integer. Is it in hexadecimals?"))
                            .collect();
     (input_allowed, output_allowed)

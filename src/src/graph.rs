@@ -10,8 +10,8 @@ successors          A map from a vertex label to a length
 */
 #[derive(Clone, Debug)]
 pub struct Vertex {
-    pub predecessors: FnvHashMap<usize, f64>,
-    pub successors: FnvHashMap<usize, f64>,
+    pub predecessors: FnvHashMap<u128, f64>,
+    pub successors: FnvHashMap<u128, f64>,
 }
 
 impl Vertex {
@@ -29,7 +29,7 @@ impl Vertex {
     Add a predecessor to the vertex.
     */
     fn add_predecessor(&mut self, 
-                       predecessor: usize, 
+                       predecessor: u128, 
                        length: f64) {
         self.predecessors.insert(predecessor, length);
     }
@@ -38,7 +38,7 @@ impl Vertex {
     Add a successor to the vertex.
     */
     fn add_successor(&mut self, 
-                     successor: usize, 
+                     successor: u128, 
                      length: f64) {
         self.successors.insert(successor, length);
     }
@@ -53,7 +53,7 @@ vertices    A vector where each element contains a map of vertices for the given
 */
 #[derive(Clone)]
 pub struct MultistageGraph {
-    pub vertices: Vec<FnvHashMap<usize, Vertex>>,
+    pub vertices: Vec<FnvHashMap<u128, Vertex>>,
 }
 
 impl MultistageGraph {
@@ -87,7 +87,7 @@ impl MultistageGraph {
     */
     pub fn add_vertex(&mut self, 
                       stage: usize, 
-                      label: usize) {    
+                      label: u128) {    
         if !self.vertices.get(stage).expect("Stage out of range").contains_key(&label) {
             let vertex = Vertex::new();
             self.vertices.get_mut(stage)
@@ -107,8 +107,8 @@ impl MultistageGraph {
     */
     pub fn add_edge(&mut self, 
                     stage: usize, 
-                    from: usize, 
-                    to: usize, 
+                    from: u128, 
+                    to: u128, 
                     length: f64) {
         if self.vertices.get(stage).expect("Stage out of range").contains_key(&from) &&
            self.vertices.get(stage+1).expect("Stage out of range").contains_key(&to) {
@@ -132,7 +132,7 @@ impl MultistageGraph {
 
     edges   A map containg tupes of the type (stage, to, from) mapping to a length.
     */
-    pub fn add_edges(&mut self, edges: &IndexMap<(usize, usize, usize), f64>) {
+    pub fn add_edges(&mut self, edges: &IndexMap<(usize, u128, u128), f64>) {
         for (&(stage, from, to), &length) in edges {
             self.add_edge(stage, from, to, length);
         }
@@ -144,7 +144,7 @@ impl MultistageGraph {
 
     edges   A map containg tupes of the type (stage, from, to) mapping to a length.
     */
-    pub fn add_edges_and_vertices(&mut self, edges: &IndexMap<(usize, usize, usize), f64>) {
+    pub fn add_edges_and_vertices(&mut self, edges: &IndexMap<(usize, u128, u128), f64>) {
         for (&(stage, from, to), &length) in edges {
             if stage == 0 {
                 self.add_vertex(0, from);
@@ -167,7 +167,7 @@ impl MultistageGraph {
     */
     pub fn remove_vertex(&mut self, 
                          stage: usize, 
-                         label: usize) {
+                         label: u128) {
         {
             let (before, mid) = self.vertices.split_at_mut(stage);
             let (mid, after) = mid.split_at_mut(1);
@@ -258,7 +258,7 @@ impl MultistageGraph {
     */
     pub fn get_vertex(&self, 
                       stage: usize, 
-                      label: usize) 
+                      label: u128) 
                       -> Option<&Vertex> {
         self.vertices.get(stage).expect("Stage out of range.").get(&label)
     }
@@ -270,7 +270,7 @@ impl MultistageGraph {
     */
     pub fn get_stage(&self, 
                      stage: usize) 
-                     -> Option<&FnvHashMap<usize, Vertex>> {
+                     -> Option<&FnvHashMap<u128, Vertex>> {
         self.vertices.get(stage)
     }
 
@@ -280,7 +280,7 @@ impl MultistageGraph {
     stage       Stage to check.
     label       Label of the vertex.
     */
-    pub fn has_vertex(&self, stage: usize, label: usize) -> bool {
+    pub fn has_vertex(&self, stage: usize, label: u128) -> bool {
         self.vertices.get(stage).expect("Stage out of range.").contains_key(&label)
     }
 

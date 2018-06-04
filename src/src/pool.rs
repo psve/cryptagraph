@@ -4,7 +4,7 @@ use utility::parity;
 
 #[derive(Clone)]
 pub struct MaskPool {
-    pub masks: FnvHashMap<u64, f64>,
+    pub masks: FnvHashMap<u128, f64>,
 }
 
 impl MaskPool {
@@ -18,7 +18,7 @@ impl MaskPool {
         self.masks.clear();
     }
 
-    pub fn add(&mut self, mask: u64) {
+    pub fn add(&mut self, mask: u128) {
         self.masks.insert(mask, 1.0);
     }
 }
@@ -27,7 +27,7 @@ pub fn step(
     lat      : &MaskLAT,
     pool_new : &mut MaskPool,
     pool_old : &MaskPool,
-    key      : u64,
+    key      : u128,
 ) {
     pool_new.clear();
 

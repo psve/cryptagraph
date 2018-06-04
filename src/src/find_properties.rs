@@ -48,7 +48,7 @@ fn num_paths(graph: &MultistageGraph,
                         // Go through all edges (i.e. properties (input, output)) in the current map
                         for &output in &edge_map {
                             // Look up output in the single round map in order to extend one round
-                            match graph.get_vertex(r, *output as usize) {
+                            match graph.get_vertex(r, *output) {
                                 Some(vertex_ref) => {
                                     for new_output in vertex_ref.successors.keys() {
                                         new_edge_map.insert(new_output);
@@ -142,7 +142,7 @@ pub fn find_middle_properties(graph: &MultistageGraph,
 
                 // Split input values between threads and call find_properties
                 for &input in graph.get_stage(start).unwrap().keys().skip(t).step_by(num_threads) {
-                    let properties = find_properties(&graph, property_type, input as u64, start, stop);
+                    let properties = find_properties(&graph, property_type, input as u128, start, stop);
                     
                     for property in properties.values() {
                         result.push(*property);
@@ -150,10 +150,10 @@ pub fn find_middle_properties(graph: &MultistageGraph,
                     
                     // Only keep best <num_keep> properties modified with outer transitions
                     result.sort_by(|&x, &y| {
-                        let x_value = x.value * best_forward.get(&(x.input as usize)).unwrap() 
-                                              * best_backward.get(&(x.output as usize)).unwrap();
-                        let y_value = y.value * best_forward.get(&(y.input as usize)).unwrap() 
-                                              * best_backward.get(&(y.output as usize)).unwrap();
+                        let x_value = x.value * best_forward.get(&(x.input)).unwrap() 
+                                              * best_backward.get(&(x.output)).unwrap();
+                        let y_value = y.value * best_forward.get(&(y.input)).unwrap() 
+                                              * best_backward.get(&(y.output)).unwrap();
                         y_value.partial_cmp(&x_value).unwrap()
                     });
                     result.truncate(num_keep);
@@ -178,10 +178,10 @@ pub fn find_middle_properties(graph: &MultistageGraph,
     }
 
     result.sort_by(|x, y| {
-        let x_value = x.value * best_forward.get(&(x.input as usize)).unwrap() 
-                              * best_backward.get(&(x.output as usize)).unwrap();
-        let y_value = y.value * best_forward.get(&(y.input as usize)).unwrap() 
-                              * best_backward.get(&(y.output as usize)).unwrap();
+        let x_value = x.value * best_forward.get(&(x.input)).unwrap() 
+                              * best_backward.get(&(x.output)).unwrap();
+        let y_value = y.value * best_forward.get(&(y.input)).unwrap() 
+                              * best_backward.get(&(y.output)).unwrap();
         y_value.partial_cmp(&x_value).unwrap()
     });
     result.truncate(num_keep);
@@ -236,7 +236,7 @@ pub fn restricted_graph(graph: &MultistageGraph,
     }
 
     for p in middle_edges.iter() {
-        new_graph.add_edge(start+1, p.input as usize, p.output as usize, p.value);
+        new_graph.add_edge(start+1, p.input, p.output, p.value);
     }
     
     new_graph.prune(0, stages - (stop-start+1) + 4);
@@ -259,10 +259,10 @@ input           The input value to start the search from.
 */
 fn find_properties(graph: &MultistageGraph, 
                    property_type: PropertyType,
-                   input: u64,
+                   input: u128,
                    start: usize,
                    stop: usize) 
-                   -> IndexMap<u64, Property> {
+                   -> IndexMap<u128, Property> {
     let start_property = Property::new(input, input, 1.0, 1);
     
     // The edge map maps output values to properties over a number of rounds
@@ -277,7 +277,7 @@ fn find_properties(graph: &MultistageGraph,
         // Go through all edges (i.e. properties (input, output)) in the current map
         for (output, &property) in &edge_map {
             // Look up output in the single round map in order to extend one round
-            match graph.get_vertex(r, *output as usize) {
+            match graph.get_vertex(r, *output) {
                 Some(vertex_ref) => {
                     for (&new_output, &length) in &vertex_ref.successors {
                         // Either add the new path to the current property or create a new one
@@ -286,9 +286,9 @@ fn find_properties(graph: &MultistageGraph,
                             PropertyType::Differential => length,
                         };
 
-                        let entry = new_edge_map.entry(new_output as u64)
+                        let entry = new_edge_map.entry(new_output as u128)
                                                 .or_insert(Property::new(property.input,
-                                                                         new_output as u64,
+                                                                         new_output as u128,
                                                                          0.0, 0));
 
                         (*entry).trails += property.trails;
@@ -316,10 +316,10 @@ num_keep            The number of properties to keep. The best <num_keep> proper
 */
 pub fn parallel_find_properties(graph: &MultistageGraph,
                                 property_type: PropertyType,
-                                input_allowed: &FnvHashSet<u64>,
-                                output_allowed: &FnvHashSet<u64>,
+                                input_allowed: &FnvHashSet<u128>,
+                                output_allowed: &FnvHashSet<u128>,
                                 num_keep: usize) 
-                                -> (Vec<Property>, f64, usize) {
+                                -> (Vec<Property>, f64, u128) {
     println!("Finding properties ({} input values, {} edges):", 
              graph.get_stage(0).unwrap().len(), graph.num_edges());
 
@@ -344,7 +344,7 @@ pub fn parallel_find_properties(graph: &MultistageGraph,
 
                 // Split input values between threads and call find_properties
                 for &input in graph.get_stage(0).unwrap().keys().skip(t).step_by(num_threads) {
-                    let properties = find_properties(&graph, property_type, input as u64, 0, rounds);
+                    let properties = find_properties(&graph, property_type, input as u128, 0, rounds);
                     num_found += properties.len();
                     
                     for property in properties.values() {

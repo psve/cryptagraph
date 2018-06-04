@@ -1,6 +1,6 @@
 use cipher::{Cipher, Sbox};
 use fnv::FnvHashMap;
-use approximation::{Approximation};
+use property::Property;
 use utility::{ProgressBar};
 
 static FLOAT_TINY : f64 = 0.00000000000000000000000000000000001;
@@ -11,16 +11,16 @@ static FLOAT_TINY : f64 = 0.00000000000000000000000000000000001;
  */
 pub struct LAT {
     lat       : Vec<Vec<Option<f64>>>,
-    map_alpha : Vec<Vec<Approximation>>,
-    map_beta  : Vec<Vec<Approximation>>
+    map_alpha : Vec<Vec<Property>>,
+    map_beta  : Vec<Vec<Property>>
 }
 
 /* Approximation over a full domain (up to 64-bit)
  */
 pub struct MaskApproximation {
     pub corr  : f64,
-    pub alpha : u64,
-    pub beta  : u64, // permuted, -> new alpha
+    pub alpha : u128,
+    pub beta  : u128, // permuted, -> new alpha
 }
 
 /* Linear Approximation Table for entire round permutation
@@ -28,7 +28,7 @@ pub struct MaskApproximation {
  * The linear layer has been applied to the { beta } set.
  */
 pub struct MaskLAT {
-    map_alpha: FnvHashMap<u64, Vec<MaskApproximation>>,
+    map_alpha: FnvHashMap<u128, Vec<MaskApproximation>>,
 }
 
 impl LAT {
@@ -69,14 +69,14 @@ impl LAT {
 
                 {
                     let entry = lat.map_alpha.get_mut(alpha).unwrap();
-                    entry.push(Approximation::new(alpha as u64, beta as u64, Some(corr)));
+                    entry.push(Property::new(alpha as u128, beta as u128, corr, 1));
                 }
 
                 // add to beta map
 
                 {
                     let entry = lat.map_beta.get_mut(beta).unwrap();
-                    entry.push(Approximation::new(alpha as u64, beta as u64, Some(corr)));
+                    entry.push(Property::new(alpha as u128, beta as u128, corr, 1));
                 }
             }
 
@@ -91,7 +91,7 @@ impl LAT {
     }
 
     #[inline(always)]
-    pub fn lookup(&self, a : u64, b : u64) -> Option<f64> {
+    pub fn lookup(&self, a : u128, b : u128) -> Option<f64> {
         match self.lat.get(a as usize) {
             None      => None,
             Some(vec) => {
@@ -113,8 +113,8 @@ impl MaskLAT {
     fn correlation(
         cipher : &Cipher,
         lat    : &LAT,
-        alpha  : u64,
-        beta   : u64
+        alpha  : u128,
+        beta   : u128
     ) -> Option<f64> {
         let mut corr : f64 = 1.0;
         let mut alpha      = alpha;
@@ -150,7 +150,7 @@ impl MaskLAT {
     /* Constructs a LAT over the bricklayer function
      * for the particular set of parities
      */
-    pub fn new(cipher : &Cipher, masks : &Vec<u64>) -> MaskLAT {
+    pub fn new(cipher : &Cipher, masks : &Vec<u128>) -> MaskLAT {
 
         // construct lat for single sbox instance
 
@@ -212,7 +212,7 @@ impl MaskLAT {
         mlat
     }
 
-    pub fn lookup_alpha(&self, a : u64) -> &Vec<MaskApproximation> {
+    pub fn lookup_alpha(&self, a : u128) -> &Vec<MaskApproximation> {
         self.map_alpha.get(&a).unwrap()
     }
 }

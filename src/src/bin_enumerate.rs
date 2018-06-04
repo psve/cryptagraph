@@ -14,7 +14,6 @@ mod pool;
 mod cipher;
 mod utility;
 mod analysis;
-mod approximation;
 mod options;
 #[allow(dead_code)]
 mod property;
@@ -53,13 +52,13 @@ pub struct CliArgs {
 }
 
 
-fn load_masks(path : &str) -> Option<Vec<u64>> {
+fn load_masks(path : &str) -> Option<Vec<u128>> {
     let file      = File::open(path).unwrap();
     let reader    = BufReader::new(&file);
     let mut masks = vec![];
     for line in reader.lines() {
         let line = line.unwrap();
-        let mask = match u64::from_str_radix(&line, 16) {
+        let mask = match u128::from_str_radix(&line, 16) {
             Ok(m)  => m,
             Err(_) => return None,
         };
@@ -81,7 +80,7 @@ fn main() {
         None => panic!("failed to load mask set")
     };
 
-    let alpha = u64::from_str_radix(&options.alpha, 16).unwrap();
+    let alpha = u128::from_str_radix(&options.alpha, 16).unwrap();
 
     let betas = match load_masks(&options.beta) {
         Some(m) => m,
