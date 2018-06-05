@@ -1,10 +1,10 @@
-use rand::{OsRng, RngCore};
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
+use fnv::FnvHashMap;
+use time;
+
 use cipher::*;
-use dist::pool::{MaskPool, step};
-use dist::analysis::MaskLat;
-use utility::{parity, ProgressBar};
+use dist::correlations::get_correlations;
 
 fn load_masks(path : &str) -> Option<Vec<u128>> {
     let file      = File::open(path).unwrap();
@@ -21,128 +21,70 @@ fn load_masks(path : &str) -> Option<Vec<u128>> {
     Some(masks)
 }
 
+fn dump_correlations(correlations: &FnvHashMap<(u128, u128), Vec<f64>>,
+                     path: &str) {
+    let mut file = OpenOptions::new()
+                               .write(true)
+                               .truncate(true)
+                               .create(true)
+                               .open(path)
+                               .expect("Could not open file.");
+
+    let mut values = Vec::new();
+
+    let mut line = String::new();
+    for ((alpha, beta), corrs) in correlations.iter() {
+        line.push_str(&format!("{:032x}_{:032x},", alpha, beta));
+        values.push(corrs);
+    }
+    line.pop();
+    write!(file, "{}\n", line).expect("Could not write to file.");
+
+    for j in 0..values.first().expect("Empty data set.").len() {
+        let mut line = String::new();
+        
+        for i in 0..values.len() {
+            line.push_str(&format!("{},", values[i][j]));
+        }
+        line.pop();
+        write!(file, "{}\n", line).expect("Could not write to file.");
+    }
+}
+
 pub fn get_distributions(cipher: Box<Cipher>,
                          alpha: String,
                          beta: String,
                          rounds: usize,
                          keys: usize,
                          masks: String,
-                         output: Option<String>) {
+                         output: String) {
+    let start = time::precise_time_s();
     
-    // parse options
-
-    // let options    = CliArgs::from_args();
-
     // read mask files
-
     let masks = match load_masks(&masks) {
         Some(m) => m,
         None => panic!("failed to load mask set")
     };
 
-    let alpha = u128::from_str_radix(&alpha, 16).unwrap();
+    let alphas = match load_masks(&alpha) {
+        Some(m) => m,
+        None => panic!("failed to load mask set")
+    };
 
     let betas = match load_masks(&beta) {
         Some(m) => m,
         None => panic!("failed to load mask set")
     };
+    
+    println!("Cipher: {}", cipher.name());
+    println!("Input masks: {}", alphas.len());
+    println!("Output masks: {}", betas.len());
+    println!("Intermediate masks: {}", masks.len());
 
-    println!("Target cipher: {}", cipher.name());
+    let correlations = get_correlations(cipher.as_ref(), &alphas, &betas, rounds, keys, &masks);
 
-    match &output {
-        Some(prefix) => println!("Saving results to {}.xyz.corr", prefix),
-        None => println!("Results will not be saved!")
-    };
+    let path = format!("{}_r{}_{}.corrs", cipher.name(), rounds, output);
+    dump_correlations(&correlations, &path);
 
-    // calculate LAT for masks between rounds (cipher dependent)
-
-    println!("Calculating full approximation table");
-
-    let lat = MaskLat::new(cipher.as_ref(), &masks);
-
-    // construct pools
-
-    let mut pool_old = MaskPool::new();
-    let mut pool_new = MaskPool::new();
-
-    println!("Enumerating keys");
-
-    let mut rng = OsRng::new().unwrap();
-    let mut key = vec![0; cipher.key_size() / 8];
-
-    // open output files
-
-    let mut outputs = vec![];
-    for beta in &betas {
-        outputs.push(
-            File::create(
-                match &output {
-                    Some(prefix) => format!(
-                        "{}.{}.{}.{:x}.{:x}.corrs",
-                        prefix,
-                        cipher.name(),
-                        keys,
-                        alpha,
-                        beta
-                    ),
-                    None => String::from("/dev/null")
-                }
-            ).unwrap()
-        )
-    }
-
-    let mut bar = ProgressBar::new(keys);
-
-    for _ in 0..keys {
-
-        bar.increment();
-
-        // generate rounds keys
-
-        rng.fill_bytes(&mut key);
-        let keys = cipher.key_schedule(rounds, &key);
-
-        // initalize pool with chosen alpha
-
-        pool_old.clear();
-        pool_old.add(alpha);
-
-        for round in 0..rounds {
-            // "clock" all patterns one round
-
-            step(&lat, &mut pool_new, &pool_old, keys[round]);
-
-            // check for early termination
-
-            if pool_new.masks.len() == 0 {
-                println!("pool empty :(");
-                return;
-            }
-
-            // swap pools
-
-            {
-                let tmp  = pool_old;
-                pool_old = pool_new;
-                pool_new = tmp;
-                pool_new.clear();
-            }
-        }
-
-
-        for (i, beta) in betas.iter().enumerate() {
-
-            let corr = match pool_old.masks.get(&beta) {
-                Some(c) =>
-                    if cipher.whitening() && parity(beta & keys[rounds]) == 1  {
-                        - (*c)
-                    } else {
-                        *c
-                    },
-                None    => 0.0
-            };
-
-            outputs[i].write_fmt(format_args!("{:}\n", corr)).unwrap();
-        }
-    }
+    println!("Generation finished. [{} s]", time::precise_time_s()-start);
 }

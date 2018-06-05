@@ -84,7 +84,7 @@ fn dump_masks(graph: &MultistageGraph,
 
 
     for (input, output) in &property_set {
-        write!(file, "{:016x},{:016x}\n", input, output).expect("Could not write to file.");
+        write!(file, "{:032x},{:032x}\n", input, output).expect("Could not write to file.");
     }
 
     let mut file = OpenOptions::new()
@@ -95,7 +95,7 @@ fn dump_masks(graph: &MultistageGraph,
                                .expect("Could not open file.");
     
     for mask in &mask_set {
-        write!(file, "{:016x}\n", mask).expect("Could not write to file.");
+        write!(file, "{:032x}\n", mask).expect("Could not write to file.");
     }
 }
 

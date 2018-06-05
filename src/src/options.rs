@@ -61,7 +61,7 @@ pub enum CryptagraphOptions {
         #[structopt(short = "c", long = "cipher", help = "Name of cipher to analyse.")]
         cipher: String,
 
-        #[structopt(short = "a", long = "alpha", help = "Input mask / parity (hex)")]
+        #[structopt(short = "a", long = "alpha", help = "Input masks (file path)")]
         alpha: String,
 
         #[structopt(short = "b", long = "beta", help = "Output masks (file path)")]
@@ -77,6 +77,6 @@ pub enum CryptagraphOptions {
         masks: String,
 
         #[structopt(short = "o", long = "output", help = "Pattern to save correlations: save.cipher.keys.input.output.corrs")]
-        output: Option<String>,
+        output: String,
     }
 }
