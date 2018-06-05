@@ -24,7 +24,7 @@ impl FromStr for PropertyType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub enum PropertyFilter {
     All,
     Input,

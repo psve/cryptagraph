@@ -15,11 +15,3 @@ fnv = "*"
 indexmap = "*"
 smallvec = "*"
 itertools = "*"
-
-[[bin]]
-name = "generate"
-path = "src/bin_generate.rs"
-
-[[bin]]
-name = "enumerate"
-path = "src/bin_enumerate.rs"

@@ -32,6 +32,34 @@ pub fn parity(input: u128) -> u128 {
     (y >> 124) & 1
 }
 
+
+static COMP_PATTERN: [u128; 4] = [
+    0x01010101010101010101010101010101, 
+    0x11111111111111111111111111111111, 
+    0x55555555555555555555555555555555, 
+    0xffffffffffffffffffffffffffffffff
+]; 
+
+/**
+"Compresses" a 64-bit value such that if a block of 2^(3-level) bits is non-zero, than that 
+block is set to the value 1.
+
+x       The value to compress
+level   The compression level to use.
+*/
+#[inline(always)]
+pub fn compress(x: u128, 
+                level: usize) 
+                -> u128 {
+    // We use bit patterns to reduce the amount of work done
+    let mut y = x;
+    for i in 0..(3-level) {
+        y = y | (y >> (1<<i));
+    }
+
+    y & COMP_PATTERN[level]
+}
+
 /**
 A struct representing a progress bar for progress printing on the command line.
 

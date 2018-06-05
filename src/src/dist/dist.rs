@@ -1,56 +1,10 @@
-#[macro_use] extern crate structopt_derive;
-
-extern crate structopt;
-extern crate rand;
-extern crate fnv;
-extern crate itertools;
-
-macro_rules! debug {
-    ($($arg:tt)*) => (if cfg!(debug_assertions) { println!($($arg)*) })
-}
-
-mod pool;
-#[allow(dead_code)]
-mod cipher;
-mod utility;
-mod analysis;
-mod options;
-#[allow(dead_code)]
-mod property;
-
 use rand::{OsRng, RngCore};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
-use structopt::StructOpt;
 use cipher::*;
-use pool::MaskPool;
+use dist::pool::{MaskPool, step};
+use dist::analysis::MaskLat;
 use utility::{parity, ProgressBar};
-
-#[derive(Clone, StructOpt)]
-#[structopt(name = "Hull Enumeration")]
-pub struct CliArgs {
-    #[structopt(short = "c", long = "cipher", help = "Name of cipher to analyse.")]
-    pub cipher: String,
-
-    #[structopt(short = "a", long = "alpha", help = "Input mask / parity (hex)")]
-    pub alpha: String,
-
-    #[structopt(short = "b", long = "beta", help = "Output masks (file path)")]
-    pub beta: String,
-
-    #[structopt(short = "r", long = "rounds", help = "Number of rounds to enumerate")]
-    pub rounds: usize,
-
-    #[structopt(short = "k", long = "keys", help = "Number of keys to enumerate")]
-    pub keys: usize,
-
-    #[structopt(short = "m", long = "masks", help = "Path to file of masks")]
-    pub masks: String,
-
-    #[structopt(short = "o", long = "output", help = "Pattern to save correlations: save.cipher.keys.input.output.corrs")]
-    pub output: Option<String>,
-}
-
 
 fn load_masks(path : &str) -> Option<Vec<u128>> {
     let file      = File::open(path).unwrap();
@@ -67,36 +21,35 @@ fn load_masks(path : &str) -> Option<Vec<u128>> {
     Some(masks)
 }
 
-fn main() {
-
+pub fn get_distributions(cipher: Box<Cipher>,
+                         alpha: String,
+                         beta: String,
+                         rounds: usize,
+                         keys: usize,
+                         masks: String,
+                         output: Option<String>) {
+    
     // parse options
 
-    let options    = CliArgs::from_args();
+    // let options    = CliArgs::from_args();
 
     // read mask files
 
-    let masks = match load_masks(&options.masks) {
+    let masks = match load_masks(&masks) {
         Some(m) => m,
         None => panic!("failed to load mask set")
     };
 
-    let alpha = u128::from_str_radix(&options.alpha, 16).unwrap();
+    let alpha = u128::from_str_radix(&alpha, 16).unwrap();
 
-    let betas = match load_masks(&options.beta) {
+    let betas = match load_masks(&beta) {
         Some(m) => m,
         None => panic!("failed to load mask set")
-    };
-
-    // resolve cipher name
-
-    let cipher = match name_to_cipher(options.cipher.as_ref()) {
-        Some(c) => c,
-        None    => panic!("unsupported cipher")
     };
 
     println!("Target cipher: {}", cipher.name());
 
-    match &options.output {
+    match &output {
         Some(prefix) => println!("Saving results to {}.xyz.corr", prefix),
         None => println!("Results will not be saved!")
     };
@@ -105,7 +58,7 @@ fn main() {
 
     println!("Calculating full approximation table");
 
-    let lat = analysis::MaskLAT::new(cipher.as_ref(), &masks);
+    let lat = MaskLat::new(cipher.as_ref(), &masks);
 
     // construct pools
 
@@ -123,12 +76,12 @@ fn main() {
     for beta in &betas {
         outputs.push(
             File::create(
-                match &options.output {
+                match &output {
                     Some(prefix) => format!(
                         "{}.{}.{}.{:x}.{:x}.corrs",
                         prefix,
-                        options.cipher,
-                        options.keys,
+                        cipher.name(),
+                        keys,
                         alpha,
                         beta
                     ),
@@ -138,26 +91,26 @@ fn main() {
         )
     }
 
-    let mut bar = ProgressBar::new(options.keys);
+    let mut bar = ProgressBar::new(keys);
 
-    for _ in 0..options.keys {
+    for _ in 0..keys {
 
         bar.increment();
 
         // generate rounds keys
 
         rng.fill_bytes(&mut key);
-        let keys = cipher.key_schedule(options.rounds, &key);
+        let keys = cipher.key_schedule(rounds, &key);
 
         // initalize pool with chosen alpha
 
         pool_old.clear();
         pool_old.add(alpha);
 
-        for round in 0..options.rounds {
+        for round in 0..rounds {
             // "clock" all patterns one round
 
-            pool::step(&lat, &mut pool_new, &pool_old, keys[round]);
+            step(&lat, &mut pool_new, &pool_old, keys[round]);
 
             // check for early termination
 
@@ -181,7 +134,7 @@ fn main() {
 
             let corr = match pool_old.masks.get(&beta) {
                 Some(c) =>
-                    if cipher.whitening() && parity(beta & keys[options.rounds]) == 1  {
+                    if cipher.whitening() && parity(beta & keys[rounds]) == 1  {
                         - (*c)
                     } else {
                         *c

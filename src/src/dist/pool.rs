@@ -1,4 +1,4 @@
-use analysis::MaskLAT;
+use dist::analysis::MaskLat;
 use fnv::FnvHashMap;
 use utility::parity;
 
@@ -24,7 +24,7 @@ impl MaskPool {
 }
 
 pub fn step(
-    lat      : &MaskLAT,
+    lat      : &MaskLat,
     pool_new : &mut MaskPool,
     pool_old : &MaskPool,
     key      : u128,

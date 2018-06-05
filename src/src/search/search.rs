@@ -4,9 +4,9 @@ use std::io::{Write, BufReader, BufRead};
 use time;
 
 use cipher::Cipher;
-use find_properties::{parallel_find_properties, restricted_graph};
-use graph::MultistageGraph;
-use graph_generate::generate_graph;
+use search::find_properties::parallel_find_properties;
+use search::graph::MultistageGraph;
+use search::graph_generate::generate_graph;
 use property::PropertyType;
 
 /**
@@ -143,11 +143,24 @@ pub fn find_properties(cipher: Box<Cipher>,
                        property_type: PropertyType,
                        rounds: usize, 
                        patterns: usize,
-                       percentage: Option<f64>,
                        anchors: Option<usize>,
                        file_mask_in: Option<String>,
                        file_mask_out: Option<String>,
                        file_graph: Option<String>) {
+    println!("\tCipher: {}.", cipher.name());
+    match property_type {
+        PropertyType::Linear       => println!("\tProperty: Linear"),
+        PropertyType::Differential => println!("\tProperty: Differential")
+    }
+    println!("\tRounds: {}.", rounds);
+    println!("\tS-box patterns: {}", patterns);
+    match anchors {
+        Some(a) => println!("\tMaximum anchors: 2^{}", a),
+        None    => println!("\tMaximum anchors: 2^17"),
+    }
+    println!("");
+
+
     let start = time::precise_time_s();
     // Restrict the number of results printed
     let num_keep = 50;
@@ -161,10 +174,10 @@ pub fn find_properties(cipher: Box<Cipher>,
         }
     };
 
-    println!("\n--------------------------------------- GRAPH GENERATION ---------------------------------------\n");
+    println!("\n--------------------------------------- GENERATING GRAPH ---------------------------------------\n");
 
-    let mut graph = generate_graph(cipher, property_type, rounds, patterns, 
-                                   anchors, &input_allowed, &output_allowed);
+    let graph = generate_graph(cipher, property_type, rounds, patterns, 
+                               anchors, &input_allowed, &output_allowed);
 
     match file_graph {
         Some(path) => {
@@ -180,17 +193,7 @@ pub fn find_properties(cipher: Box<Cipher>,
         None => { }
     }
 
-    if percentage.is_some() {
-        println!("\n-------------------------------------- GRAPH RESTRICTION ---------------------------------------\n");
-        println!("Finding restricted version of graph before search -- {} runs.", rounds/2);
-
-        for i in (0..rounds/2).rev() {
-            let stages = graph.stages();
-            graph = restricted_graph(&graph, property_type, percentage.unwrap(), i, stages-i-1);
-        }
-    }
-
-    println!("\n---------------------------------------- GRAPH SEARCH ------------------------------------------\n");
+    println!("\n------------------------------------- FINDING PROPERTIES ---------------------------------------\n");
 
     let (result, min_value, paths) = parallel_find_properties(&graph,property_type, 
                                           &input_allowed, &output_allowed, 

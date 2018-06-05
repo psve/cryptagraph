@@ -3,13 +3,18 @@ use fnv::FnvHashMap;
 use property::Property;
 use utility::{ProgressBar};
 
+macro_rules! debug {
+    ($($arg:tt)*) => (if cfg!(debug_assertions) { println!($($arg)*) })
+}
+
+
 static FLOAT_TINY : f64 = 0.00000000000000000000000000000000001;
 
 /* Linear Approximation Table over some component.
  *
  * Maps (alpha, beta) -> correlation
  */
-pub struct LAT {
+pub struct Lat {
     lat       : Vec<Vec<Option<f64>>>,
     map_alpha : Vec<Vec<Property>>,
     map_beta  : Vec<Vec<Property>>
@@ -27,14 +32,14 @@ pub struct MaskApproximation {
  *
  * The linear layer has been applied to the { beta } set.
  */
-pub struct MaskLAT {
+pub struct MaskLat {
     map_alpha: FnvHashMap<u128, Vec<MaskApproximation>>,
 }
 
-impl LAT {
-    pub fn new(sbox: &Sbox) -> LAT {
+impl Lat {
+    pub fn new(sbox: &Sbox) -> Lat {
 
-        let mut lat = LAT {
+        let mut lat = Lat {
             lat       : vec![],
             map_alpha : vec![],
             map_beta  : vec![]
@@ -104,15 +109,15 @@ impl LAT {
     }
 }
 
-impl MaskLAT {
+impl MaskLat {
 
-    /* Takes a LAT of a component function and
+    /* Takes an LAT of a component function and
      * computes the correlation of parities over the bricklayer function.
      */
     #[inline(always)]
     fn correlation(
         cipher : &Cipher,
-        lat    : &LAT,
+        lat    : &Lat,
         alpha  : u128,
         beta   : u128
     ) -> Option<f64> {
@@ -147,14 +152,14 @@ impl MaskLAT {
         }
     }
 
-    /* Constructs a LAT over the bricklayer function
+    /* Constructs a Lat over the bricklayer function
      * for the particular set of parities
      */
-    pub fn new(cipher : &Cipher, masks : &Vec<u128>) -> MaskLAT {
+    pub fn new(cipher : &Cipher, masks : &Vec<u128>) -> MaskLat {
 
         // construct lat for single sbox instance
 
-        let lat = LAT::new(cipher.sbox());
+        let lat = Lat::new(cipher.sbox());
 
         /* Assuming SPN; compute possible "betas" for alpha set
          *
@@ -174,7 +179,7 @@ impl MaskLAT {
 
         // construct full mask lat
 
-        let mut mlat = MaskLAT {
+        let mut mlat = MaskLat {
             map_alpha : FnvHashMap::default(),
         };
 
@@ -187,7 +192,7 @@ impl MaskLAT {
         for alpha in masks.iter() {
             bar.increment();
             for beta in betas.iter() {
-                match MaskLAT::correlation(cipher, &lat, *alpha, *beta) {
+                match MaskLat::correlation(cipher, &lat, *alpha, *beta) {
                     None       => (), // zero correlation
                     Some(corr) => {
                         debug_assert!(corr*corr > 0.0);

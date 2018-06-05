@@ -9,41 +9,15 @@ use std::sync::{Arc, Barrier};
 use time;
 
 use cipher::*;
-use graph::MultistageGraph;
+use search::graph::MultistageGraph;
+use search::prince_extra::{prince_pruning, prince_modification};
 use property::{PropertyType, PropertyFilter, MaskMap};
-use single_round::SortedProperties;
-use utility::ProgressBar;
+use search::single_round::SortedProperties;
+use utility::{ProgressBar, compress};
 
 // The number of threads used for parallel calls is fixed
 lazy_static! {
     static ref THREADS: usize = num_cpus::get();
-}
-
-static COMP_PATTERN: [u128; 4] = [
-    0x01010101010101010101010101010101, 
-    0x11111111111111111111111111111111, 
-    0x55555555555555555555555555555555, 
-    0xffffffffffffffffffffffffffffffff
-]; 
-
-/**
-"Compresses" a 64-bit value such that if a block of 2^(3-level) bits is non-zero, than that 
-block is set to the value 1.
-
-x       The value to compress
-level   The compression level to use.
-*/
-#[inline(always)]
-pub fn compress(x: u128, 
-                level: usize) 
-                -> u128 {
-    // We use bit patterns to reduce the amount of work done
-    let mut y = x;
-    for i in 0..(3-level) {
-        y = y | (y >> (1<<i));
-    }
-
-    y & COMP_PATTERN[level]
 }
 
 /**
@@ -580,189 +554,6 @@ fn anchor_ends(cipher: &Cipher,
 }
 
 /**
-Special pruning for Prince-like ciphers. The last layer is also pruned with regards to the
-reflection function. 
-
-cipher      The cipher that specifies the reflection layer.
-graph       The graph to prune.
-*/
-fn prince_pruning(cipher: &Cipher,
-                  graph: &mut MultistageGraph) {
-    let mut pruned = true;
-
-    while pruned {
-        pruned = false;
-
-        let stages = graph.stages();
-        let reflections: FnvHashSet<_>;
-        let remove: FnvHashSet<_>;
-        {
-            reflections = graph.get_stage(stages-1).unwrap()
-                               .keys()
-                               .map(|&x| cipher.reflection_layer(x as u128))
-                               .collect();
-            remove = graph.get_stage(stages-1).unwrap()
-                          .keys()
-                          .filter(|&x| !reflections.contains(&(*x as u128)))
-                          .cloned()
-                          .collect();
-        }
-
-        for &label in &remove {
-            graph.remove_vertex(stages-1, label);
-            pruned = true;
-        }
-
-        graph.prune(0, stages);
-    }
-}
-
-/**
-Creates a Prince-like graph from a normal SPN graph, i.e. it reflects the graph and connects 
-the two halves through a reflection layer.
-
-cipher          The cipher that specifies the reflection layer.
-graph_firs      The first half of the final graph. 
-*/
-fn prince_modification(cipher: &Cipher, 
-                       graph_first: &mut MultistageGraph)
-                       -> MultistageGraph {
-    let stages = graph_first.stages();
-    
-    // Get other half of the graph
-    let mut graph_second = graph_first.clone();
-    graph_second.reverse();
-
-    // Stitch the two halfs together 
-    let mut graph = MultistageGraph::new(stages*2);
-    graph.vertices.splice(0..stages, graph_first.vertices.iter().cloned());
-    graph.vertices.splice(stages..2*stages, graph_second.vertices.iter().cloned());
-
-    // Add reflection edges
-    let mut edges = IndexMap::new();
-
-    for &input in graph.get_stage(stages-1).unwrap().keys() {
-        edges.insert((stages-1, input, cipher.reflection_layer(input as u128)), 1.0);
-    }
-
-    graph.add_edges(&edges);
-    graph.prune(0, 2*stages);
-    graph
-}
-
-/**
-Update all filters with new allowed values given by the current vertices in the graph. 
-Returns number of vertices in the graph which were inserted into the filter. 
-
-filters         Filters to update.
-graph           Graph to update from.
-*/
-fn update_filters(
-    filters: &mut [FnvHashSet<u128>], 
-    graph: &MultistageGraph)
-    -> usize {
-    let mut good_vertices = 0;
-
-    for (i, f) in filters.iter_mut().enumerate() {
-        f.clear();
-        f.extend(graph.get_stage(i).unwrap()
-                                   .iter()
-                                   .map(|(input, _)| *input as u128));
-        good_vertices += f.len();
-    }
-
-    good_vertices
-}
-
-/**
-Removes S-box patterns from a set of properties for which none of the resulting properties
-are allowed by the current filters. Note that the order of properties generated is not preserved.
-
-Filters         Filters to check.
-properties      Properties to remove patterns from.
-level           Compression level used for the filters.
-*/
-fn remove_dead_patterns(filters: &[FnvHashSet<u128>], 
-                        properties: &mut SortedProperties,
-                        level: usize) {
-    let (result_tx, result_rx) = mpsc::channel();
-    
-    // Start scoped worker threads
-    scoped::scope(|scope| {
-        for t in 0..*THREADS {
-            let mut thread_properties = properties.clone();
-            let result_tx = result_tx.clone();
-
-            scope.spawn(move || {
-                thread_properties.set_type_input();
-                
-                // Split the S-box patterns equally across threads
-                // Note that this does not equally split the number of properties across threads,
-                // but hopefully it is close enough
-                let tmp = thread_properties.sbox_patterns.iter()
-                                                         .cloned()
-                                                         .skip(t)
-                                                         .step_by(*THREADS)
-                                                         .collect();
-                thread_properties.sbox_patterns = tmp;
-
-                // Find patterns to keep
-                let mut good_patterns = vec![false; thread_properties.len_patterns()];
-                let mut progress_bar = ProgressBar::new(thread_properties.len());
-
-                for (property, pattern_idx) in thread_properties.into_iter() {
-                    // Skip if pattern is already marked good
-                    if good_patterns[pattern_idx] {
-                        if t == 0 {
-                            progress_bar.increment();
-                        }
-                        continue;
-                    }
-
-                    let input = compress(property.input, level);
-                    let mut good = false;
-
-                    for f in filters {
-                        if f.contains(&input) {
-                            good = true;
-                            break;
-                        }
-                    }
-
-                    good_patterns[pattern_idx] |= good;
-                    
-                    if t == 0 {
-                        progress_bar.increment();
-                    }
-                }
-
-                // Keep only good patterns
-                let mut new_patterns = vec![];
-
-                for (i, keep) in good_patterns.iter().enumerate() {
-                    if *keep {
-                        new_patterns.push(thread_properties.sbox_patterns[i].clone());
-                    }
-                }
-
-                result_tx.send(new_patterns).expect("Thread could not send result");
-            });
-        }
-    });
-
-    // Collect patterns from each thread and update properties
-    let mut new_patterns = Vec::new();
-
-    for _ in 0..*THREADS {
-        let mut thread_result = result_rx.recv().expect("Main could not receive result");
-        new_patterns.append(&mut thread_result);
-    }
-
-    properties.sbox_patterns = new_patterns;
-    properties.set_type_all();
-}
-
-/**
 Initialise filters. The resulting filters allow all values with a block size of 8.
 
 rounds      One less than the number of filters to generate.
@@ -796,6 +587,30 @@ fn init_filter(rounds: usize)
     // Using smallvec here assuming most ciphers don't have a large number of rounds
     let output: SmallVec<[_; 65536]> = smallvec![sequence ; rounds+1];
     output
+}
+
+/**
+Update all filters with new allowed values given by the current vertices in the graph. 
+Returns number of vertices in the graph which were inserted into the filter. 
+
+filters         Filters to update.
+graph           Graph to update from.
+*/
+fn update_filters(
+    filters: &mut [FnvHashSet<u128>], 
+    graph: &MultistageGraph)
+    -> usize {
+    let mut good_vertices = 0;
+
+    for (i, f) in filters.iter_mut().enumerate() {
+        f.clear();
+        f.extend(graph.get_stage(i).unwrap()
+                                   .iter()
+                                   .map(|(input, _)| *input as u128));
+        good_vertices += f.len();
+    }
+
+    good_vertices
 }
 
 /** 
@@ -861,14 +676,14 @@ pub fn generate_graph(cipher: Box<Cipher>,
         for level in 1..4 {
             // Get total number of properties considered
             properties.set_type_all();
-            let num_app = properties.len();
+            let num_prop = properties.len();
             properties.set_type_input();
             let num_input = properties.len();
             properties.set_type_output();
             let num_output = properties.len();
 
             println!("Level {}.", level);
-            println!("{} properties ({} input, {} output).", num_app, num_input, num_output);
+            println!("{} properties ({} input, {} output).", num_prop, num_input, num_output);
 
             let start = time::precise_time_s();
             graph = get_middle_vertices(&properties, rounds, &filters[..], level);
@@ -913,7 +728,7 @@ pub fn generate_graph(cipher: Box<Cipher>,
 
                 let start = time::precise_time_s();
                 let patterns_before = properties.len_patterns();
-                remove_dead_patterns(&filters[..], &mut properties, level);
+                properties.remove_dead_patterns(&filters[..], level);
                 let patterns_after = properties.len_patterns();
                 println!("Removed {} dead patterns [{} s]", 
                     patterns_before - patterns_after, time::precise_time_s()-start);
