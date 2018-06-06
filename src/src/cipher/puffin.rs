@@ -20,7 +20,7 @@ pub struct Puffin {
 }
 
 impl Puffin {
-    const PERMUTATION : [[u128 ; 0x100] ; 8] = include!("puffin.perm");
+    const PERMUTATION : [[u128 ; 0x100] ; 8] = include!("data/puffin.perm");
     const KEY_PERMUTATION : [u128; 128] = [22,121,126,110,79,81,116,55,
                                           113,21,29,20,56,76,41,112,
                                           45,109,95,87,94,44,68,8,

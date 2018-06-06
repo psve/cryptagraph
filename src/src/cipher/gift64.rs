@@ -24,8 +24,8 @@ pub struct Gift64 {
 }
 
 impl Gift64 {
-    const PERMUTATION     : [[u128 ; 0x100] ; 8] = include!("gift.perm");
-    const PERMUTATION_INV : [[u128 ; 0x100] ; 8] = include!("gift.perm.inv");
+    const PERMUTATION     : [[u128 ; 0x100] ; 8] = include!("data/gift.perm");
+    const PERMUTATION_INV : [[u128 ; 0x100] ; 8] = include!("data/gift.perm.inv");
 }
 
 pub fn new() -> Gift64 {

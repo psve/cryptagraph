@@ -25,8 +25,8 @@ pub struct Pride {
 
 pub fn new() -> Pride {
     let table = vec![0x0,0x4,0x8,0xf,0x1,0x5,0xe,0x9,0x2,0x7,0xa,0xc,0xb,0xd,0x6,0x3];
-    let perm = include!("present.perm");
-    let iperm = include!("present.inv.perm");
+    let perm = include!("data/pride.perm");
+    let iperm = include!("data/pride.inv.perm");
 
     Pride {
         size: 64, 

@@ -23,8 +23,8 @@ pub struct Rectangle {
 }
 
 impl Rectangle {
-    const PERMUTATION : [[u128 ; 0x100] ; 8] = include!("rectangle.perm");
-    const IPERMUTATION : [[u128 ; 0x100] ; 8] = include!("rectangle.inv.perm");
+    const PERMUTATION : [[u128 ; 0x100] ; 8] = include!("data/rectangle.perm");
+    const IPERMUTATION : [[u128 ; 0x100] ; 8] = include!("data/rectangle.inv.perm");
 }
 
 pub fn new() -> Rectangle {

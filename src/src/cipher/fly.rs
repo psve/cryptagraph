@@ -20,8 +20,8 @@ pub struct Fly {
 }
 
 impl Fly {
-    const PERMUTATION     : [[u128 ; 0x100] ; 8] = include!("fly.perm");
-    const PERMUTATION_INV : [[u128 ; 0x100] ; 8] = include!("fly.inv.perm");
+    const PERMUTATION     : [[u128 ; 0x100] ; 8] = include!("data/fly.perm");
+    const PERMUTATION_INV : [[u128 ; 0x100] ; 8] = include!("data/fly.inv.perm");
     const SBOX : [u8 ; 256] = [0x00,0x9b,0xc2,0x15,0x5d,0x84,0x4c,0xd1,
                                0x67,0x38,0xef,0xb0,0x7e,0x2b,0xf6,0xa3,
                                0xb9,0xaa,0x36,0x78,0x2f,0x6e,0xe3,0xf7,

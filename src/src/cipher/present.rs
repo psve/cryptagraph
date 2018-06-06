@@ -22,8 +22,8 @@ pub struct Present {
 }
 
 impl Present {
-    const PERMUTATION_INV : [[u128 ; 0x100] ; 8] = include!("present.inv.perm");
-    const PERMUTATION     : [[u128 ; 0x100] ; 8] = include!("present.perm");
+    const PERMUTATION_INV : [[u128 ; 0x100] ; 8] = include!("data/present.inv.perm");
+    const PERMUTATION     : [[u128 ; 0x100] ; 8] = include!("data/present.perm");
     const SBOX : [u8 ; 16] = [0xc, 0x5, 0x6, 0xb,
                               0x9, 0x0, 0xa, 0xd,
                               0x3, 0xe, 0xf, 0x8,
