@@ -36,18 +36,19 @@ impl InternalSboxPattern {
                         Is assumed to contain the value of the trivial property.
      */
     fn extend(&self, 
-              property_values: &[i16], 
+              property_values: &[SmallVec<[i16; 128]>], 
               property_type: PropertyType) 
               -> (Option<InternalSboxPattern>, Option<InternalSboxPattern>) {
-        // Value of the trivial property
-        let trivial = *property_values.first().expect("No values found.") as f64;
-
         // We generate at most two new patterns
         let mut extended_patterns = (None, None);
 
         // The first pattern extends the current pattern to the right with the trivial value
         // If the current pattern is complete, we cannot extend in this way
         if !self.is_complete() {
+            // Value of the trivial property for the next S-box
+            let trivial = *property_values[self.determined_length]
+                            .first().expect("No values found.") as f64;
+
             let mut new_pattern = self.clone();
             new_pattern.pattern[self.determined_length] = Some(trivial as i16);
             new_pattern.determined_length += 1;
@@ -60,25 +61,34 @@ impl InternalSboxPattern {
         // next value in property_values
         let mut new_pattern = self.clone();
         let current_value = self.pattern[self.determined_length - 1].unwrap();
-        // let corr_idx = property_values.binary_search_by(|a| a.abs().cmp(&current_value.abs()).reverse());
-        let corr_idx = property_values.iter().enumerate().find(|(_, x)| **x == current_value).map(|(i,_)| i);
+        let corr_idx = property_values[self.determined_length - 1]
+                        .iter().enumerate().find(|(_, x)| **x == current_value).map(|(i,_)| i);
 
         // This check fails if the current value was the last on the list
         // In this case, this pattern isn't generated
         match corr_idx {
             Some(x) => {
-                if x+1 < property_values.len() {
-                    new_pattern.pattern[self.determined_length - 1] = Some(property_values[x+1]);
+                if x+1 < property_values[self.determined_length - 1].len() {
+                    // Value of the trivial property for the current S-box
+                    let trivial = *property_values[self.determined_length - 1]
+                                    .first().expect("No values found.") as f64;
+
+                    new_pattern.pattern[self.determined_length - 1] = 
+                        Some(property_values[self.determined_length - 1][x+1]);
                     new_pattern.num_active += (x == 0) as usize;
 
                     match property_type {
                         PropertyType::Linear => {
-                            new_pattern.value /= (property_values[x] as f64 / trivial).powi(2);
-                            new_pattern.value *= (property_values[x+1] as f64 / trivial).powi(2);
+                            new_pattern.value /= 
+                                (property_values[self.determined_length - 1][x] as f64 / trivial).powi(2);
+                            new_pattern.value *= 
+                                (property_values[self.determined_length - 1][x+1] as f64 / trivial).powi(2);
                         },
                         PropertyType::Differential => {
-                            new_pattern.value /= property_values[x] as f64 / trivial;
-                            new_pattern.value *= property_values[x+1] as f64 / trivial;
+                            new_pattern.value /= 
+                                property_values[self.determined_length - 1][x] as f64 / trivial;
+                            new_pattern.value *= 
+                                property_values[self.determined_length - 1][x+1] as f64 / trivial;
                         }
                     }
 
@@ -152,7 +162,7 @@ enum PatternStatus {
 /** 
 An external interface to InternalSboxPattern. The pattern only stores the active S-box positions.
 
-pattern     A vector describing the S-box index and its property value.
+pattern     A vector describing the first bit index of the S-box, the S-box index, and its property value.
 property    Current property represented by the pattern.
 mask        A bit mask corresponding to a single S-box.
 counter     A vector of counters keep track of the current property in each S-box.
@@ -160,9 +170,10 @@ status      The patterns current status.
 */
 #[derive(Clone)]
 pub struct SboxPattern {
-    pattern: Vec<(usize, i16)>,
+    pattern: Vec<(usize, usize, i16)>,
     property: Property,
     mask: u128,
+    sbox_size: usize,
     counter: Vec<usize>,
     status: PatternStatus,
 }
@@ -181,8 +192,8 @@ impl SboxPattern {
            -> SboxPattern {
         // Get the value of an inactive S-box 
         let non_property = match property_type {
-            PropertyType::Linear => cipher.sbox().linear_balance(),
-            PropertyType::Differential => 1 << cipher.sbox().size,
+            PropertyType::Linear => cipher.sbox(0).linear_balance(),
+            PropertyType::Differential => 1 << cipher.sbox(0).size,
         };
 
         // Collect active S-box positions
@@ -191,7 +202,7 @@ impl SboxPattern {
                                    .map(|x| x.expect("Tried to convert incomplete pattern."))
                                    .enumerate()
                                    .filter(|&(_,x)| x != non_property)
-                                   .map(|(i,x)| (i*cipher.sbox().size, x))
+                                   .map(|(i,x)| (i*cipher.sbox(i).size, i, x))
                                    .collect();
 
         let counter = vec![0; pattern.len()];
@@ -200,7 +211,8 @@ impl SboxPattern {
         SboxPattern {
             pattern: pattern, 
             property: property,
-            mask: ((1 << cipher.sbox().size) - 1) as u128,
+            mask: ((1 << cipher.sbox(0).size) - 1) as u128,
+            sbox_size: cipher.sbox(0).size,
             counter: counter,
             status: PatternStatus::New
         }
@@ -209,14 +221,14 @@ impl SboxPattern {
     /**
     Generates the next property matching the S-box pattern. 
 
-    value_map        A map from S-box values to inputs/outputs.
+    value_maps          Maps from each S-box's values to inputs/outputs.
     property_filter     A filter determining whether to produce full properties, or only
                         inputs/outputs.
     */
     pub fn next(&mut self, 
-            value_map: &ValueMap,
-            property_filter: &PropertyFilter) 
-            -> Option<Property> {
+                value_maps: &Vec<ValueMap>,
+                property_filter: &PropertyFilter) 
+                -> Option<Property> {
         // If there are no active S-boxes in the pattern, it is already empty
         if self.counter.len() == 0 {
             self.status = PatternStatus::Empty;
@@ -229,11 +241,11 @@ impl SboxPattern {
 
         // Initialise and return first property if the pattern is new
         if self.status == PatternStatus::New {
-            for &(i, x) in &self.pattern {
+            for &(i, j, x) in &self.pattern {
                 let sbox_property = match property_filter {
-                    PropertyFilter::All   => value_map.get(&x).unwrap()[0],
-                    PropertyFilter::Input => value_map.get_input(&x).unwrap()[0],
-                    PropertyFilter::Output  => value_map.get_output(&x).unwrap()[0]
+                    PropertyFilter::All   => value_maps[j].get(&x).unwrap()[0],
+                    PropertyFilter::Input => value_maps[j].get_input(&x).unwrap()[0],
+                    PropertyFilter::Output  => value_maps[j].get_output(&x).unwrap()[0]
                 };
 
                 let input = sbox_property.input;
@@ -252,12 +264,13 @@ impl SboxPattern {
         for i in 0..self.counter.len() {
             // We can consider counter as a mixed radix number. We simply increment the value of
             // this number. 
-            let idx = self.pattern[i].0;
-            let val = self.pattern[i].1;
+            let idx  = self.pattern[i].0;
+            let sbox = self.pattern[i].1;
+            let val  = self.pattern[i].2;
             let modulus = match property_filter {
-                PropertyFilter::All    => value_map.len_of(val),
-                PropertyFilter::Input  => value_map.len_of_input(val),
-                PropertyFilter::Output => value_map.len_of_output(val)
+                PropertyFilter::All    => value_maps[sbox].len_of(val),
+                PropertyFilter::Input  => value_maps[sbox].len_of_input(val),
+                PropertyFilter::Output => value_maps[sbox].len_of_output(val)
             };
 
             self.counter[i] = (self.counter[i] + 1) % modulus;
@@ -270,9 +283,9 @@ impl SboxPattern {
 
             // Update current position
             let app = match property_filter {
-                PropertyFilter::All    => value_map.get(&val).unwrap()[self.counter[i]],
-                PropertyFilter::Input  => value_map.get_input(&val).unwrap()[self.counter[i]],
-                PropertyFilter::Output => value_map.get_output(&val).unwrap()[self.counter[i]]
+                PropertyFilter::All    => value_maps[sbox].get(&val).unwrap()[self.counter[i]],
+                PropertyFilter::Input  => value_maps[sbox].get_input(&val).unwrap()[self.counter[i]],
+                PropertyFilter::Output => value_maps[sbox].get_output(&val).unwrap()[self.counter[i]]
             };
 
             self.property.input = 
@@ -292,22 +305,22 @@ impl SboxPattern {
     /** 
     Returns the number of properties described by this pattern 
     */
-    pub fn num_prop(&self, value_map: &ValueMap) -> usize {
-        self.pattern.iter().fold(1, |acc, &(_, x)| acc * value_map.len_of(x))
+    pub fn num_prop(&self, value_maps: &Vec<ValueMap>) -> usize {
+        self.pattern.iter().fold(1, |acc, &(_, j, x)| acc * value_maps[j].len_of(x))
     }
 
     /** 
     Returns the number of inputs described by this pattern 
     */
-    pub fn num_input(&self, value_map: &ValueMap) -> usize {
-        self.pattern.iter().fold(1, |acc, &(_, x)| acc * value_map.len_of_input(x))
+    pub fn num_input(&self, value_maps: &Vec<ValueMap>) -> usize {
+        self.pattern.iter().fold(1, |acc, &(_, j, x)| acc * value_maps[j].len_of_input(x))
     }
 
     /** 
     Returns the number of outputs described by this pattern 
     */
-    pub fn num_output(&self, value_map: &ValueMap) -> usize {
-        self.pattern.iter().fold(1, |acc, &(_, x)| acc * value_map.len_of_output(x))
+    pub fn num_output(&self, value_maps: &Vec<ValueMap>) -> usize {
+        self.pattern.iter().fold(1, |acc, &(_, j, x)| acc * value_maps[j].len_of_output(x))
     }
 }
 
@@ -321,17 +334,25 @@ property_type   The type of property to generate patterns for.
 pub fn get_sorted_patterns(cipher: &Cipher, 
                            pattern_limit: usize, 
                            property_type: PropertyType) -> 
-                           (Vec<SboxPattern>, ValueMap) {
+                           (Vec<SboxPattern>, Vec<ValueMap>) {
     // Generate property map and get S-box property values
-    let value_map = ValueMap::new(cipher, property_type);
-    let mut property_values: SmallVec<[_; 128]> = value_map.map.keys().cloned().collect();
+    let value_maps: Vec<_> = (0..cipher.num_sboxes()).map(|i| {
+        ValueMap::new(cipher.sbox(i), property_type)
+    }).collect();
+
+    let mut property_values: Vec<SmallVec<[_; 128]>> = value_maps.iter().map(|map| {
+        map.map.keys().cloned().collect()
+    }).collect();
 
     // We need the values in descending order
-    property_values.sort_by(|a, b| b.abs().cmp(&a.abs()));
+    for v in property_values.iter_mut() {
+        v.sort_by(|a, b| b.abs().cmp(&a.abs()));
+    }
 
     // Start with a partial pattern where only the first value is determined
     let mut tmp = vec![None; cipher.num_sboxes()];
-    tmp[0] = Some(*property_values.first().expect("No values found."));
+    tmp[0] = Some(*property_values.first().expect("No values found.")
+                                  .first().expect("No values found."));
     let current_pattern = InternalSboxPattern {
         pattern: tmp,
         determined_length: 1,
@@ -353,7 +374,7 @@ pub fn get_sorted_patterns(cipher: &Cipher,
                                .map(|x| SboxPattern::new(cipher, x, property_type))
                                .collect();
 
-            return (sbox_patterns, value_map);
+            return (sbox_patterns, value_maps);
         }
 
         // Extract the current best pattern
@@ -389,5 +410,5 @@ pub fn get_sorted_patterns(cipher: &Cipher,
                               .map(|x| SboxPattern::new(cipher, x, property_type))
                               .collect();
 
-    return (sbox_patterns, value_map);
+    return (sbox_patterns, value_maps);
 }

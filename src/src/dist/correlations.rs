@@ -30,14 +30,14 @@ impl MaskLat {
         let mut input = input;
         let mut output = output;
 
-        debug_assert_eq!(cipher.sbox().size * cipher.num_sboxes(), 64);
+        debug_assert_eq!(cipher.sbox(0).size * cipher.num_sboxes(), cipher.size());
 
-        let w = cipher.sbox().size;
+        let w = cipher.sbox(0).size;
         let m = (1 << w) - 1;
-        let values  = (1 << cipher.sbox().size) as f64;
+        let values  = (1 << cipher.sbox(0).size) as f64;
 
-        for _ in 0..cipher.num_sboxes() {
-            let hits = cipher.sbox().lat[(input & m) as usize][(output & m) as usize];
+        for i in 0..cipher.num_sboxes() {
+            let hits = cipher.sbox(i).lat[(input & m) as usize][(output & m) as usize];
             let c = 2.0 * ((hits as f64) / values) - 1.0;
             value *= c;
 

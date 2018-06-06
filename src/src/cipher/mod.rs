@@ -26,6 +26,8 @@ impl Sbox {
     */
     fn new(size: usize,
            table: Vec<u8>) -> Sbox {
+        assert_eq!(1 << size, table.len());
+
         let lat = Sbox::generate_lat(&table[..], size);
         let ddt = Sbox::generate_ddt(&table[..], size);
 
@@ -146,9 +148,9 @@ pub trait Cipher: Sync {
     fn num_sboxes(&self) -> usize;
 
     /**
-    Returns the S-box of the cipher.
+    Returns the i'th S-box of the cipher.
     */
-    fn sbox(&self) -> &Sbox;
+    fn sbox(&self, i: usize) -> &Sbox;
 
     /**
     Applies the linear layer of the cipher.

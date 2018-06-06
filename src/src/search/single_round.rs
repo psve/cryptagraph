@@ -29,7 +29,7 @@ property_filter          What type of property an iterator will generate.
 #[derive(Clone)]
 pub struct SortedProperties<'a> {
     pub cipher: &'a Cipher,
-    pub value_map: ValueMap,
+    pub value_maps: Vec<ValueMap>,
     pub sbox_patterns: Vec<SboxPattern>,
     property_type: PropertyType,
     property_filter: PropertyFilter,
@@ -53,10 +53,10 @@ impl<'a> SortedProperties<'a> {
                property_type: PropertyType,
                property_filter: PropertyFilter) 
                -> SortedProperties {
-        let (sbox_patterns, value_map) = get_sorted_patterns(cipher, pattern_limit, property_type);
+        let (sbox_patterns, value_maps) = get_sorted_patterns(cipher, pattern_limit, property_type);
 
         return SortedProperties{cipher: cipher.clone(),
-                                value_map: value_map,
+                                value_maps: value_maps,
                                 sbox_patterns: sbox_patterns,
                                 property_type: property_type,
                                 property_filter: property_filter}
@@ -70,9 +70,9 @@ impl<'a> SortedProperties<'a> {
 
         for pattern in &self.sbox_patterns {
             let combinations = match self.property_filter {
-                PropertyFilter::All    => pattern.num_prop(&self.value_map),
-                PropertyFilter::Input  => pattern.num_input(&self.value_map),
-                PropertyFilter::Output => pattern.num_output(&self.value_map),
+                PropertyFilter::All    => pattern.num_prop(&self.value_maps),
+                PropertyFilter::Input  => pattern.num_input(&self.value_maps),
+                PropertyFilter::Output => pattern.num_output(&self.value_maps),
             };
 
             len += combinations;
@@ -208,7 +208,7 @@ impl<'a> IntoIterator for &'a SortedProperties<'a> {
     fn into_iter(self) -> Self::IntoIter {
         SortedPropertiesIterator { 
             cipher: self.cipher,
-            value_map: self.value_map.clone(),
+            value_maps: self.value_maps.clone(),
             sbox_patterns: self.sbox_patterns.clone(),
             property_type: self.property_type.clone(),
             property_filter: self.property_filter.clone(),
@@ -222,7 +222,7 @@ An iterator over properties represented by a SortedProperties struct.
 
 cipher              The cipher considered.
 sbox_patterns       A vector of patterns to generate properties from.
-value_map           A map from S-box property values to property input/output.
+value_maps          Map from each of the S-boxes property values to property input/output.
 property_type       The type of property the iterator generates. 
 property_filter     Determines whether to generate full properties or just inputs/outputs.
 current_pattern     Index of the current pattern used to generate properties.
@@ -231,7 +231,7 @@ current_pattern     Index of the current pattern used to generate properties.
 pub struct SortedPropertiesIterator<'a> {
     cipher: &'a Cipher,
     pub sbox_patterns: Vec<SboxPattern>,
-    value_map: ValueMap,
+    value_maps: Vec<ValueMap>,
     property_type: PropertyType,
     property_filter: PropertyFilter,
     current_pattern: usize
@@ -257,7 +257,7 @@ impl<'a> Iterator for SortedPropertiesIterator<'a> {
 
         while property.is_none() {
             let pattern = &mut self.sbox_patterns[self.current_pattern];
-            property = match pattern.next(&self.value_map, &self.property_filter) {
+            property = match pattern.next(&self.value_maps, &self.property_filter) {
                 Some(x) => Some(x),
                 None => {
                     self.current_pattern += 1;

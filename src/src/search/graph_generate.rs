@@ -301,7 +301,7 @@ fn add_middle_edges(graph: &MultistageGraph,
             scope.spawn(move || {
                 // For SPN ciphers, we can exploit the structure when the compressiond is 
                 // sufficiently coarse and not generate all properties explicitly 
-                if block >= thread_properties.cipher.sbox().size  && 
+                if block >= thread_properties.cipher.sbox(0).size  && 
                    thread_properties.cipher.structure() == CipherStructure::Spn {
                     thread_properties.set_type_output();
                 } else {
@@ -387,7 +387,7 @@ fn add_outer_edges (graph: &MultistageGraph,
             scope.spawn(move || {
                 // For SPN ciphers, we can exploit the structure when the compressiond is 
                 // sufficiently coarse and not generate all properties explicitly 
-                if block >= thread_properties.cipher.sbox().size  && 
+                if block >= thread_properties.cipher.sbox(0).size  && 
                    thread_properties.cipher.structure() == CipherStructure::Spn {
                     thread_properties.set_type_output();
                 } else {

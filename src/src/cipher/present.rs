@@ -73,9 +73,9 @@ impl Cipher for Present {
     }
 
     /**
-    Returns the S-box of the cipher.
+    Returns the i'th S-box of the cipher.
     */
-    fn sbox(&self) -> &Sbox {
+    fn sbox(&self, _i: usize) -> &Sbox {
         &self.sbox
     }
 
