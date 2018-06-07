@@ -298,6 +298,15 @@ impl Cipher for Midori {
                            -> (u128, u128) {
         (input, self.linear_layer(output))
     }
+
+    /**
+    Specifies if a pre-whitening key is used. In this case, the key-schedule returns 
+    rounds+1 round keys. 
+    */
+    #[inline(always)]
+    fn whitening(&self) -> bool {
+        true
+    }
 }
 
 

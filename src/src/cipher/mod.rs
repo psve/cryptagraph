@@ -219,15 +219,11 @@ pub trait Cipher: Sync {
                            -> (u128, u128);
 
     /**
-     * Pre-whiteing key used?
-     * (rounds + 1) round keys
-     *
-     * This is the case for most ciphers
-     */
+    Specifies if a pre-whitening key is used. In this case, the key-schedule returns 
+    rounds+1 round keys. 
+    */
     #[inline(always)]
-    fn whitening(&self) -> bool { 
-        true 
-    }
+    fn whitening(&self) -> bool;
 }
 
 mod aes;
