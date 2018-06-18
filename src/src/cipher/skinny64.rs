@@ -287,10 +287,10 @@ mod tests {
     #[test]
     fn encryption_test() {
         let cipher = cipher::name_to_cipher("skinny64").unwrap();
-        let key = [0x45, 0x84, 0xf9, 0xd7, 0x08, 0x97, 0x76, 0x4d];
+        let key = [0x83, 0x21, 0x86, 0xcf, 0x62, 0x89, 0x62, 0x5f];
         let round_keys = cipher.key_schedule(32, &key);
-        let plaintext = 0x74aba08aa527f88a;
-        let ciphertext = 0xfa2848282ab1f696;
+        let plaintext = 0xd91d427759f43060;
+        let ciphertext = 0x7ca8b9242bfd93bb;
 
         assert_eq!(ciphertext, cipher.encrypt(plaintext, &round_keys));
 
@@ -305,10 +305,10 @@ mod tests {
     #[test]
     fn decryption_test() {
         let cipher = cipher::name_to_cipher("skinny64").unwrap();
-        let key = [0x45, 0x84, 0xf9, 0xd7, 0x08, 0x97, 0x76, 0x4d];
+        let key = [0x83, 0x21, 0x86, 0xcf, 0x62, 0x89, 0x62, 0x5f];
         let round_keys = cipher.key_schedule(32, &key);
-        let plaintext = 0x74aba08aa527f88a;
-        let ciphertext = 0xfa2848282ab1f696;
+        let plaintext = 0xd91d427759f43060;
+        let ciphertext = 0x7ca8b9242bfd93bb;
 
         assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
 
