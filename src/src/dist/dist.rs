@@ -81,7 +81,10 @@ pub fn get_distributions(cipher: Box<Cipher>,
     println!("Output masks: {}", betas.len());
     println!("Intermediate masks: {}", masks.len());
 
-    let correlations = get_correlations(cipher.as_ref(), &alphas, &betas, rounds, keys, &masks);
+    let mut correlations = get_correlations(cipher.as_ref(), &alphas, &betas, rounds, keys, &masks);
+
+    // Remove approximations with zero correlation
+    correlations.retain(|_, v| v.iter().fold(false, |acc, &x| acc | (x != 0.0)));
 
     let path = format!("{}_r{}_{}.corrs", cipher.name(), rounds, output);
     dump_correlations(&correlations, &path);

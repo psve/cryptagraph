@@ -4,7 +4,7 @@ use fnv::FnvHashMap;
 use num_cpus;
 use std::sync::mpsc;
 
-use cipher::Cipher;
+use cipher::{Cipher, CipherStructure};
 use property::Property;
 use utility::{ProgressBar, parity};
 
@@ -13,7 +13,7 @@ use utility::{ProgressBar, parity};
  * The linear layer has been applied to the { output } set.
  */
 #[derive(Clone)]
-pub struct MaskLat {
+struct MaskLat {
     map_input: FnvHashMap<u128, Vec<Property>>,
 }
 
@@ -29,8 +29,6 @@ impl MaskLat {
         let mut value = 1.0;
         let mut input = input;
         let mut output = output;
-
-        debug_assert_eq!(cipher.sbox(0).size * cipher.num_sboxes(), cipher.size());
 
         let w = cipher.sbox(0).size;
         let m = (1 << w) - 1;
@@ -54,7 +52,7 @@ impl MaskLat {
     /* Constructs a Lat over the bricklayer function
      * for the particular set of parities
      */
-    pub fn new(cipher : &Cipher, masks : &Vec<u128>) -> MaskLat {
+    fn new(cipher : &Cipher, masks : &Vec<u128>) -> MaskLat {
         /* Assuming SPN; compute possible "outputs" for input set
          *
          * Alpha ^ Key Addition -> Substitution -> Linear
@@ -108,42 +106,60 @@ impl MaskLat {
         mlat
     }
 
-    pub fn lookup_input(&self, a : u128) -> Option<&Vec<Property>> {
+    fn invert(&mut self) {
+        let mut inverse = FnvHashMap::default();
+
+        for v in self.map_input.values() {
+            for p in v {
+                let inverse_property = Property {
+                    input  : p.output,
+                    output : p.input,
+                    value  : p.value,
+                    trails : p.trails
+                };
+
+                let entry = inverse.entry(inverse_property.input).or_insert(Vec::new());
+                entry.push(inverse_property);
+            }
+        }
+
+        self.map_input = inverse;
+    }
+
+    fn lookup_input(&self, a : u128) -> Option<&Vec<Property>> {
         self.map_input.get(&a)
     }
 }
 
 
 #[derive(Clone)]
-pub struct MaskPool {
-    pub masks: FnvHashMap<(u128, u128), f64>,
+struct MaskPool {
+    masks: FnvHashMap<(u128, u128), f64>,
 }
 
 impl MaskPool {
-    pub fn new() -> MaskPool {
+    fn new() -> MaskPool {
         MaskPool{
             masks: FnvHashMap::default(),
         }
     }
 
-    pub fn add(&mut self, mask: u128) {
+    fn add(&mut self, mask: u128) {
         self.masks.insert((mask, mask), 1.0);
     }
     
-    pub fn step(&mut self,
-                lat: &MaskLat,
-                key: u128) {
+    fn step(&mut self,
+            lat: &MaskLat,
+            key: u128) {
         let mut pool_new = FnvHashMap::default();
 
         // propergate mask set
         for ((input, output), value) in &self.masks {
-            let sign   = if parity(*output & key) == 1 { -1.0 } else { 1.0 };
 
             match lat.lookup_input(*output) {
                 Some(approximations) => {
                     for approx in approximations {
-                        debug_assert_eq!(approx.output, *output);
-
+                        let sign   = if parity(approx.output & key) == 1 { -1.0 } else { 1.0 };
                         let delta = sign * (approx.value * value);
 
                         // add relation to accumulator
@@ -175,6 +191,10 @@ pub fn get_correlations(cipher: &Cipher,
     println!("Calculating full approximation table.");
     let lat = MaskLat::new(cipher, &masks);
 
+    // Calculate the inverse LAT in case of Prince-like ciphers
+    let mut lat_inv = lat.clone();
+    lat_inv.invert();
+
     println!("Generating correlations.");
         
     // Generate keys
@@ -193,16 +213,30 @@ pub fn get_correlations(cipher: &Cipher,
         for t in 0..num_threads {
             let result_tx = result_tx.clone();
             let keys = keys.clone();
-            let lat = lat.clone();
+            let mut lat = lat.clone();
+            let mut lat_inv = lat_inv.clone();
 
             scope.spawn(move || {
                 let mut pool = MaskPool::new();
                 let mut thread_result = FnvHashMap::default();
                 let mut progress_bar = ProgressBar::new((0..num_keys).skip(t).step_by(num_threads).len());
+                
+                let rounds = if cipher.structure() == CipherStructure::Prince {
+                    rounds - 1
+                } else {
+                    rounds
+                };
 
                 for k in (0..num_keys).skip(t).step_by(num_threads) {
+
                     // generate rounds keys
-                    let round_keys = cipher.key_schedule(rounds, &keys[k]);
+                    let mut round_keys = if cipher.structure() == CipherStructure::Prince {
+                        cipher.key_schedule(rounds*2, &keys[k])
+                    } else {
+                        cipher.key_schedule(rounds, &keys[k])
+                    };
+
+                    let whitening_key = if cipher.whitening() { round_keys.remove(0) } else { 0 };
 
                     for alpha in alphas {
                         // initalize pool with chosen alpha
@@ -215,7 +249,32 @@ pub fn get_correlations(cipher: &Cipher,
 
                         // check for early termination
                         if pool.masks.len() == 0 {
-                            panic!("pool empty :(");
+                            panic!("1: pool empty :(");
+                        }
+                    }
+
+                    if cipher.structure() == CipherStructure::Prince {
+                        // Handle reflection layer
+                        pool.step(&lat, 0);
+
+                        let mut pool_new = pool.clone();
+                        
+                        for (k, &v) in &pool.masks {
+                            let k_new = (k.0, cipher.reflection_layer(k.1));
+                            pool_new.masks.insert(k_new, v); 
+                        }
+
+                        pool.step(&lat_inv, round_keys[rounds]);
+
+                        // Do remaining rounds
+                        for round in 0..rounds {
+                            // "clock" all patterns one round
+                            pool.step(&lat_inv, round_keys[rounds+1+round]);
+
+                            // check for early termination
+                            if pool.masks.len() == 0 {
+                                panic!("2: pool empty :(");
+                            }
                         }
                     }
 
@@ -223,7 +282,7 @@ pub fn get_correlations(cipher: &Cipher,
                         for beta in betas {
                             let corr = match pool.masks.get(&(*alpha, *beta)) {
                                 Some(c) =>
-                                    if cipher.whitening() && parity(*beta & round_keys[rounds]) == 1  {
+                                    if cipher.whitening() && parity(*alpha & whitening_key) == 1  {
                                         - (*c)
                                     } else {
                                         *c
