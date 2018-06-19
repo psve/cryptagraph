@@ -204,10 +204,10 @@ impl Cipher for Prince {
             k0 |= key[i+8] as u128;
         }
 
-        let mut keys = vec![k1; rounds];
+        let mut keys = vec![k1; rounds+2];
 
         keys[0] ^= k0;
-        keys[rounds-1] ^= ((k0 >> 1) & 0xffffffffffffffff) ^ ((k0 & 1) << 63) ^ ((k0 >> 63) & 1);
+        keys[rounds+1] ^= ((k0 >> 1) & 0xffffffffffffffff) ^ ((k0 & 1) << 63) ^ ((k0 >> 63) & 1);
 
         keys
     }
@@ -360,7 +360,7 @@ mod tests {
         let cipher = cipher::name_to_cipher("prince").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(12, &key);
+        let round_keys = cipher.key_schedule(10, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0x818665aa0d02dfda;
 
@@ -368,7 +368,7 @@ mod tests {
 
         let key = [0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(12, &key);
+        let round_keys = cipher.key_schedule(10, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = 0xae25ad3ca8fa9ccf;
 
@@ -380,7 +380,7 @@ mod tests {
         let cipher = cipher::name_to_cipher("prince").unwrap();
         let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(12, &key);
+        let round_keys = cipher.key_schedule(10, &key);
         let plaintext = 0x0000000000000000;
         let ciphertext = 0x818665aa0d02dfda;
 
@@ -388,7 +388,7 @@ mod tests {
 
         let key = [0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10,
                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let round_keys = cipher.key_schedule(12, &key);
+        let round_keys = cipher.key_schedule(10, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = 0xae25ad3ca8fa9ccf;
 
@@ -400,7 +400,7 @@ mod tests {
         let cipher = cipher::name_to_cipher("prince").unwrap();
         let key = [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 
                    0x08, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff];
-        let round_keys = cipher.key_schedule(12, &key);
+        let round_keys = cipher.key_schedule(10, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 
@@ -408,7 +408,7 @@ mod tests {
 
         let key = [0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10,
                    0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10];
-        let round_keys = cipher.key_schedule(12, &key);
+        let round_keys = cipher.key_schedule(10, &key);
         let plaintext = 0x010a0b0c0d0e0f02;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 
