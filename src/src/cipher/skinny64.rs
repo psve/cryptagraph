@@ -163,7 +163,8 @@ impl Cipher for Skinny64 {
 
 
         for _ in 0..rounds {
-            keys.push(k & 0xffffffff);
+            let round_key = self.linear_layer(k & 0xffffffff);
+            keys.push(round_key);
 
             let mut tmp = 0;
 
@@ -201,11 +202,11 @@ impl Cipher for Skinny64 {
             output ^= (self.constants[i] >> 4) << 16;
             output ^= 0x2 << 32;
 
-            // Add round key
-            output ^= round_keys[i];
-
             // Shift + MixColumns
             output = self.linear_layer(output);
+            
+            // Add round key
+            output ^= round_keys[i];
         }
 
         output
@@ -221,11 +222,11 @@ impl Cipher for Skinny64 {
         let mut output = input;
 
         for i in 0..32 {
-            // Shift + MixColumns
-            output = self.linear_layer_inv(output);
-            
             // Add round key
             output ^= round_keys[31-i];
+            
+            // Shift + MixColumns
+            output = self.linear_layer_inv(output);
 
             // Add constants
             output ^= self.constants[31-i] & 0xf;

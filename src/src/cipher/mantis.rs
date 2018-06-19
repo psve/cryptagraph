@@ -104,7 +104,6 @@ impl Cipher for Mantis {
         for i in 0..16 {
             output ^= ((input >> (i*4)) & 0xf) << (self.permute_cell_table[i]*4);
         }
-        println!("{:016x}", output);
 
         // Apply MixColumns
         let x = output;
@@ -227,9 +226,6 @@ impl Cipher for Mantis {
         keys[0] ^= k0;
         keys[rounds+1] ^= ((k0 >> 63) & 0x1) ^ ((k0 << 1) & 0xffffffffffffffff) ^ ((k0 & 0x1) << 63);
 
-        println!("k0  = {:016x}", k0);
-        println!("k0' = {:016x}", keys[rounds+1] ^ k1);
-        println!("k1  = {:016x}", k1);
 
         for i in 0..keys.len()/2 {
             keys[i] ^= t;
@@ -276,7 +272,6 @@ impl Cipher for Mantis {
         // Forward rounds
         output ^= round_keys[0];
 
-        println!("{:016x}", output);
 
         for i in 0..6 {
             // S-box
@@ -286,17 +281,13 @@ impl Cipher for Mantis {
                 tmp ^= (self.sbox.table[((output >> (j*4)) & 0xf) as usize] as u128) << (j*4);
             }
 
-            println!("{:016x}", tmp);
 
             // Round key and constant
             output = tmp ^ self.constants[i];
-            println!("{:016x}", output);
             output ^= round_keys[i+1];
-            println!("{:016x}", output);
             
             // Linear layer
             output = self.linear_layer(output);
-            println!("{:016x}\n", output);
         }
 
         // S-box
@@ -330,18 +321,14 @@ impl Cipher for Mantis {
             tmp ^= (self.sbox.table[((output >> (j*4)) & 0xf) as usize] as u128) << (j*4);
         }
 
-        println!("{:016x}\n", tmp);
 
         for i in 0..6 {
             // Inverse linear layer
             output = self.linear_layer_inv(tmp);
-            println!("{:016x}", output);
             
             // Round key and constant
             output ^= round_keys[i+7];
-            println!("{:016x}", output);
             output ^= self.constants[5-i];
-            println!("{:016x}", output);
 
             // Inverse S-box
             tmp = 0;
@@ -349,12 +336,10 @@ impl Cipher for Mantis {
             for j in 0..16 {
                 tmp ^= (self.sbox.table[((output >> (j*4)) & 0xf) as usize] as u128) << (j*4);
             }
-            println!("{:016x}\n", tmp);
         }
 
         // Round key and constant
         output = tmp ^ round_keys[13];
-        println!("{:016x}\n", output);
 
         output
     }
