@@ -72,14 +72,12 @@ Find all properties for a given graph in parallel.
 
 graph               The graph to search through.
 property_type       The type of peroperty to find.
-input_allowed       A set of allowed input values. Other inputs are ignored.
-output_allowed      A set of allowed output values. Other outputs are ignored.
+allowed       A set of allowed input/output values. Other input/output pairs are ignored.
 num_keep            The number of properties to keep. The best <num_keep> properties are kept.
 */
 pub fn parallel_find_properties(graph: &MultistageGraph,
                                 property_type: PropertyType,
-                                input_allowed: &FnvHashSet<u128>,
-                                output_allowed: &FnvHashSet<u128>,
+                                allowed: &FnvHashSet<(u128, u128)>,
                                 num_keep: usize) 
                                 -> (Vec<Property>, f64, u128) {
     println!("Finding properties ({} input values, {} edges):", 
@@ -110,8 +108,8 @@ pub fn parallel_find_properties(graph: &MultistageGraph,
                     num_found += properties.len();
                     
                     for property in properties.values() {
-                        if (input_allowed.len() == 0 || input_allowed.contains(&property.input)) &&
-                           (output_allowed.len() == 0 || output_allowed.contains(&property.output)) {
+                        if allowed.len() == 0 || 
+                           allowed.contains(&(property.input, property.output)) {
                             paths += property.trails;
                             result.push(*property);
                         }

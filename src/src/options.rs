@@ -39,7 +39,7 @@ pub enum CryptagraphOptions {
 
         #[structopt(short = "i", long = "mask_in")]
         /**
-        Prefix of a path to a set of two files which restrict the input and output values of the property. The two files are assumed to be <file_mask_in>.input and <file_mask_in>.output.
+        Path to a file which restrict the input and output values of the property. Each line of the file must be of the form '<input>,<output>'.
         */
         file_mask_in: Option<String>,
 
@@ -61,11 +61,11 @@ pub enum CryptagraphOptions {
         #[structopt(short = "c", long = "cipher", help = "Name of cipher to analyse.")]
         cipher: String,
 
-        #[structopt(short = "a", long = "alpha", help = "Input masks (file path)")]
-        alpha: String,
-
-        #[structopt(short = "b", long = "beta", help = "Output masks (file path)")]
-        beta: String,
+        #[structopt(short = "i", long = "mask_in")]
+        /**
+        Path to a file which restrict the input and output values of the property. Each line of the file must be of the form '<input>,<output>'.
+        */
+        file_mask_in: String,
 
         #[structopt(short = "r", long = "rounds", help = "Number of rounds to enumerate")]
         rounds: usize,

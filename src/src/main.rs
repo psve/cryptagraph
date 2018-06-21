@@ -47,8 +47,7 @@ fn main() {
                                             file_mask_in, file_mask_out, file_graph);
         },
         CryptagraphOptions::Dist {cipher,
-                                  alpha,
-                                  beta,
+                                  file_mask_in,
                                   rounds,
                                   keys,
                                   masks,
@@ -62,7 +61,7 @@ fn main() {
                 }
             };
 
-            dist::dist::get_distributions(cipher, alpha, beta, rounds, keys, masks, output);
+            dist::dist::get_distributions(cipher, file_mask_in, rounds, keys, masks, output);
         }
     }
 }

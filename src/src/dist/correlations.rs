@@ -181,8 +181,7 @@ impl MaskPool {
 }
 
 pub fn get_correlations(cipher: &Cipher,
-                        alphas: &Vec<u128>,
-                        betas: &Vec<u128>,
+                        allowed: &Vec<(u128, u128)>,
                         rounds: usize,
                         num_keys: usize,
                         masks: &Vec<u128>)
@@ -238,7 +237,7 @@ pub fn get_correlations(cipher: &Cipher,
 
                     let whitening_key = if cipher.whitening() { round_keys.remove(0) } else { 0 };
 
-                    for alpha in alphas {
+                    for (alpha, _) in allowed {
                         // initalize pool with chosen alpha
                         pool.add(*alpha);
                     }
@@ -278,21 +277,19 @@ pub fn get_correlations(cipher: &Cipher,
                         }
                     }
 
-                    for alpha in alphas {
-                        for beta in betas {
-                            let corr = match pool.masks.get(&(*alpha, *beta)) {
-                                Some(c) =>
-                                    if cipher.whitening() && parity(*alpha & whitening_key) == 1  {
-                                        - (*c)
-                                    } else {
-                                        *c
-                                    },
-                                None    => 0.0
-                            };
+                    for (alpha, beta) in allowed {
+                        let corr = match pool.masks.get(&(*alpha, *beta)) {
+                            Some(c) =>
+                                if cipher.whitening() && parity(*alpha & whitening_key) == 1  {
+                                    - (*c)
+                                } else {
+                                    *c
+                                },
+                            None    => 0.0
+                        };
 
-                            let entry = thread_result.entry((*alpha, *beta)).or_insert(vec![]);
-                            entry.push(corr);
-                        }
+                        let entry = thread_result.entry((*alpha, *beta)).or_insert(vec![]);
+                        entry.push(corr);
                     }
 
                     if t == 0 {

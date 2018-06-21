@@ -621,9 +621,7 @@ cipher              The cipher to consider.
 property_type       The property type to consider.
 rounds              The number of rounds.
 patterns            The number of S-box patterns to generate.
-input_allowed       A set of allowed input values for the properties. 
-                    If empty, all values are allowed.
-output_allowed      A set of allowed output values for the properties. 
+allowed             A set of allowed input/output values for the properties. 
                     If empty, all values are allowed.
 */
 pub fn generate_graph(cipher: Box<Cipher>, 
@@ -631,8 +629,7 @@ pub fn generate_graph(cipher: Box<Cipher>,
                       rounds: usize, 
                       patterns: usize,
                       anchors: Option<usize>,
-                      input_allowed: &FnvHashSet<u128>,
-                      output_allowed: &FnvHashSet<u128>) 
+                      allowed: &FnvHashSet<(u128, u128)>) 
                       -> MultistageGraph {
     // Generate the set of properties to consider
     let mut properties = SortedProperties::new(cipher.as_ref(), patterns, 
@@ -640,8 +637,8 @@ pub fn generate_graph(cipher: Box<Cipher>,
     let mut graph = MultistageGraph::new(0);
     
     // Change allowed inputs/outputs for Prince-like ciphers
-    let mut input_allowed = input_allowed.clone();
-    let mut output_allowed = output_allowed.clone();
+    let mut input_allowed: FnvHashSet<_>  = allowed.iter().map(|(a,_)| *a).collect();
+    let mut output_allowed: FnvHashSet<_> = allowed.iter().map(|(_,b)| *b).collect();
     if cipher.structure() == CipherStructure::Prince {
         input_allowed = input_allowed.union(&output_allowed).cloned().collect();
         output_allowed = FnvHashSet::default();

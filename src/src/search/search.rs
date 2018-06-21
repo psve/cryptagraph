@@ -100,31 +100,27 @@ fn dump_masks(graph: &MultistageGraph,
 }
 
 /**
-Reads two files of allowed input and output values and stores them in hash sets. The used 
-are <file_mask_in>.input and <file_mask_in>.output. The values in the files are assumed to be in
-hexadecimals, without the '0x' prefix. 
+Reads a file of allowed input and output values and stores them in a hash set. 
+The values in the files are assumed to be in hexadecimals, without the '0x' prefix, and
+input/output masks should be separated by a comma. 
 
-file_mask_in        Prefix of the path of the two files used.
+file_mask_in        Path of the input file used.
 */
-fn read_allowed(file_mask_in: String) 
-                -> (FnvHashSet<u128>,FnvHashSet<u128>) {
-    let mut file_input_path = file_mask_in.clone();
-    file_input_path.push_str(".input");
-    let mut file_output_path = file_mask_in.clone();
-    file_output_path.push_str(".output");
+fn read_allowed(file_mask_in: String) -> FnvHashSet<(u128, u128)> {
+    let file = File::open(file_mask_in).expect("Could not open file.");
+    let mut allowed = FnvHashSet::default();
 
-    let file = File::open(file_input_path).expect("Could not open file.");
-    let input_allowed = BufReader::new(file).lines()
-                            .map(|x| u128::from_str_radix(&x.expect("Error reading file."), 16)
-                                         .expect("Could not parse integer. Is it in hexadecimals?"))
-                            .collect();
+    for line in BufReader::new(file).lines() {
+        let s = line.expect("Error reading file");
+        let split: Vec<_> = s.split(",").collect();
+        let alpha = u128::from_str_radix(split.get(0).expect("Could not read input data"), 16)
+                        .expect("Could not parse integer. Is it in hexadecimals?");
+        let beta  = u128::from_str_radix(split.get(1).expect("Could not read input data"), 16)
+                        .expect("Could not parse integer. Is it in hexadecimals?");
+        allowed.insert((alpha, beta));
+    }
 
-    let file = File::open(file_output_path).expect("Could not open file.");
-    let output_allowed = BufReader::new(file).lines()
-                           .map(|x| u128::from_str_radix(&x.expect("Error reading file."), 16)
-                                        .expect("Could not parse integer. Is it in hexadecimals?"))
-                           .collect();
-    (input_allowed, output_allowed)
+    allowed
 }
 
 /**
@@ -165,19 +161,19 @@ pub fn find_properties(cipher: Box<Cipher>,
     // Restrict the number of results printed
     let num_keep = 50;
 
-    let (input_allowed, output_allowed) = match file_mask_in {
+    let allowed = match file_mask_in {
         Some(path) => {
             read_allowed(path)
         },
         None => {  
-            (FnvHashSet::default(), FnvHashSet::default())
+            FnvHashSet::default()
         }
     };
 
     println!("\n--------------------------------------- GENERATING GRAPH ---------------------------------------\n");
 
     let graph = generate_graph(cipher, property_type, rounds, patterns, 
-                               anchors, &input_allowed, &output_allowed);
+                               anchors, &allowed);
 
     match file_graph {
         Some(path) => {
@@ -196,8 +192,7 @@ pub fn find_properties(cipher: Box<Cipher>,
     println!("\n------------------------------------- FINDING PROPERTIES ---------------------------------------\n");
 
     let (result, min_value, paths) = parallel_find_properties(&graph,property_type, 
-                                          &input_allowed, &output_allowed, 
-                                          num_keep);
+                                                              &allowed, num_keep);
     
     println!("\n------------------------------------------ RESULTS ---------------------------------------------\n");
 
