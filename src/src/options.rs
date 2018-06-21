@@ -49,6 +49,13 @@ pub enum CryptagraphOptions {
         */
         file_mask_out: Option<String>,
 
+        #[structopt(short = "n", long = "num_keep")]
+        /**
+        The number of properties to display as output. If specified together with <mask_out>, the 
+        results are also written to the file <mask_out>.app.
+        */
+        num_keep: Option<usize>,
+
         #[structopt(short = "g", long = "file_graph")]
         /**
         Prefix of a path to dump the graph data to. The file generate is <file_graph>.graph.

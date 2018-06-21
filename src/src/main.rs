@@ -33,6 +33,7 @@ fn main() {
                                     anchors, 
                                     file_mask_in, 
                                     file_mask_out, 
+                                    num_keep,
                                     file_graph} => {
             
             let cipher = match name_to_cipher(cipher.as_ref()) {
@@ -44,7 +45,7 @@ fn main() {
             };
 
             search::search::find_properties(cipher, property_type, rounds, num_patterns, anchors,
-                                            file_mask_in, file_mask_out, file_graph);
+                                            file_mask_in, file_mask_out, num_keep, file_graph);
         },
         CryptagraphOptions::Dist {cipher,
                                   file_mask_in,

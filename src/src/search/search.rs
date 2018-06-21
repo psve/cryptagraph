@@ -7,7 +7,7 @@ use cipher::Cipher;
 use search::find_properties::parallel_find_properties;
 use search::graph::MultistageGraph;
 use search::graph_generate::generate_graph;
-use property::PropertyType;
+use property::{Property, PropertyType};
 
 /**
 Dumps a graph to file for plotting with python graph-tool. 
@@ -46,28 +46,23 @@ fn dump_to_graph_tool(graph: &MultistageGraph,
 }
 
 /**
-Dumps all edges of a graph to the file <file_mask_out>.app and all vertices to the file
-<file_mask_out>.set. 
+Dumps all vertices of a graph to the file <file_mask_out>.set. 
 
 graph           The input graph to dump.
-file_mask_out   Prefix of the path of the two files created.
+file_mask_out   Prefix of the path of the file created.
 */
 fn dump_masks(graph: &MultistageGraph, 
               file_mask_out: String) {
-    let mut file_app_path = file_mask_out.clone();
-    file_app_path.push_str(".app");
     let mut file_set_path = file_mask_out.clone();
     file_set_path.push_str(".set");
 
     // Collect edges and vertices
-    let mut property_set = FnvHashSet::default();
     let mut mask_set = FnvHashSet::default();
     let stages = graph.stages();
 
     for stage in 0..stages-1 {
         for (&input, vertex_ref) in graph.get_stage(stage).unwrap() {
             for (&output, _) in &vertex_ref.successors {
-                property_set.insert((input,output));
                 mask_set.insert(input);
                 mask_set.insert(output);
             }
@@ -79,14 +74,26 @@ fn dump_masks(graph: &MultistageGraph,
                                .write(true)
                                .truncate(true)
                                .create(true)
-                               .open(file_app_path)
+                               .open(file_set_path)
                                .expect("Could not open file.");
-
-
-    for (input, output) in &property_set {
-        write!(file, "{:032x},{:032x}\n", input, output).expect("Could not write to file.");
+    
+    for mask in &mask_set {
+        write!(file, "{:032x}\n", mask).expect("Could not write to file.");
     }
+}
 
+/**
+Dumps a vector of properties to <file_mask_out>.app. 
+
+Properties      A vector of properties to write to file.
+file_mask_out   Prefix of the path of the file created.
+*/
+fn dump_results(properties: &Vec<Property>, 
+                file_mask_out: String) {
+    let mut file_set_path = file_mask_out.clone();
+    file_set_path.push_str(".app");
+
+    // Contents of previous files are overwritten
     let mut file = OpenOptions::new()
                                .write(true)
                                .truncate(true)
@@ -94,8 +101,9 @@ fn dump_masks(graph: &MultistageGraph,
                                .open(file_set_path)
                                .expect("Could not open file.");
     
-    for mask in &mask_set {
-        write!(file, "{:032x}\n", mask).expect("Could not write to file.");
+    for property in properties {
+        write!(file, "{:?},{},{}\n", property, property.trails, property.value.log2())
+            .expect("Could not write to file.");
     }
 }
 
@@ -142,6 +150,7 @@ pub fn find_properties(cipher: Box<Cipher>,
                        anchors: Option<usize>,
                        file_mask_in: Option<String>,
                        file_mask_out: Option<String>,
+                       num_keep: Option<usize>,
                        file_graph: Option<String>) {
     println!("\tCipher: {}.", cipher.name());
     match property_type {
@@ -159,7 +168,10 @@ pub fn find_properties(cipher: Box<Cipher>,
 
     let start = time::precise_time_s();
     // Restrict the number of results printed
-    let num_keep = 50;
+    let keep = match num_keep {
+        Some(x) => x,
+        None => 20,
+    };
 
     let allowed = match file_mask_in {
         Some(path) => {
@@ -182,9 +194,9 @@ pub fn find_properties(cipher: Box<Cipher>,
         None => {}
     }
 
-    match file_mask_out {
+    match &file_mask_out {
         Some(path) => {
-            dump_masks(&graph, path);
+            dump_masks(&graph, path.to_string());
         },
         None => { }
     }
@@ -192,7 +204,7 @@ pub fn find_properties(cipher: Box<Cipher>,
     println!("\n------------------------------------- FINDING PROPERTIES ---------------------------------------\n");
 
     let (result, min_value, paths) = parallel_find_properties(&graph,property_type, 
-                                                              &allowed, num_keep);
+                                                              &allowed, keep);
     
     println!("\n------------------------------------------ RESULTS ---------------------------------------------\n");
 
@@ -209,7 +221,11 @@ pub fn find_properties(cipher: Box<Cipher>,
             continue
         }
 
-        print!("Approximation:   {:?} ", property);
+        print!("Approximation: {:?} ", property);
         println!("[{}, {}]", property.trails, property.value.log2());
+    }
+    
+    if num_keep.is_some() && file_mask_out.is_some() {
+        dump_results(&result, file_mask_out.unwrap());
     }
 }
