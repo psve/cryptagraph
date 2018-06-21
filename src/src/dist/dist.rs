@@ -100,7 +100,7 @@ pub fn get_distributions(cipher: Box<Cipher>,
     // Remove approximations with zero correlation
     correlations.retain(|_, v| v.iter().fold(false, |acc, &x| acc | (x != 0.0)));
 
-    let path = format!("{}_r{}_{}.corrs", cipher.name(), rounds, output);
+    let path = format!("{}.corrs", output);
     dump_correlations(&correlations, &path);
 
     println!("Generation finished. [{} s]", time::precise_time_s()-start);

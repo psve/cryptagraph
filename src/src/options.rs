@@ -8,7 +8,7 @@ pub enum CryptagraphOptions {
         #[structopt(short = "c", long = "cipher")]
         /**
         Name of the cipher to analyse. Current available ciphers are: 
-        fly, gift, khazad, klein, led, mantis, mibs, midori, present, pride, prince, puffin, qarma, rectangle, skinny, twine
+        aes, epcbc48, epcbc96, fly, gift64, gift128, khazad, klein, led, mantis, mibs, midori, present, pride, prince, puffin, qarma, rectangle, skinny64, skinny128, twine
         */
         cipher: String,
 
@@ -58,7 +58,11 @@ pub enum CryptagraphOptions {
 
     #[structopt(name = "dist")]
     Dist {
-        #[structopt(short = "c", long = "cipher", help = "Name of cipher to analyse.")]
+        #[structopt(short = "c", long = "cipher")]
+        /**
+        Name of the cipher to analyse. Current available ciphers are: 
+        aes, epcbc48, epcbc96, fly, gift64, gift128, khazad, klein, led, mantis, mibs, midori, present, pride, prince, puffin, qarma, rectangle, skinny64, skinny128, twine
+        */
         cipher: String,
 
         #[structopt(short = "i", long = "mask_in")]
@@ -67,16 +71,28 @@ pub enum CryptagraphOptions {
         */
         file_mask_in: String,
 
-        #[structopt(short = "r", long = "rounds", help = "Number of rounds to enumerate")]
+        #[structopt(short = "r", long = "rounds")]
+        /**
+        Number of rounds to generate correlations for.
+        */
         rounds: usize,
 
-        #[structopt(short = "k", long = "keys", help = "Number of keys to enumerate")]
+        #[structopt(short = "k", long = "keys")]
+        /**
+        Number of keys to generation correlations for.
+        */
         keys: usize,
 
-        #[structopt(short = "m", long = "masks", help = "Path to file of masks")]
+        #[structopt(short = "m", long = "masks")]
+        /**
+        Path to a file containing intermediate masksk.
+        */
         masks: String,
 
-        #[structopt(short = "o", long = "output", help = "Pattern to save correlations: save.cipher.keys.input.output.corrs")]
+        #[structopt(short = "o", long = "output")]
+        /**
+        Name of output file. File name is <output>.corrs
+        */
         output: String,
     }
 }
