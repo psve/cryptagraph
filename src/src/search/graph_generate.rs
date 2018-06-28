@@ -636,6 +636,13 @@ pub fn generate_graph(cipher: Box<Cipher>,
                                                property_type, PropertyFilter::All);
     let mut graph = MultistageGraph::new(0);
     
+    properties.set_type_all();
+    let num_prop = properties.len();
+    properties.set_type_input();
+    let num_input = properties.len();
+    properties.set_type_output();
+    let num_output = properties.len();
+
     // Change allowed inputs/outputs for Prince-like ciphers
     let mut input_allowed: FnvHashSet<_>  = allowed.iter().map(|(a,_)| *a).collect();
     let mut output_allowed: FnvHashSet<_> = allowed.iter().map(|(_,b)| *b).collect();
@@ -646,6 +653,7 @@ pub fn generate_graph(cipher: Box<Cipher>,
 
     if rounds == 1 {
         let start = time::precise_time_s();
+        println!("{} properties ({} input, {} output).", num_prop, num_input, num_output);
         graph = one_round(&mut properties);
         println!("Graph has {} vertices and {} edges [{} s]", 
             graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
@@ -653,6 +661,7 @@ pub fn generate_graph(cipher: Box<Cipher>,
 
     if rounds == 2 {
         let start = time::precise_time_s();
+        println!("{} properties ({} input, {} output).", num_prop, num_input, num_output);
         graph = two_rounds(&mut properties);
         println!("Graph has {} vertices and {} edges [{} s]", 
             graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
@@ -660,6 +669,7 @@ pub fn generate_graph(cipher: Box<Cipher>,
 
     if rounds == 3 {
         let start = time::precise_time_s();
+        println!("{} properties ({} input, {} output).", num_prop, num_input, num_output);
         graph = one_round(&mut properties);
         println!("Graph has {} vertices and {} edges [{} s]", 
             graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
