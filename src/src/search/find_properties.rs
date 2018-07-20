@@ -39,25 +39,22 @@ fn find_properties(graph: &MultistageGraph,
         // Go through all edges (i.e. properties (input, output)) in the current map
         for (output, &property) in &edge_map {
             // Look up output in the single round map in order to extend one round
-            match graph.get_vertex(r, *output) {
-                Some(vertex_ref) => {
-                    for (&new_output, &length) in &vertex_ref.successors {
-                        // Either add the new path to the current property or create a new one
-                        let new_value = match property_type {
-                            PropertyType::Linear => length,
-                            PropertyType::Differential => length,
-                        };
+            if let Some(vertex_ref) = graph.get_vertex(r, *output) {
+                for (&new_output, &length) in &vertex_ref.successors {
+                    // Either add the new path to the current property or create a new one
+                    let new_value = match property_type {
+                        PropertyType::Linear => length,
+                        PropertyType::Differential => length,
+                    };
 
-                        let entry = new_edge_map.entry(new_output as u128)
-                                                .or_insert(Property::new(property.input,
-                                                                         new_output as u128,
-                                                                         0.0, 0));
+                    let entry = new_edge_map.entry(new_output as u128)
+                                            .or_insert(Property::new(property.input,
+                                                                     new_output as u128,
+                                                                     0.0, 0));
 
-                        (*entry).trails += property.trails;
-                        (*entry).value += property.value * new_value;
-                    }
-                },
-                None => {}
+                    (*entry).trails += property.trails;
+                    (*entry).value += property.value * new_value;
+                }
             }
         }
 
@@ -108,7 +105,7 @@ pub fn parallel_find_properties(graph: &MultistageGraph,
                     num_found += properties.len();
                     
                     for property in properties.values() {
-                        if allowed.len() == 0 || 
+                        if allowed.is_empty() || 
                            allowed.contains(&(property.input, property.output)) {
                             paths += property.trails;
                             result.push(*property);
@@ -117,12 +114,11 @@ pub fn parallel_find_properties(graph: &MultistageGraph,
                     
                     // Only keep best <num_keep> properties
                     result.sort_by(|a, b| b.value.partial_cmp(&a.value).unwrap());
-                    match result.last() {
-                        Some(property) => {
-                            min_value = min_value.min(property.value);
-                        },
-                        None => { }
+                    
+                    if let Some(property) = result.last() {
+                        min_value = min_value.min(property.value);
                     }
+
                     result.truncate(num_keep);
 
                     if t == 0 {

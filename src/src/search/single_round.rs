@@ -55,11 +55,11 @@ impl<'a> SortedProperties<'a> {
                -> SortedProperties {
         let (sbox_patterns, value_maps) = get_sorted_patterns(cipher, pattern_limit, property_type);
 
-        return SortedProperties{cipher: cipher.clone(),
-                                value_maps: value_maps,
-                                sbox_patterns: sbox_patterns,
-                                property_type: property_type,
-                                property_filter: property_filter}
+        SortedProperties{cipher,
+                         value_maps,
+                         sbox_patterns,
+                         property_type,
+                         property_filter}
     }
 
     /** 
@@ -145,7 +145,7 @@ impl<'a> SortedProperties<'a> {
                     let mut good_patterns = vec![false; thread_properties.len_patterns()];
                     let mut progress_bar = ProgressBar::new(thread_properties.len());
 
-                    for (property, pattern_idx) in thread_properties.into_iter() {
+                    for (property, pattern_idx) in &thread_properties {
                         // Skip if pattern is already marked good
                         if good_patterns[pattern_idx] {
                             if t == 0 {
@@ -210,8 +210,8 @@ impl<'a> IntoIterator for &'a SortedProperties<'a> {
             cipher: self.cipher,
             value_maps: self.value_maps.clone(),
             sbox_patterns: self.sbox_patterns.clone(),
-            property_type: self.property_type.clone(),
-            property_filter: self.property_filter.clone(),
+            property_type: self.property_type,
+            property_filter: self.property_filter,
             current_pattern: 0       
         }
     }
@@ -257,7 +257,7 @@ impl<'a> Iterator for SortedPropertiesIterator<'a> {
 
         while property.is_none() {
             let pattern = &mut self.sbox_patterns[self.current_pattern];
-            property = match pattern.next(&self.value_maps, &self.property_filter) {
+            property = match pattern.next(&self.value_maps, self.property_filter) {
                 Some(x) => Some(x),
                 None => {
                     self.current_pattern += 1;

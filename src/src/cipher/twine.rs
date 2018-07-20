@@ -36,9 +36,9 @@ pub fn new() -> Twine {
     Twine{size: 64, 
           key_size: 80,
           sbox: Sbox::new(4, table), 
-          permutation: permutation, 
-          inverse: inverse,
-          constants: constants}
+          permutation, 
+          inverse,
+          constants}
 }
 
 impl Cipher for Twine {
@@ -85,24 +85,24 @@ impl Cipher for Twine {
     fn linear_layer(&self, input: u128) -> u128{
         let mut output = 0;
         
-        output ^= ((input as u64 >> ( 0*4)) & 0xf) << (self.permutation[ 0]*4);
-        output ^= ((input as u64 >> ( 1*4)) & 0xf) << (self.permutation[ 1]*4);
-        output ^= ((input as u64 >> ( 2*4)) & 0xf) << (self.permutation[ 2]*4);
-        output ^= ((input as u64 >> ( 3*4)) & 0xf) << (self.permutation[ 3]*4);
-        output ^= ((input as u64 >> ( 4*4)) & 0xf) << (self.permutation[ 4]*4);
-        output ^= ((input as u64 >> ( 5*4)) & 0xf) << (self.permutation[ 5]*4);
-        output ^= ((input as u64 >> ( 6*4)) & 0xf) << (self.permutation[ 6]*4);
-        output ^= ((input as u64 >> ( 7*4)) & 0xf) << (self.permutation[ 7]*4);
-        output ^= ((input as u64 >> ( 8*4)) & 0xf) << (self.permutation[ 8]*4);
-        output ^= ((input as u64 >> ( 9*4)) & 0xf) << (self.permutation[ 9]*4);
-        output ^= ((input as u64 >> (10*4)) & 0xf) << (self.permutation[10]*4);
-        output ^= ((input as u64 >> (11*4)) & 0xf) << (self.permutation[11]*4);
-        output ^= ((input as u64 >> (12*4)) & 0xf) << (self.permutation[12]*4);
-        output ^= ((input as u64 >> (13*4)) & 0xf) << (self.permutation[13]*4);
-        output ^= ((input as u64 >> (14*4)) & 0xf) << (self.permutation[14]*4);
-        output ^= ((input as u64 >> (15*4)) & 0xf) << (self.permutation[15]*4);
+        output ^= ((input as u64      ) & 0xf) << (self.permutation[ 0]*4);
+        output ^= ((input as u64 >>  4) & 0xf) << (self.permutation[ 1]*4);
+        output ^= ((input as u64 >>  8) & 0xf) << (self.permutation[ 2]*4);
+        output ^= ((input as u64 >> 12) & 0xf) << (self.permutation[ 3]*4);
+        output ^= ((input as u64 >> 16) & 0xf) << (self.permutation[ 4]*4);
+        output ^= ((input as u64 >> 20) & 0xf) << (self.permutation[ 5]*4);
+        output ^= ((input as u64 >> 24) & 0xf) << (self.permutation[ 6]*4);
+        output ^= ((input as u64 >> 28) & 0xf) << (self.permutation[ 7]*4);
+        output ^= ((input as u64 >> 32) & 0xf) << (self.permutation[ 8]*4);
+        output ^= ((input as u64 >> 36) & 0xf) << (self.permutation[ 9]*4);
+        output ^= ((input as u64 >> 40) & 0xf) << (self.permutation[10]*4);
+        output ^= ((input as u64 >> 44) & 0xf) << (self.permutation[11]*4);
+        output ^= ((input as u64 >> 48) & 0xf) << (self.permutation[12]*4);
+        output ^= ((input as u64 >> 52) & 0xf) << (self.permutation[13]*4);
+        output ^= ((input as u64 >> 56) & 0xf) << (self.permutation[14]*4);
+        output ^= ((input as u64 >> 60) & 0xf) << (self.permutation[15]*4);
 
-        output as u128
+        u128::from(output)
     }
 
     /** 
@@ -113,24 +113,24 @@ impl Cipher for Twine {
     fn linear_layer_inv(&self, input: u128) -> u128 {
         let mut output = 0;
 
-        output ^= ((input as u64 >> ( 0*4)) & 0xf) << (self.inverse[ 0]*4);
-        output ^= ((input as u64 >> ( 1*4)) & 0xf) << (self.inverse[ 1]*4);
-        output ^= ((input as u64 >> ( 2*4)) & 0xf) << (self.inverse[ 2]*4);
-        output ^= ((input as u64 >> ( 3*4)) & 0xf) << (self.inverse[ 3]*4);
-        output ^= ((input as u64 >> ( 4*4)) & 0xf) << (self.inverse[ 4]*4);
-        output ^= ((input as u64 >> ( 5*4)) & 0xf) << (self.inverse[ 5]*4);
-        output ^= ((input as u64 >> ( 6*4)) & 0xf) << (self.inverse[ 6]*4);
-        output ^= ((input as u64 >> ( 7*4)) & 0xf) << (self.inverse[ 7]*4);
-        output ^= ((input as u64 >> ( 8*4)) & 0xf) << (self.inverse[ 8]*4);
-        output ^= ((input as u64 >> ( 9*4)) & 0xf) << (self.inverse[ 9]*4);
-        output ^= ((input as u64 >> (10*4)) & 0xf) << (self.inverse[10]*4);
-        output ^= ((input as u64 >> (11*4)) & 0xf) << (self.inverse[11]*4);
-        output ^= ((input as u64 >> (12*4)) & 0xf) << (self.inverse[12]*4);
-        output ^= ((input as u64 >> (13*4)) & 0xf) << (self.inverse[13]*4);
-        output ^= ((input as u64 >> (14*4)) & 0xf) << (self.inverse[14]*4);
-        output ^= ((input as u64 >> (15*4)) & 0xf) << (self.inverse[15]*4);
+        output ^= ((input as u64      ) & 0xf) << (self.inverse[ 0]*4);
+        output ^= ((input as u64 >>  4) & 0xf) << (self.inverse[ 1]*4);
+        output ^= ((input as u64 >>  8) & 0xf) << (self.inverse[ 2]*4);
+        output ^= ((input as u64 >> 12) & 0xf) << (self.inverse[ 3]*4);
+        output ^= ((input as u64 >> 16) & 0xf) << (self.inverse[ 4]*4);
+        output ^= ((input as u64 >> 20) & 0xf) << (self.inverse[ 5]*4);
+        output ^= ((input as u64 >> 24) & 0xf) << (self.inverse[ 6]*4);
+        output ^= ((input as u64 >> 28) & 0xf) << (self.inverse[ 7]*4);
+        output ^= ((input as u64 >> 32) & 0xf) << (self.inverse[ 8]*4);
+        output ^= ((input as u64 >> 36) & 0xf) << (self.inverse[ 9]*4);
+        output ^= ((input as u64 >> 40) & 0xf) << (self.inverse[10]*4);
+        output ^= ((input as u64 >> 44) & 0xf) << (self.inverse[11]*4);
+        output ^= ((input as u64 >> 48) & 0xf) << (self.inverse[12]*4);
+        output ^= ((input as u64 >> 52) & 0xf) << (self.inverse[13]*4);
+        output ^= ((input as u64 >> 56) & 0xf) << (self.inverse[14]*4);
+        output ^= ((input as u64 >> 60) & 0xf) << (self.inverse[15]*4);
 
-        output as u128
+        u128::from(output)
     }
 
     /**
@@ -159,13 +159,13 @@ impl Cipher for Twine {
         let mut k0 = 0;
         let mut k1 = 0;
 
-        k1 |= key[0] as u64;
+        k1 |= u64::from(key[0]);
         k1 <<= 8;
-        k1 |= key[1] as u64;
+        k1 |= u64::from(key[1]);
 
-        for i in 2..10 {
+        for &k in key.iter().take(10).skip(2) {
             k0 <<= 8;
-            k0 |= key[i] as u64;
+            k0 |= u64::from(k);
         }
 
         let idx_0 = [12, 16, 20, 24, 52, 60];
@@ -175,12 +175,12 @@ impl Cipher for Twine {
             // Extract
             let mut roundkey = 0;
 
-            for i in 0..6 {
-                roundkey ^= ((k0 >> idx_0[i]) & 0xf) << (8*i+4);
+            for (i, &idx) in idx_0.iter().enumerate() {
+                roundkey ^= ((k0 >> idx) & 0xf) << (8*i+4);
             }
 
-            for i in 0..2 {
-                roundkey ^= ((k1 >> idx_1[i]) & 0xf) << (8*(i+6)+4);
+            for (i, &idx) in idx_1.iter().enumerate() {
+                roundkey ^= ((k1 >> idx) & 0xf) << (8*(i+6)+4);
             }
 
             keys.push(roundkey);
@@ -188,8 +188,8 @@ impl Cipher for Twine {
             // Update
             k0 ^= self.constants[r] as u64 & 0x7;
             k0 ^= (self.constants[r] as u64 >> 3) << 48;
-            k0 ^= (self.sbox.table[((k0 >> 12) & 0xf) as usize] as u64) << 60;
-            k1 ^= (self.sbox.table[((k1 >> 12) & 0xf) as usize] as u64) << 8;
+            k0 ^= u64::from(self.sbox.table[((k0 >> 12) & 0xf) as usize]) << 60;
+            k1 ^= u64::from(self.sbox.table[((k1 >> 12) & 0xf) as usize]) << 8;
             k1 = (k1 >> 12) ^ ((k1 << 4) & 0xfff0);
             let t = k1;
             k1 = k0 >> 48;
@@ -200,17 +200,17 @@ impl Cipher for Twine {
         // Extract
         let mut roundkey = 0;
 
-        for i in 0..6 {
-            roundkey ^= ((k0 >> idx_0[i]) & 0xf) << (8*i+4);
+        for (i, &idx) in idx_0.iter().enumerate() {
+            roundkey ^= ((k0 >> idx) & 0xf) << (8*i+4);
         }
 
-        for i in 0..2 {
-            roundkey ^= ((k1 >> idx_1[i]) & 0xf) << (8*(i+6)+4);
+        for (i, &idx) in idx_1.iter().enumerate() {
+            roundkey ^= ((k1 >> idx) & 0xf) << (8*(i+6)+4);
         }
 
         keys.push(roundkey);
 
-        keys.iter().map(|&x| x as u128).collect()
+        keys.iter().map(|&x| u128::from(x)).collect()
     }
 
     /** 
@@ -219,15 +219,15 @@ impl Cipher for Twine {
     input       Plaintext to be encrypted.
     round_keys  Round keys generated by the key-schedule.
     */
-    fn encrypt(&self, input: u128, round_keys: &Vec<u128>) -> u128 {
+    fn encrypt(&self, input: u128, round_keys: &[u128]) -> u128 {
         let mut output = input;
 
-        for i in 0..35 {
-            let x = (output & 0xf0f0f0f0f0f0f0f0) ^ round_keys[i];
+        for round_key in round_keys.iter().take(35) {
+            let x = (output & 0xf0f0f0f0f0f0f0f0) ^ round_key;
             let mut tmp = 0;
 
             for j in 0..8 {
-                tmp ^= (self.sbox.table[((x >> (8*j+4)) & 0xf) as usize] as u128) << (8*j+4);
+                tmp ^= u128::from(self.sbox.table[((x >> (8*j+4)) & 0xf) as usize]) << (8*j+4);
             }
 
             output ^= tmp >> 4;
@@ -238,7 +238,7 @@ impl Cipher for Twine {
         let mut tmp = 0;
 
         for j in 0..8 {
-            tmp ^= (self.sbox.table[((x >> (8*j+4)) & 0xf) as usize] as u128) << (8*j+4);
+            tmp ^= u128::from(self.sbox.table[((x >> (8*j+4)) & 0xf) as usize]) << (8*j+4);
         }
 
         output ^= tmp >> 4;
@@ -251,7 +251,7 @@ impl Cipher for Twine {
     input       Ciphertext to be decrypted.
     round_keys  Round keys generated by the key-schedule.
     */
-    fn decrypt(&self, input: u128, round_keys: &Vec<u128>) -> u128 {
+    fn decrypt(&self, input: u128, round_keys: &[u128]) -> u128 {
         let mut output = input;
 
         for i in 0..35 {
@@ -259,7 +259,7 @@ impl Cipher for Twine {
             let mut tmp = 0;
 
             for j in 0..8 {
-                tmp ^= (self.sbox.table[((x >> (8*j+4)) & 0xf) as usize] as u128) << (8*j+4);
+                tmp ^= u128::from(self.sbox.table[((x >> (8*j+4)) & 0xf) as usize]) << (8*j+4);
             }
 
             output ^= tmp >> 4;
@@ -270,7 +270,7 @@ impl Cipher for Twine {
         let mut tmp = 0;
 
         for j in 0..8 {
-            tmp ^= (self.sbox.table[((x >> (8*j+4)) & 0xf) as usize] as u128) << (8*j+4);
+            tmp ^= u128::from(self.sbox.table[((x >> (8*j+4)) & 0xf) as usize]) << (8*j+4);
         }
 
         output ^= tmp >> 4;
@@ -306,12 +306,12 @@ impl Cipher for Twine {
                 let mut tmp = 0;
 
                 for i in 0..8 {
-                    alpha ^= ((output >> 4*i) & 0xf) << (i*8);
-                    alpha ^= ((input >> 4*i) & 0xf) << (i*8+4);
+                    alpha ^= ((output >> (4*i)) & 0xf) << (i*8);
+                    alpha ^= ((input >> (4*i)) & 0xf) << (i*8+4);
                     tmp ^= ((output >> (4*i+32)) & 0xf) << (i*8);
                 }
 
-                tmp = self.linear_layer_inv(tmp as u128) as u64;
+                tmp = self.linear_layer_inv(u128::from(tmp)) as u64;
                 alpha ^= tmp;
 
                 let mut beta = 0;
@@ -320,14 +320,14 @@ impl Cipher for Twine {
                 for i in 0..8 {
                     beta ^= ((output >> (4*i+32)) & 0xf) << (i*8);
                     beta ^= ((input >> (4*i+32)) & 0xf) << (i*8+4);
-                    tmp ^= ((output >> 4*i) & 0xf) << (i*8);
+                    tmp ^= ((output >> (4*i)) & 0xf) << (i*8);
                 }
 
-                tmp = self.linear_layer(tmp as u128) as u64;
+                tmp = self.linear_layer(u128::from(tmp)) as u64;
                 beta ^= tmp;
-                beta = self.linear_layer(beta as u128) as u64;       
+                beta = self.linear_layer(u128::from(beta)) as u64;       
 
-                (alpha as u128, beta as u128)
+                (u128::from(alpha), u128::from(beta))
             },
             PropertyType::Differential => {
                 let input = input as u64;
@@ -337,12 +337,12 @@ impl Cipher for Twine {
                 let mut tmp = 0;
 
                 for i in 0..8 {
-                    delta ^= ((output >> 4*i) & 0xf) << (i*8);
-                    delta ^= ((input >> 4*i) & 0xf) << (i*8+4);
+                    delta ^= ((output >> (4*i)) & 0xf) << (i*8);
+                    delta ^= ((input >> (4*i)) & 0xf) << (i*8+4);
                     tmp ^= ((input >> (4*i+32)) & 0xf) << (i*8+4);
                 }
 
-                tmp = self.linear_layer_inv(tmp as u128) as u64;
+                tmp = self.linear_layer_inv(u128::from(tmp)) as u64;
                 delta ^= tmp;
 
                 let mut nabla = 0;
@@ -351,14 +351,14 @@ impl Cipher for Twine {
                 for i in 0..8 {
                     nabla ^= ((output >> (4*i+32)) & 0xf) << (i*8);
                     nabla ^= ((input >> (4*i+32)) & 0xf) << (i*8+4);
-                    tmp ^= ((input >> 4*i) & 0xf) << (i*8+4);
+                    tmp ^= ((input >> (4*i)) & 0xf) << (i*8+4);
                 }
 
-                tmp = self.linear_layer(tmp as u128) as u64;
+                tmp = self.linear_layer(u128::from(tmp)) as u64;
                 nabla ^= tmp;
-                nabla = self.linear_layer(nabla as u128) as u64;       
+                nabla = self.linear_layer(u128::from(nabla)) as u64;       
 
-                (delta as u128, nabla as u128)
+                (u128::from(delta), u128::from(nabla))
             }
         }
     }

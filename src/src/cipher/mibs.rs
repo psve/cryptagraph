@@ -82,31 +82,31 @@ impl Cipher for Mibs {
         x ^= (x & (0xf << 20)) >> 16;
         x ^= (x & (0xf << 24)) >> 16;
         x ^= (x & (0xf << 28)) >> 16;
-        x ^= (x & (0xf << 0)) << 24;
-        x ^= (x & (0xf << 4)) << 24;
-        x ^= (x & (0xf << 8)) << 8;
-        x ^= (x & (0xf << 12)) << 8;
-        x ^= (x & (0xf << 16)) >> 4;
+        x ^= (x & (0xf      )) << 24;
+        x ^= (x & (0xf <<  4)) << 24;
+        x ^= (x & (0xf <<  8)) <<  8;
+        x ^= (x & (0xf << 12)) <<  8;
+        x ^= (x & (0xf << 16)) >>  4;
         x ^= (x & (0xf << 20)) >> 20;
         x ^= (x & (0xf << 24)) >> 20;
         x ^= (x & (0xf << 28)) >> 20;
-        x ^= (x & (0xf << 0)) << 16;
-        x ^= (x & (0xf << 4)) << 16;
-        x ^= (x & (0xf << 8)) << 16;
+        x ^= (x & (0xf      )) << 16;
+        x ^= (x & (0xf <<  4)) << 16;
+        x ^= (x & (0xf <<  8)) << 16;
         x ^= (x & (0xf << 12)) << 16;
 
         let mut output = 0;
         
-        output ^= ((x >> (4*0)) & 0xf) << (Mibs::PERMUTATION[0] * 4);
-        output ^= ((x >> (4*1)) & 0xf) << (Mibs::PERMUTATION[1] * 4);
-        output ^= ((x >> (4*2)) & 0xf) << (Mibs::PERMUTATION[2] * 4);
-        output ^= ((x >> (4*3)) & 0xf) << (Mibs::PERMUTATION[3] * 4);
-        output ^= ((x >> (4*4)) & 0xf) << (Mibs::PERMUTATION[4] * 4);
-        output ^= ((x >> (4*5)) & 0xf) << (Mibs::PERMUTATION[5] * 4);
-        output ^= ((x >> (4*6)) & 0xf) << (Mibs::PERMUTATION[6] * 4);
-        output ^= ((x >> (4*7)) & 0xf) << (Mibs::PERMUTATION[7] * 4);
+        output ^= ((x      ) & 0xf) << (Mibs::PERMUTATION[0] * 4);
+        output ^= ((x >>  4) & 0xf) << (Mibs::PERMUTATION[1] * 4);
+        output ^= ((x >>  8) & 0xf) << (Mibs::PERMUTATION[2] * 4);
+        output ^= ((x >> 12) & 0xf) << (Mibs::PERMUTATION[3] * 4);
+        output ^= ((x >> 16) & 0xf) << (Mibs::PERMUTATION[4] * 4);
+        output ^= ((x >> 20) & 0xf) << (Mibs::PERMUTATION[5] * 4);
+        output ^= ((x >> 24) & 0xf) << (Mibs::PERMUTATION[6] * 4);
+        output ^= ((x >> 28) & 0xf) << (Mibs::PERMUTATION[7] * 4);
 
-        output as u128
+        u128::from(output)
     }
 
     /** 
@@ -117,35 +117,35 @@ impl Cipher for Mibs {
     fn linear_layer_inv(&self, input: u128) -> u128 {
         let mut output = 0;
         
-        output ^= ((input as u64 >> (4*0)) & 0xf) << (Mibs::IPERMUTATION[0] * 4);
-        output ^= ((input as u64 >> (4*1)) & 0xf) << (Mibs::IPERMUTATION[1] * 4);
-        output ^= ((input as u64 >> (4*2)) & 0xf) << (Mibs::IPERMUTATION[2] * 4);
-        output ^= ((input as u64 >> (4*3)) & 0xf) << (Mibs::IPERMUTATION[3] * 4);
-        output ^= ((input as u64 >> (4*4)) & 0xf) << (Mibs::IPERMUTATION[4] * 4);
-        output ^= ((input as u64 >> (4*5)) & 0xf) << (Mibs::IPERMUTATION[5] * 4);
-        output ^= ((input as u64 >> (4*6)) & 0xf) << (Mibs::IPERMUTATION[6] * 4);
-        output ^= ((input as u64 >> (4*7)) & 0xf) << (Mibs::IPERMUTATION[7] * 4);
+        output ^= ((input as u64      ) & 0xf) << (Mibs::IPERMUTATION[0] * 4);
+        output ^= ((input as u64 >>  4) & 0xf) << (Mibs::IPERMUTATION[1] * 4);
+        output ^= ((input as u64 >>  8) & 0xf) << (Mibs::IPERMUTATION[2] * 4);
+        output ^= ((input as u64 >> 12) & 0xf) << (Mibs::IPERMUTATION[3] * 4);
+        output ^= ((input as u64 >> 16) & 0xf) << (Mibs::IPERMUTATION[4] * 4);
+        output ^= ((input as u64 >> 20) & 0xf) << (Mibs::IPERMUTATION[5] * 4);
+        output ^= ((input as u64 >> 24) & 0xf) << (Mibs::IPERMUTATION[6] * 4);
+        output ^= ((input as u64 >> 28) & 0xf) << (Mibs::IPERMUTATION[7] * 4);
         
         let mut x = output;
 
         x ^= (x & (0xf << 12)) << 16;
-        x ^= (x & (0xf << 8)) << 16;
-        x ^= (x & (0xf << 4)) << 16;
-        x ^= (x & (0xf << 0)) << 16;
+        x ^= (x & (0xf <<  8)) << 16;
+        x ^= (x & (0xf <<  4)) << 16;
+        x ^= (x & (0xf      )) << 16;
         x ^= (x & (0xf << 28)) >> 20;
         x ^= (x & (0xf << 24)) >> 20;
         x ^= (x & (0xf << 20)) >> 20;
-        x ^= (x & (0xf << 16)) >> 4;
-        x ^= (x & (0xf << 12)) << 8;
-        x ^= (x & (0xf << 8)) << 8;
-        x ^= (x & (0xf << 4)) << 24;
-        x ^= (x & (0xf << 0)) << 24;
+        x ^= (x & (0xf << 16)) >>  4;
+        x ^= (x & (0xf << 12)) <<  8;
+        x ^= (x & (0xf <<  8)) <<  8;
+        x ^= (x & (0xf <<  4)) << 24;
+        x ^= (x & (0xf      )) << 24;
         x ^= (x & (0xf << 28)) >> 16;
         x ^= (x & (0xf << 24)) >> 16;
         x ^= (x & (0xf << 20)) >> 16;
         x ^= (x & (0xf << 16)) >> 16;
 
-        x as u128
+        u128::from(x)
     }
 
     /**
@@ -174,19 +174,19 @@ impl Cipher for Mibs {
         let mut s = 0;
 
         // load key into 63-bit state
-        for i in 0..8 {
+        for &k in key.iter().take(8) {
             s <<= 8;
-            s |= key[i] as u64;
+            s |= u64::from(k);
         }
 
         for r in 0..rounds {
             s = (s >> 15) ^ (s << (64-15));
-            s = (s & 0x0fffffffffffffff) ^ ((self.sbox.table[(s >> 60) as usize] as u64) << 60);
+            s = (s & 0x0fffffffffffffff) ^ (u64::from(self.sbox.table[(s >> 60) as usize]) << 60);
             s ^= ((r+1) as u64) << 11;
             keys.push(s >> 32);
         }
 
-        keys.iter().map(|&x| x as u128).collect()
+        keys.iter().map(|&x| u128::from(x)).collect()
     }
 
     /** 
@@ -195,22 +195,22 @@ impl Cipher for Mibs {
     input       Plaintext to be encrypted.
     round_keys  Round keys generated by the key-schedule.
     */
-    fn encrypt(&self, input: u128, round_keys: &Vec<u128>) -> u128 {
+    fn encrypt(&self, input: u128, round_keys: &[u128]) -> u128 {
         let mut output = input as u64;
 
-        for i in 0..32 {
+        for &round_key in round_keys.iter().take(32) {
             let mut left = output >> 32;
             let right = output & 0xffffffff;
             output = left;
 
             // Add round key
-            left ^= round_keys[i] as u64;
+            left ^= round_key as u64;
 
             // Sbox
             let mut tmp = 0;
 
             for j in 0..8 {
-                tmp ^= (self.sbox.table[((left >> (4*j)) & 0xf) as usize] as u128) << (4*j);
+                tmp ^= u128::from(self.sbox.table[((left >> (4*j)) & 0xf) as usize]) << (4*j);
             }
 
             // Linear layer
@@ -220,7 +220,7 @@ impl Cipher for Mibs {
         }
 
         output = (output >> 32) ^ (output << 32);
-        output as u128
+        u128::from(output)
     }
 
     /** 
@@ -229,7 +229,7 @@ impl Cipher for Mibs {
     input       Ciphertext to be decrypted.
     round_keys  Round keys generated by the key-schedule.
     */
-    fn decrypt(&self, input: u128, round_keys: &Vec<u128>) -> u128 {
+    fn decrypt(&self, input: u128, round_keys: &[u128]) -> u128 {
         let mut output = input as u64;
 
         for i in 0..32 {
@@ -244,7 +244,7 @@ impl Cipher for Mibs {
             let mut tmp = 0;
 
             for j in 0..8 {
-                tmp ^= (self.sbox.table[((left >> (4*j)) & 0xf) as usize] as u128) << (4*j);
+                tmp ^= u128::from(self.sbox.table[((left >> (4*j)) & 0xf) as usize]) << (4*j);
             }
 
             // Linear layer
@@ -253,7 +253,7 @@ impl Cipher for Mibs {
             output ^= (right ^ left) << 32;
         }
 
-        ((output >> 32) ^ (output << 32)) as u128
+        u128::from((output >> 32) ^ (output << 32))
     }
 
     /** 
@@ -287,7 +287,7 @@ impl Cipher for Mibs {
                 let mut beta = output;
                 beta ^= input >> 32;
 
-                (alpha as u128, beta as u128)
+                (u128::from(alpha), u128::from(beta))
             },
             PropertyType::Differential => {
                 let input = input as u64;
@@ -299,7 +299,7 @@ impl Cipher for Mibs {
                 let mut nabla = (input >> 32) ^ (input << 32);
                 nabla ^= output & 0xffffffff00000000;
 
-                (delta as u128, nabla as u128)
+                (u128::from(delta), u128::from(nabla))
             }
         }
     }

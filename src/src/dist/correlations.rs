@@ -32,7 +32,7 @@ impl MaskLat {
 
         let w = cipher.sbox(0).size;
         let m = (1 << w) - 1;
-        let values  = (1 << cipher.sbox(0).size) as f64;
+        let values  = f64::from(1 << cipher.sbox(0).size);
 
         for i in 0..cipher.num_sboxes() {
             let hits = cipher.sbox(i).lat[(input & m) as usize][(output & m) as usize];
@@ -52,7 +52,7 @@ impl MaskLat {
     /* Constructs a Lat over the bricklayer function
      * for the particular set of parities
      */
-    fn new(cipher : &Cipher, masks : &Vec<u128>) -> MaskLat {
+    fn new(cipher : &Cipher, masks : &[u128]) -> MaskLat {
         /* Assuming SPN; compute possible "outputs" for input set
          *
          * Alpha ^ Key Addition -> Substitution -> Linear
@@ -63,7 +63,7 @@ impl MaskLat {
          */
         let mut outputs = vec![];
 
-        for input in masks.iter() {
+        for input in masks {
             let output = cipher.linear_layer_inv(*input);
             assert_eq!(cipher.linear_layer(output), *input);
             outputs.push(output);
@@ -74,29 +74,29 @@ impl MaskLat {
             map_input : FnvHashMap::default(),
         };
 
-        for input in masks.iter() {
+        for input in masks {
             mlat.map_input.insert(*input, vec![]);
         }
 
-        let mut bar = ProgressBar::new(masks.len());
+        let mut progress_bar = ProgressBar::new(masks.len());
 
-        for input in masks.iter() {
-            bar.increment();
-            for output in outputs.iter() {
-                let value = MaskLat::correlation(cipher, *input, *output);
+        for &input in masks {
+            progress_bar.increment();
+            for &output in &outputs {
+                let value = MaskLat::correlation(cipher, input, output);
                 
                 if value*value > 0.0 {
-                    let vector = mlat.map_input.get_mut(input).expect("Error 1");
+                    let vector = mlat.map_input.get_mut(&input).expect("Error 1");
                     /* NOTE:
                      *   Applies linear layer to output
                      *   to speed up computation of
                      *   new maskset (subset of Alpha)
                      */
-                    let ninput = cipher.linear_layer(*output);
+                    let output = cipher.linear_layer(output);
                     vector.push(Property{
-                        input  : *input,
-                        output : ninput,
-                        value  : value,
+                        input,
+                        output,
+                        value,
                         trails : 1
                     });
                 }
@@ -118,7 +118,7 @@ impl MaskLat {
                     trails : p.trails
                 };
 
-                let entry = inverse.entry(inverse_property.input).or_insert(Vec::new());
+                let entry = inverse.entry(inverse_property.input).or_insert_with(Vec::new);
                 entry.push(inverse_property);
             }
         }
@@ -155,24 +155,20 @@ impl MaskPool {
 
         // propergate mask set
         for ((input, output), value) in &self.masks {
+            if let Some(approximations) = lat.lookup_input(*output) {
+                for approx in approximations {
+                    let sign   = if parity(approx.output & key) == 1 { -1.0 } else { 1.0 };
+                    let delta = sign * (approx.value * value);
 
-            match lat.lookup_input(*output) {
-                Some(approximations) => {
-                    for approx in approximations {
-                        let sign   = if parity(approx.output & key) == 1 { -1.0 } else { 1.0 };
-                        let delta = sign * (approx.value * value);
+                    // add relation to accumulator
+                    let acc  = match pool_new.get(&(*input, approx.output)) {
+                        None    => delta,
+                        Some(c) => delta + c
+                    };
 
-                        // add relation to accumulator
-                        let acc  = match pool_new.get(&(*input, approx.output)) {
-                            None    => delta,
-                            Some(c) => delta + c
-                        };
-
-                        // write back to pool
-                        pool_new.insert((*input, approx.output), acc);
-                    }
-                },
-                None => {}
+                    // write back to pool
+                    pool_new.insert((*input, approx.output), acc);
+                }
             }
         }
 
@@ -181,14 +177,14 @@ impl MaskPool {
 }
 
 pub fn get_correlations(cipher: &Cipher,
-                        allowed: &Vec<(u128, u128)>,
+                        allowed: &[(u128, u128)],
                         rounds: usize,
                         num_keys: usize,
-                        masks: &Vec<u128>)
+                        masks: &[u128])
                         -> FnvHashMap<(u128, u128), Vec<f64>> {
     // calculate LAT for masks between rounds (cipher dependent)
     println!("Calculating full approximation table.");
-    let lat = MaskLat::new(cipher, &masks);
+    let lat = MaskLat::new(cipher, masks);
 
     // Calculate the inverse LAT in case of Prince-like ciphers
     let mut lat_inv = lat.clone();
@@ -200,7 +196,7 @@ pub fn get_correlations(cipher: &Cipher,
     let mut rng = OsRng::new().unwrap();
     let mut keys = vec![vec![0; cipher.key_size() / 8]; num_keys];
 
-    for mut k in keys.iter_mut() {
+    for mut k in &mut keys {
         rng.fill_bytes(&mut k);
     }
     
@@ -242,12 +238,14 @@ pub fn get_correlations(cipher: &Cipher,
                         pool.add(*alpha);
                     }
 
-                    for round in 0..rounds {
+                    for &round_key in round_keys.iter().take(rounds) {
+                    // for round in 0..rounds {
                         // "clock" all patterns one round
-                        pool.step(&lat, round_keys[round]);
+                        // pool.step(&lat, round_keys[round]);
+                        pool.step(&lat, round_key);
 
                         // check for early termination
-                        if pool.masks.len() == 0 {
+                        if pool.masks.is_empty() {
                             panic!("1: pool empty :(");
                         }
                     }
@@ -266,12 +264,14 @@ pub fn get_correlations(cipher: &Cipher,
                         pool.step(&lat_inv, round_keys[rounds]);
 
                         // Do remaining rounds
-                        for round in 0..rounds {
+                        for &round_key in round_keys.iter().skip(rounds+1) {
+                        // for round in 0..rounds {
                             // "clock" all patterns one round
-                            pool.step(&lat_inv, round_keys[rounds+1+round]);
+                            // pool.step(&lat_inv, round_keys[rounds+1+round]);
+                            pool.step(&lat_inv, round_key);
 
                             // check for early termination
-                            if pool.masks.len() == 0 {
+                            if pool.masks.is_empty() {
                                 panic!("2: pool empty :(");
                             }
                         }
@@ -288,7 +288,7 @@ pub fn get_correlations(cipher: &Cipher,
                             None    => 0.0
                         };
 
-                        let entry = thread_result.entry((*alpha, *beta)).or_insert(vec![]);
+                        let entry = thread_result.entry((*alpha, *beta)).or_insert_with(Vec::new);
                         entry.push(corr);
                     }
 
@@ -307,8 +307,8 @@ pub fn get_correlations(cipher: &Cipher,
     for _ in 0..num_threads {
         let mut thread_result = result_rx.recv().expect("Main could not receive result");
 
-        for (k, mut v) in thread_result.iter_mut() {
-            let entry = result.entry(*k).or_insert(vec![]);
+        for (k, mut v) in &mut thread_result {
+            let entry = result.entry(*k).or_insert_with(Vec::new);
             entry.append(&mut v);
         }
     }

@@ -1,2 +1,2 @@
-pub mod dist;
+pub mod distributions;
 mod correlations;

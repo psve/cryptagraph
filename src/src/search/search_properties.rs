@@ -16,8 +16,8 @@ graph       The input graph to dump.
 path        Prefix of the path of the output file. Gets appended with ".graph".
 */
 fn dump_to_graph_tool(graph: &MultistageGraph,
-                      path: &String) {
-    let mut path = path.clone();
+                      path: &str) {
+    let mut path = path.to_string();
     path.push_str(".graph");
 
     // Contents of previous files are overwritten
@@ -31,15 +31,15 @@ fn dump_to_graph_tool(graph: &MultistageGraph,
     let stages = graph.stages();
 
     for i in 0..stages {
-        for (j, _) in graph.get_stage(i).unwrap() {
-            write!(file, "{},{}\n", i, j).expect("Could not write to file.");
+        for j in graph.get_stage(i).unwrap().keys() {
+            writeln!(file, "{},{}", i, j).expect("Could not write to file.");
         }
     }        
 
     for i in 0..stages-1 {
         for (j, vertex_ref) in graph.get_stage(i).unwrap() {
-            for (k, _) in &vertex_ref.successors {
-                write!(file, "{},{},{},{}\n", i, j, i+1, k).expect("Could not write to file.");       
+            for k in vertex_ref.successors.keys() {
+                writeln!(file, "{},{},{},{}", i, j, i+1, k).expect("Could not write to file.");       
             }
         }
     }   
@@ -52,8 +52,8 @@ graph           The input graph to dump.
 file_mask_out   Prefix of the path of the file created.
 */
 fn dump_masks(graph: &MultistageGraph, 
-              file_mask_out: String) {
-    let mut file_set_path = file_mask_out.clone();
+              file_mask_out: &str) {
+    let mut file_set_path = file_mask_out.to_string();
     file_set_path.push_str(".set");
 
     // Collect edges and vertices
@@ -62,7 +62,7 @@ fn dump_masks(graph: &MultistageGraph,
 
     for stage in 0..stages-1 {
         for (&input, vertex_ref) in graph.get_stage(stage).unwrap() {
-            for (&output, _) in &vertex_ref.successors {
+            for &output in vertex_ref.successors.keys() {
                 mask_set.insert(input);
                 mask_set.insert(output);
             }
@@ -78,7 +78,7 @@ fn dump_masks(graph: &MultistageGraph,
                                .expect("Could not open file.");
     
     for mask in &mask_set {
-        write!(file, "{:032x}\n", mask).expect("Could not write to file.");
+        writeln!(file, "{:032x}", mask).expect("Could not write to file.");
     }
 }
 
@@ -88,9 +88,9 @@ Dumps a vector of properties to <file_mask_out>.app.
 Properties      A vector of properties to write to file.
 file_mask_out   Prefix of the path of the file created.
 */
-fn dump_results(properties: &Vec<Property>, 
-                file_mask_out: String) {
-    let mut file_set_path = file_mask_out.clone();
+fn dump_results(properties: &[Property], 
+                file_mask_out: &str) {
+    let mut file_set_path = file_mask_out.to_string();
     file_set_path.push_str(".app");
 
     // Contents of previous files are overwritten
@@ -102,7 +102,7 @@ fn dump_results(properties: &Vec<Property>,
                                .expect("Could not open file.");
     
     for property in properties {
-        write!(file, "{:?},{},{}\n", property, property.trails, property.value.log2())
+        writeln!(file, "{:?},{},{}", property, property.trails, property.value.log2())
             .expect("Could not write to file.");
     }
 }
@@ -114,13 +114,13 @@ input/output masks should be separated by a comma.
 
 file_mask_in        Path of the input file used.
 */
-fn read_allowed(file_mask_in: String) -> FnvHashSet<(u128, u128)> {
+fn read_allowed(file_mask_in: &str) -> FnvHashSet<(u128, u128)> {
     let file = File::open(file_mask_in).expect("Could not open file.");
     let mut allowed = FnvHashSet::default();
 
     for line in BufReader::new(file).lines() {
         let s = line.expect("Error reading file");
-        let split: Vec<_> = s.split(",").collect();
+        let split: Vec<_> = s.split(',').collect();
         let alpha = u128::from_str_radix(split.get(0).expect("Could not read input data"), 16)
                         .expect("Could not parse integer. Is it in hexadecimals?");
         let beta  = u128::from_str_radix(split.get(1).expect("Could not read input data"), 16)
@@ -143,15 +143,16 @@ file_mask_in    Prefix of two files which restict the input/output values of the
 file_mask_out   Prefix of two files to which results are dumped.
 file_graph      Prefix of a file to which raw graph data is dumped.
 */
-pub fn find_properties(cipher: Box<Cipher>, 
-                       property_type: PropertyType,
-                       rounds: usize, 
-                       patterns: usize,
-                       anchors: Option<usize>,
-                       file_mask_in: Option<String>,
-                       file_mask_out: Option<String>,
-                       num_keep: Option<usize>,
-                       file_graph: Option<String>) {
+#[cfg_attr(clippy, allow(too_many_arguments))]
+pub fn search_properties(cipher: &Cipher, 
+                         property_type: PropertyType,
+                         rounds: usize, 
+                         patterns: usize,
+                         anchors: Option<usize>,
+                         file_mask_in: Option<String>,
+                         file_mask_out: Option<String>,
+                         num_keep: Option<usize>,
+                         file_graph: Option<String>) {
     println!("\tCipher: {}.", cipher.name());
     match property_type {
         PropertyType::Linear       => println!("\tProperty: Linear"),
@@ -163,7 +164,7 @@ pub fn find_properties(cipher: Box<Cipher>,
         Some(a) => println!("\tMaximum anchors: 2^{}", a),
         None    => println!("\tMaximum anchors: 2^17"),
     }
-    println!("");
+    println!();
 
 
     let start = time::precise_time_s();
@@ -175,7 +176,7 @@ pub fn find_properties(cipher: Box<Cipher>,
 
     let allowed = match file_mask_in {
         Some(path) => {
-            read_allowed(path)
+            read_allowed(&path)
         },
         None => {  
             FnvHashSet::default()
@@ -187,18 +188,12 @@ pub fn find_properties(cipher: Box<Cipher>,
     let graph = generate_graph(cipher, property_type, rounds, patterns, 
                                anchors, &allowed);
 
-    match file_graph {
-        Some(path) => {
-            dump_to_graph_tool(&graph, &path);
-        },
-        None => {}
+    if let Some(path) = file_graph {
+        dump_to_graph_tool(&graph, &path);
     }
 
-    match &file_mask_out {
-        Some(path) => {
-            dump_masks(&graph, path.to_string());
-        },
-        None => { }
+    if let Some(path) = &file_mask_out {
+        dump_masks(&graph, path);
     }
 
     println!("\n------------------------------------- FINDING PROPERTIES ---------------------------------------\n");
@@ -210,7 +205,7 @@ pub fn find_properties(cipher: Box<Cipher>,
 
     println!("Search finished. [{} s]", time::precise_time_s()-start);
 
-    if result.len() > 0 {
+    if !result.is_empty() {
         println!("Smallest value: {}", min_value.log2());
         println!("Largest value:  {}\n", result[0].value.log2());
         println!("Total number of trails:  {}", paths);
@@ -226,6 +221,6 @@ pub fn find_properties(cipher: Box<Cipher>,
     }
     
     if num_keep.is_some() && file_mask_out.is_some() {
-        dump_results(&result, file_mask_out.unwrap());
+        dump_results(&result, &file_mask_out.unwrap());
     }
 }

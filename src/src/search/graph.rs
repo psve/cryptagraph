@@ -66,7 +66,7 @@ impl MultistageGraph {
         let vertices = vec![FnvHashMap::default(); stages];
 
         MultistageGraph {
-            vertices: vertices,
+            vertices,
         }
     }
 
@@ -88,12 +88,10 @@ impl MultistageGraph {
     pub fn add_vertex(&mut self, 
                       stage: usize, 
                       label: u128) {    
-        if !self.vertices.get(stage).expect("Stage out of range").contains_key(&label) {
-            let vertex = Vertex::new();
-            self.vertices.get_mut(stage)
-                         .expect("Stage out of range")
-                         .insert(label, vertex);
-        }
+        self.vertices.get_mut(stage)
+            .expect("Stage out of range")
+            .entry(label)
+            .or_insert_with(Vertex::new);
     }
 
     /**
@@ -171,29 +169,21 @@ impl MultistageGraph {
         {
             let (before, mid) = self.vertices.split_at_mut(stage);
             let (mid, after) = mid.split_at_mut(1);
-            match mid[0].get(&label) {
-                Some(vertex) => {
-                    match before.last_mut() {
-                        Some(other_stage) => {
-                            for other in vertex.predecessors.keys() {
-                                let mut other_vertex = other_stage.get_mut(&other).expect("Error 5");
-                                other_vertex.successors.remove(&label);
-                            }
-                        },
-                        None => {}
+            
+            if let Some(vertex) = mid[0].get(&label) {
+                if let Some(other_stage) = before.last_mut() {
+                    for other in vertex.predecessors.keys() {
+                        let mut other_vertex = other_stage.get_mut(&other).expect("Error 5");
+                        other_vertex.successors.remove(&label);
                     }
+                }
 
-                    match after.first_mut() {
-                        Some(other_stage) => {
-                            for other in vertex.successors.keys() {
-                                let mut other_vertex = other_stage.get_mut(&other).expect("Error 6");
-                                other_vertex.predecessors.remove(&label);
-                            }   
-                        },
-                        None => {}
+                if let Some(other_stage) = after.first_mut() {
+                    for other in vertex.successors.keys() {
+                        let mut other_vertex = other_stage.get_mut(&other).expect("Error 6");
+                        other_vertex.predecessors.remove(&label);
                     }
-                },
-                None => { }
+                }
             }
         }
 
@@ -219,12 +209,8 @@ impl MultistageGraph {
                 let mut remove = Vec::new();
 
                 for (&label, vertex) in self.get_stage(stage).unwrap() {
-                    if stage == start && vertex.successors.len() == 0 {
-                        remove.push(label);
-                    } else if stage == stop-1 && vertex.predecessors.len() == 0 {
-                        remove.push(label);
-                    } else if (stage != start && stage != stop-1) && (vertex.successors.len() == 0 ||
-                        vertex.predecessors.len() == 0) {
+                    if (vertex.successors.is_empty() && stage != stop-1) ||
+                       (vertex.predecessors.is_empty() && stage != start) {
                         remove.push(label);
                     }
                 }
@@ -243,8 +229,8 @@ impl MultistageGraph {
     pub fn reverse(&mut self) {
         self.vertices.reverse();
         
-        for stage in self.vertices.iter_mut() {
-            for (_, vertex) in stage.iter_mut() {
+        for stage in &mut self.vertices {
+            for vertex in stage.values_mut() {
                 mem::swap(&mut vertex.predecessors, &mut vertex.successors);
             }
         }       
@@ -293,12 +279,8 @@ impl MultistageGraph {
     */
     pub fn has_edge(&self, stage: usize, label_from: u128, label_to: u128) -> bool {
         match self.vertices.get(stage).expect("Stage out of range.").get(&label_from) {
-            Some(vertex) => {
-                return vertex.successors.contains_key(&label_to);
-            },
-            None => {
-                return false;
-            }
+            Some(vertex) => vertex.successors.contains_key(&label_to),
+            None => false
         }
     }
 

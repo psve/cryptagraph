@@ -57,10 +57,10 @@ impl Property {
         input: u128, output: u128, 
         value: f64, trails: u128) -> Property {
         Property {
-            input: input, 
-            output: output, 
-            value: value,
-            trails: trails,
+            input, 
+            output, 
+            value,
+            trails,
         }
     }
 }
@@ -149,13 +149,13 @@ impl ValueMap {
                     // Absolute counter bias or probability
                     let key = ((*element as i16) - non_property).abs();
 
-                    let entry = map.entry(key).or_insert(vec![]);
+                    let entry = map.entry(key).or_insert_with(Vec::new);
                     entry.push(Property::new(input as u128, output as u128, 1.0, 1));
 
-                    let entry = input_map.entry(key).or_insert(vec![]);
+                    let entry = input_map.entry(key).or_insert_with(Vec::new);
                     entry.push(Property::new(input as u128, (output != 0) as u128, 1.0, 1));
 
-                    let entry = output_map.entry(key).or_insert(vec![]);
+                    let entry = output_map.entry(key).or_insert_with(Vec::new);
                     entry.push(Property::new((input != 0) as u128, output as u128, 1.0, 1));
                 }
             }
@@ -173,31 +173,31 @@ impl ValueMap {
         }
 
         ValueMap {
-            map: map, 
-            input_map: input_map, 
-            output_map: output_map
+            map, 
+            input_map, 
+            output_map
         }
     }
 
     /** 
     Getter to avoid unecessary syntax. Simply reimplements FnvHashMap::get .
     */
-    pub fn get(&self, k: &i16) -> Option<&Vec<Property>> {
-        self.map.get(k)
+    pub fn get(&self, k: i16) -> Option<&Vec<Property>> {
+        self.map.get(&k)
     }
 
     /** 
     Getter for the input map.
     */
-    pub fn get_input(&self, k: &i16) -> Option<&Vec<Property>> {
-        self.input_map.get(k)
+    pub fn get_input(&self, k: i16) -> Option<&Vec<Property>> {
+        self.input_map.get(&k)
     }
 
     /** 
     Getter for the output map.
     */
-    pub fn get_output(&self, k: &i16) -> Option<&Vec<Property>> {
-        self.output_map.get(k)
+    pub fn get_output(&self, k: i16) -> Option<&Vec<Property>> {
+        self.output_map.get(&k)
     }
 
     /** 
@@ -206,7 +206,7 @@ impl ValueMap {
     value    The target property value.
     */
     pub fn len_of(&self, value: i16) -> usize {
-        self.get(&value).unwrap().len()
+        self.get(value).unwrap().len()
     }
 
     /** 
@@ -215,7 +215,7 @@ impl ValueMap {
     value    The target property value.
     */
     pub fn len_of_input(&self, value: i16) -> usize {
-        self.get_input(&value).unwrap().len()
+        self.get_input(value).unwrap().len()
     }
 
     /** 
@@ -224,7 +224,7 @@ impl ValueMap {
     value    The target property value.
     */
     pub fn len_of_output(&self, value: i16) -> usize {
-        self.get_output(&value).unwrap().len()
+        self.get_output(value).unwrap().len()
     }
 }
 
@@ -266,14 +266,14 @@ impl MaskMap {
             let mut input_map = FnvHashMap::default();
             let mut output_map = FnvHashMap::default();
 
-            for r in 1..table.len() {
-                for c in 1..table[r].len() {
-                    let x = ((table[r][c] as i16) - non_property).abs();
+            for (r, row) in table.iter().enumerate().skip(1) {
+                for (c, &col) in row.iter().enumerate().skip(1) {
+                    let x = ((col as i16) - non_property).abs();
                     if x != 0 {
-                        let entry = input_map.entry(r as u128).or_insert(Vec::new());
+                        let entry = input_map.entry(r as u128).or_insert_with(Vec::new);
                         entry.push((c as u128, x));
 
-                        let entry = output_map.entry(c as u128).or_insert(Vec::new());
+                        let entry = output_map.entry(c as u128).or_insert_with(Vec::new);
                         entry.push((r as u128, x));
                     }
                 }
@@ -293,9 +293,9 @@ impl MaskMap {
 
 
         MaskMap {
-            input_maps: input_maps,
-            output_maps: output_maps,
-            property_type: property_type,
+            input_maps,
+            output_maps,
+            property_type,
         }
     }
 
@@ -314,8 +314,8 @@ impl MaskMap {
         let mask = cipher.sbox(0).mask();
         let size = cipher.sbox(0).size;
         let trivial = match self.property_type {
-            PropertyType::Linear => (1 << (size-1)) as f64,
-            PropertyType::Differential => (1 << size) as f64
+            PropertyType::Linear => f64::from(1 << (size-1)),
+            PropertyType::Differential => f64::from(1 << size)
         };
 
         // Extract active positions and output values
@@ -347,7 +347,7 @@ impl MaskMap {
             
             for (i, (sbox_idx, _, _)) in active.iter().enumerate() {
                 input ^= parts[i].0 << sbox_idx;
-                value *= parts[i].1 as f64 / trivial;
+                value *= f64::from(parts[i].1) / trivial;
             }
 
             if self.property_type == PropertyType::Linear {
@@ -375,8 +375,8 @@ impl MaskMap {
         let mask = cipher.sbox(0).mask();
         let size = cipher.sbox(0).size;
         let trivial = match self.property_type {
-            PropertyType::Linear => (1 << (size-1)) as f64,
-            PropertyType::Differential => (1 << size) as f64
+            PropertyType::Linear => f64::from(1 << (size-1)),
+            PropertyType::Differential => f64::from(1 << size)
         };
 
         // Extract active positions and output values
@@ -408,7 +408,7 @@ impl MaskMap {
             
             for (i, (sbox_idx, _, _)) in active.iter().enumerate() {
                 output ^= parts[i].0 << sbox_idx;
-                value *= parts[i].1 as f64 / trivial;
+                value *= f64::from(parts[i].1) / trivial;
             }
 
             if self.property_type == PropertyType::Linear {

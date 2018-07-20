@@ -44,7 +44,7 @@ fn main() {
                 }
             };
 
-            search::search::find_properties(cipher, property_type, rounds, num_patterns, anchors,
+            search::search_properties::search_properties(cipher.as_ref(), property_type, rounds, num_patterns, anchors,
                                             file_mask_in, file_mask_out, num_keep, file_graph);
         },
         CryptagraphOptions::Dist {cipher,
@@ -62,7 +62,7 @@ fn main() {
                 }
             };
 
-            dist::dist::get_distributions(cipher, file_mask_in, rounds, keys, masks, output);
+            dist::distributions::get_distributions(cipher.as_ref(), &file_mask_in, rounds, keys, &masks, &output);
         }
     }
 }

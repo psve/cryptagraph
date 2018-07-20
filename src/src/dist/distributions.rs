@@ -13,13 +13,13 @@ input/output masks should be separated by a comma.
 
 file_mask_in        Path of the input file used.
 */
-fn read_allowed(file_mask_in: String) -> Vec<(u128, u128)> {
+fn read_allowed(file_mask_in: &str) -> Vec<(u128, u128)> {
     let file = File::open(file_mask_in).expect("Could not open file.");
     let mut allowed = Vec::new();
 
     for line in BufReader::new(file).lines() {
         let s = line.expect("Error reading file");
-        let split: Vec<_> = s.split(",").collect();
+        let split: Vec<_> = s.split(',').collect();
         let alpha = u128::from_str_radix(split.get(0).expect("Could not read input data"), 16)
                         .expect("Could not parse integer. Is it in hexadecimals?");
         let beta  = u128::from_str_radix(split.get(1).expect("Could not read input data"), 16)
@@ -62,25 +62,25 @@ fn dump_correlations(correlations: &FnvHashMap<(u128, u128), Vec<f64>>,
         values.push(corrs);
     }
     line.pop();
-    write!(file, "{}\n", line).expect("Could not write to file.");
+    writeln!(file, "{}", line).expect("Could not write to file.");
 
     for j in 0..values.first().expect("Empty data set.").len() {
         let mut line = String::new();
         
-        for i in 0..values.len() {
-            line.push_str(&format!("{},", values[i][j]));
+        for v in &values {
+            line.push_str(&format!("{},", v[j]));
         }
         line.pop();
-        write!(file, "{}\n", line).expect("Could not write to file.");
+        writeln!(file, "{}", line).expect("Could not write to file.");
     }
 }
 
-pub fn get_distributions(cipher: Box<Cipher>,
-                         file_mask_in: String,
+pub fn get_distributions(cipher: &Cipher,
+                         file_mask_in: &str,
                          rounds: usize,
                          keys: usize,
-                         masks: String,
-                         output: String) {
+                         masks: &str,
+                         output: &str) {
     let start = time::precise_time_s();
     
     // read mask files
@@ -95,7 +95,7 @@ pub fn get_distributions(cipher: Box<Cipher>,
     println!("Properties masks: {}", allowed.len());
     println!("Intermediate masks: {}", masks.len());
 
-    let mut correlations = get_correlations(cipher.as_ref(), &allowed, rounds, keys, &masks);
+    let mut correlations = get_correlations(cipher, &allowed, rounds, keys, &masks);
 
     // Remove approximations with zero correlation
     correlations.retain(|_, v| v.iter().fold(false, |acc, &x| acc | (x != 0.0)));

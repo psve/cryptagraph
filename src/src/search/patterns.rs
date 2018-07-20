@@ -46,8 +46,8 @@ impl InternalSboxPattern {
         // If the current pattern is complete, we cannot extend in this way
         if !self.is_complete() {
             // Value of the trivial property for the next S-box
-            let trivial = *property_values[self.determined_length]
-                            .first().expect("No values found.") as f64;
+            let trivial = f64::from(*property_values[self.determined_length]
+                                    .first().expect("No values found."));
 
             let mut new_pattern = self.clone();
             new_pattern.pattern[self.determined_length] = Some(trivial as i16);
@@ -66,36 +66,33 @@ impl InternalSboxPattern {
 
         // This check fails if the current value was the last on the list
         // In this case, this pattern isn't generated
-        match corr_idx {
-            Some(x) => {
-                if x+1 < property_values[self.determined_length - 1].len() {
-                    // Value of the trivial property for the current S-box
-                    let trivial = *property_values[self.determined_length - 1]
-                                    .first().expect("No values found.") as f64;
+        if let Some(x) = corr_idx {
+            if x+1 < property_values[self.determined_length - 1].len() {
+                // Value of the trivial property for the current S-box
+                let trivial = f64::from(*property_values[self.determined_length - 1]
+                                        .first().expect("No values found."));
 
-                    new_pattern.pattern[self.determined_length - 1] = 
-                        Some(property_values[self.determined_length - 1][x+1]);
-                    new_pattern.num_active += (x == 0) as usize;
+                new_pattern.pattern[self.determined_length - 1] = 
+                    Some(property_values[self.determined_length - 1][x+1]);
+                new_pattern.num_active += (x == 0) as usize;
 
-                    match property_type {
-                        PropertyType::Linear => {
-                            new_pattern.value /= 
-                                (property_values[self.determined_length - 1][x] as f64 / trivial).powi(2);
-                            new_pattern.value *= 
-                                (property_values[self.determined_length - 1][x+1] as f64 / trivial).powi(2);
-                        },
-                        PropertyType::Differential => {
-                            new_pattern.value /= 
-                                property_values[self.determined_length - 1][x] as f64 / trivial;
-                            new_pattern.value *= 
-                                property_values[self.determined_length - 1][x+1] as f64 / trivial;
-                        }
+                match property_type {
+                    PropertyType::Linear => {
+                        new_pattern.value /= 
+                            (f64::from(property_values[self.determined_length - 1][x]) / trivial).powi(2);
+                        new_pattern.value *= 
+                            (f64::from(property_values[self.determined_length - 1][x+1]) / trivial).powi(2);
+                    },
+                    PropertyType::Differential => {
+                        new_pattern.value /= 
+                            f64::from(property_values[self.determined_length - 1][x]) / trivial;
+                        new_pattern.value *= 
+                            f64::from(property_values[self.determined_length - 1][x+1]) / trivial;
                     }
-
-                    extended_patterns.1 = Some(new_pattern);
                 }
-            },
-            None => {}
+
+                extended_patterns.1 = Some(new_pattern);
+            }
         };
 
         extended_patterns
@@ -129,7 +126,7 @@ impl PartialOrd for InternalSboxPattern {
             return Some(len_ord);
         }
 
-        return Some(Ordering::Equal);
+        Some(Ordering::Equal)
     }
 }
 
@@ -209,11 +206,11 @@ impl SboxPattern {
         let property = Property::new(0, 0, internal_sbox_pattern.value, 1);
 
         SboxPattern {
-            pattern: pattern, 
-            property: property,
+            pattern, 
+            property,
             mask: ((1 << cipher.sbox(0).size) - 1) as u128,
             sbox_size: cipher.sbox(0).size,
-            counter: counter,
+            counter,
             status: PatternStatus::New
         }
     }
@@ -226,11 +223,11 @@ impl SboxPattern {
                         inputs/outputs.
     */
     pub fn next(&mut self, 
-                value_maps: &Vec<ValueMap>,
-                property_filter: &PropertyFilter) 
+                value_maps: &[ValueMap],
+                property_filter: PropertyFilter) 
                 -> Option<Property> {
         // If there are no active S-boxes in the pattern, it is already empty
-        if self.counter.len() == 0 {
+        if self.counter.is_empty() {
             self.status = PatternStatus::Empty;
         }
 
@@ -243,9 +240,9 @@ impl SboxPattern {
         if self.status == PatternStatus::New {
             for &(i, j, x) in &self.pattern {
                 let sbox_property = match property_filter {
-                    PropertyFilter::All   => value_maps[j].get(&x).unwrap()[0],
-                    PropertyFilter::Input => value_maps[j].get_input(&x).unwrap()[0],
-                    PropertyFilter::Output  => value_maps[j].get_output(&x).unwrap()[0]
+                    PropertyFilter::All   => value_maps[j].get(x).unwrap()[0],
+                    PropertyFilter::Input => value_maps[j].get_input(x).unwrap()[0],
+                    PropertyFilter::Output  => value_maps[j].get_output(x).unwrap()[0]
                 };
 
                 let input = sbox_property.input;
@@ -283,9 +280,9 @@ impl SboxPattern {
 
             // Update current position
             let app = match property_filter {
-                PropertyFilter::All    => value_maps[sbox].get(&val).unwrap()[self.counter[i]],
-                PropertyFilter::Input  => value_maps[sbox].get_input(&val).unwrap()[self.counter[i]],
-                PropertyFilter::Output => value_maps[sbox].get_output(&val).unwrap()[self.counter[i]]
+                PropertyFilter::All    => value_maps[sbox].get(val).unwrap()[self.counter[i]],
+                PropertyFilter::Input  => value_maps[sbox].get_input(val).unwrap()[self.counter[i]],
+                PropertyFilter::Output => value_maps[sbox].get_output(val).unwrap()[self.counter[i]]
             };
 
             self.property.input = 
@@ -305,21 +302,21 @@ impl SboxPattern {
     /** 
     Returns the number of properties described by this pattern 
     */
-    pub fn num_prop(&self, value_maps: &Vec<ValueMap>) -> usize {
+    pub fn num_prop(&self, value_maps: &[ValueMap]) -> usize {
         self.pattern.iter().fold(1, |acc, &(_, j, x)| acc * value_maps[j].len_of(x))
     }
 
     /** 
     Returns the number of inputs described by this pattern 
     */
-    pub fn num_input(&self, value_maps: &Vec<ValueMap>) -> usize {
+    pub fn num_input(&self, value_maps: &[ValueMap]) -> usize {
         self.pattern.iter().fold(1, |acc, &(_, j, x)| acc * value_maps[j].len_of_input(x))
     }
 
     /** 
     Returns the number of outputs described by this pattern 
     */
-    pub fn num_output(&self, value_maps: &Vec<ValueMap>) -> usize {
+    pub fn num_output(&self, value_maps: &[ValueMap]) -> usize {
         self.pattern.iter().fold(1, |acc, &(_, j, x)| acc * value_maps[j].len_of_output(x))
     }
 }
@@ -345,7 +342,7 @@ pub fn get_sorted_patterns(cipher: &Cipher,
     }).collect();
 
     // We need the values in descending order
-    for v in property_values.iter_mut() {
+    for v in &mut property_values {
         v.sort_by(|a, b| b.abs().cmp(&a.abs()));
     }
 
@@ -384,18 +381,12 @@ pub fn get_sorted_patterns(cipher: &Cipher,
         let (pattern_1, pattern_2) = current_pattern.extend(&property_values[..], 
                                                             property_type);
 
-        match pattern_1 {
-            Some(pattern) => {
-                heap.push(pattern);
-            },
-            None => ()
+        if let Some(pattern) = pattern_1 {
+            heap.push(pattern);
         };
 
-        match pattern_2 {
-            Some(pattern) => {
-                heap.push(pattern);
-            },
-            None => ()
+        if let Some(pattern) = pattern_2 {
+            heap.push(pattern);
         };
 
         // Add current pattern if it was complete
@@ -410,5 +401,5 @@ pub fn get_sorted_patterns(cipher: &Cipher,
                               .map(|x| SboxPattern::new(cipher, x, property_type))
                               .collect();
 
-    return (sbox_patterns, value_maps);
+    (sbox_patterns, value_maps)
 }

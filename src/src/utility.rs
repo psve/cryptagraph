@@ -84,7 +84,7 @@ impl ProgressBar {
 
         ProgressBar {
             current_items: 0.0,
-            item_size: item_size,
+            item_size,
             used: false,
         }
     }
@@ -99,7 +99,7 @@ impl ProgressBar {
 
         while self.current_items >= 1.0 {
             print!("=");
-            io::stdout().flush().ok().expect("Could not flush stdout");
+            io::stdout().flush().expect("Could not flush stdout");
             self.current_items -= 1.0;
         }
 
@@ -110,7 +110,7 @@ impl ProgressBar {
 impl Drop for ProgressBar {
     fn drop(&mut self) {
         if self.used {
-            println!("");
+            println!();
         }
     }
 }
