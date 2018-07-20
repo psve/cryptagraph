@@ -857,12 +857,14 @@ pub fn generate_graph(cipher: Box<Cipher>,
         println!("Extended graph has {} vertices and {} edges [{} s]\n", 
                 graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
 
-        let start = time::precise_time_s();
-        anchor_ends(cipher.as_ref(), property_type, &mut graph, anchors,
-                    &input_allowed, &output_allowed);
-        println!("Anchored graph has {} vertices and {} edges [{} s]\n", 
-                graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
-
+        if cipher.structure() != CipherStructure::Feistel {
+            let start = time::precise_time_s();
+            anchor_ends(cipher.as_ref(), property_type, &mut graph, anchors,
+                        &input_allowed, &output_allowed);
+            println!("Anchored graph has {} vertices and {} edges [{} s]\n", 
+                    graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
+        }
+        
         graph.prune(0, rounds+1);
     }
 
