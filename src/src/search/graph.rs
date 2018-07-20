@@ -285,6 +285,24 @@ impl MultistageGraph {
     }
 
     /**
+    Check if an edge exists.
+
+    stage           Start stage of the edge.
+    label_from      Start label of the edge.
+    label_to        End label of the edge.
+    */
+    pub fn has_edge(&self, stage: usize, label_from: u128, label_to: u128) -> bool {
+        match self.vertices.get(stage).expect("Stage out of range.").get(&label_from) {
+            Some(vertex) => {
+                return vertex.successors.contains_key(&label_to);
+            },
+            None => {
+                return false;
+            }
+        }
+    }
+
+    /**
     Returns the number of vertices in the graph.
     */
     pub fn num_vertices(&self) -> usize {

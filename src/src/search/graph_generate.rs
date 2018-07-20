@@ -494,7 +494,7 @@ fn anchor_ends(cipher: &Cipher,
          + graph.get_stage(stages-1).unwrap().len()) as i64);
     let num_anchor = (limit as f64 / num_labels as f64).ceil() as usize;
     println!("Adding {:?} anchors.", limit);
-
+    
     // Start scoped worker threads
     scoped::scope(|scope| {
         for t in 0..*THREADS {
@@ -551,6 +551,106 @@ fn anchor_ends(cipher: &Cipher,
         let thread_result = result_rx.recv().expect("Main could not receive result");
         graph.add_edges_and_vertices(&thread_result);
     }
+}
+
+/** 
+Patches the graph, i.e. adds any missing edges between already existing vertices. 
+
+cipher          The cipher being analysed.
+property_type   The type of property being analysed.
+graph           The graph to modify.
+*/
+fn patch(cipher: &Cipher,
+         property_type: PropertyType,
+         graph: &mut MultistageGraph) {
+    // Get LATs/DDTs
+    let mut tables = Vec::new();
+
+    for i in 0..cipher.num_sboxes() {
+        match property_type {
+            PropertyType::Linear       => tables.push(cipher.sbox(i).lat.clone()),
+            PropertyType::Differential => tables.push(cipher.sbox(i).ddt.clone()),
+        }
+    }
+    
+    // Set mask and level to match S-box size
+    let mask = (1 << cipher.sbox(0).size) - 1;
+    let level = 3 - (cipher.sbox(0).size as f32).log2()  as usize;
+    
+    let mut progress_bar = ProgressBar::new(graph.num_vertices());
+    
+    // Initialise maps for first stage
+    let stages = graph.stages();
+    let mut edges = IndexMap::new();
+    let mut input_map = FnvHashMap::default();
+    let mut input_map_tmp = FnvHashMap::default();
+
+    for &input in graph.get_stage(0).unwrap().keys() {
+        let input_c = compress(input, level);
+        let entry = input_map.entry(input_c).or_insert(Vec::new());
+        entry.push(input);
+        progress_bar.increment();
+    }    
+
+    for s in 0..stages-1 {
+        for &output in graph.get_stage(s+1).unwrap().keys() {
+            // Build map for next stage
+            let input_c = compress(output, level);
+            let entry = input_map_tmp.entry(input_c).or_insert(Vec::new());
+            entry.push(output);
+
+            // Check if the output has non-zero correlation with any input
+            let out_inv = cipher.linear_layer_inv(output);
+
+            match input_map.get(&compress(out_inv, level)) {
+                Some(inputs) => {
+                    for &input in inputs {
+                        if graph.has_edge(s, input, output) {
+                            continue;
+                        }
+
+                        // Calculate correlation
+                        let mut value = 1.0;
+
+                        for i in 0..cipher.num_sboxes() {
+                            let a = (input  >> (i * cipher.sbox(i).size)) & mask;
+                            let b = (out_inv >> (i * cipher.sbox(i).size)) & mask;
+
+                            let v = tables[i][a as usize][b as usize];
+
+                            if v == 0 {
+                                value = 0.0;
+                                break;
+                            }
+
+                            match property_type {
+                                PropertyType::Linear => {
+                                    value *= (2.0 * v as f64 / tables[i][0][0] as f64 - 1.0).powi(2);
+                                },
+                                PropertyType::Differential => {
+                                    value *= v as f64 / tables[i][0][0] as f64;  
+                                }
+                            }
+                        }
+
+                        if value != 0.0 {
+                            edges.insert((s, input, output), value);
+                        }
+                    }
+
+                }, 
+                None => {}
+            }
+
+            progress_bar.increment();
+        }
+
+        input_map = input_map_tmp.clone();
+        input_map_tmp.clear();
+    }
+
+    print!("\nAdding {:?} patch edges.", edges.len());
+    graph.add_edges(&edges);
 }
 
 /**
@@ -751,6 +851,7 @@ pub fn generate_graph(cipher: Box<Cipher>,
         graph.vertices.push(FnvHashMap::default());
 
         let start = time::precise_time_s();
+        println!("Extending graph.");
         graph = add_outer_edges(&mut graph, &properties, rounds, 3,
                                 &input_allowed, &output_allowed);
         println!("Extended graph has {} vertices and {} edges [{} s]\n", 
@@ -763,8 +864,6 @@ pub fn generate_graph(cipher: Box<Cipher>,
                 graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
 
         graph.prune(0, rounds+1);
-        println!("Final graph has {} vertices and {} edges", 
-                graph.num_vertices(), graph.num_edges());
     }
 
     // Reflecting in case of Prince type ciphers
@@ -774,6 +873,18 @@ pub fn generate_graph(cipher: Box<Cipher>,
         println!("Reflected graph has {} vertices and {} edges [{} s]\n", 
             graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
     }
+
+    // Patch graph
+    if cipher.structure() != CipherStructure::Feistel {
+        let start = time::precise_time_s();
+        println!("Patching graph.");
+        patch(cipher.as_ref(), property_type, &mut graph);
+        println!("Patched graph has {} vertices and {} edges [{} s]\n", 
+            graph.num_vertices(), graph.num_edges(), time::precise_time_s()-start);
+    }
     
+    println!("Final graph has {} vertices and {} edges", 
+            graph.num_vertices(), graph.num_edges());
+
     graph
 }
