@@ -10,3 +10,5 @@
 *.masks
 Cargo.lock
 src/target/*
+*.sublime-project
+*.sublime-workspace
