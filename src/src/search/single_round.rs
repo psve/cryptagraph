@@ -48,7 +48,7 @@ impl<'a> SortedProperties<'a> {
     property_type    What type of property to generate. 
     property_filter  What type of property an iterator will generate.
     */
-    pub fn new(cipher: &Cipher, 
+    pub fn new(cipher: &dyn Cipher, 
                pattern_limit: usize, 
                property_type: PropertyType,
                property_filter: PropertyFilter) 

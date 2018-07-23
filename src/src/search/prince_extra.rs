@@ -12,7 +12,7 @@ reflection function.
 cipher      The cipher that specifies the reflection layer.
 graph       The graph to prune.
 */
-pub fn prince_pruning(cipher: &Cipher,
+pub fn prince_pruning(cipher: &dyn Cipher,
                       graph: &mut MultistageGraph) {
     let mut pruned = true;
 
@@ -50,7 +50,7 @@ the two halves through a reflection layer.
 cipher          The cipher that specifies the reflection layer.
 graph_firs      The first half of the final graph. 
 */
-pub fn prince_modification(cipher: &Cipher, 
+pub fn prince_modification(cipher: &dyn Cipher, 
                            graph_first: &mut MultistageGraph)
                            -> MultistageGraph {
     let stages = graph_first.stages();

@@ -248,7 +248,7 @@ mod twine;
 /**
 Converts the name of a cipher to an instance of that cipher.
 */
-pub fn name_to_cipher(name : &str) -> Option<Box<Cipher>> {
+pub fn name_to_cipher(name : &str) -> Option<Box<dyn Cipher>> {
     match name {
         "aes"       => Some(Box::new(aes::new())),
         "epcbc48"   => Some(Box::new(epcbc48::new())),

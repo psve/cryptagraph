@@ -22,7 +22,7 @@ impl MaskLat {
      * computes the correlation of parities over the bricklayer function.
      */
     #[inline(always)]
-    fn correlation(cipher : &Cipher,
+    fn correlation(cipher : &dyn Cipher,
                    input  : u128,
                    output : u128) 
                    -> f64 {
@@ -52,7 +52,7 @@ impl MaskLat {
     /* Constructs a Lat over the bricklayer function
      * for the particular set of parities
      */
-    fn new(cipher : &Cipher, masks : &[u128]) -> MaskLat {
+    fn new(cipher : &dyn Cipher, masks : &[u128]) -> MaskLat {
         /* Assuming SPN; compute possible "outputs" for input set
          *
          * Alpha ^ Key Addition -> Substitution -> Linear
@@ -176,7 +176,7 @@ impl MaskPool {
     }
 }
 
-pub fn get_correlations(cipher: &Cipher,
+pub fn get_correlations(cipher: &dyn Cipher,
                         allowed: &[(u128, u128)],
                         rounds: usize,
                         num_keys: usize,

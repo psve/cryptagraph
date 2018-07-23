@@ -75,7 +75,7 @@ fn dump_correlations(correlations: &FnvHashMap<(u128, u128), Vec<f64>>,
     }
 }
 
-pub fn get_distributions(cipher: &Cipher,
+pub fn get_distributions(cipher: &dyn Cipher,
                          file_mask_in: &str,
                          rounds: usize,
                          keys: usize,

@@ -183,7 +183,7 @@ impl SboxPattern {
     internal_sbox_pattern   A complete internal S-box pattern.
     property_type           The type of property represented by the pattern.
     */
-    fn new(cipher: &Cipher,
+    fn new(cipher: &dyn Cipher,
            internal_sbox_pattern: &InternalSboxPattern,
            property_type: PropertyType) 
            -> SboxPattern {
@@ -328,7 +328,7 @@ cipher          The cipher to generate patterns for.
 pattern_limit   The number of patterns to generate.
 property_type   The type of property to generate patterns for.
 */
-pub fn get_sorted_patterns(cipher: &Cipher, 
+pub fn get_sorted_patterns(cipher: &dyn Cipher, 
                            pattern_limit: usize, 
                            property_type: PropertyType) -> 
                            (Vec<SboxPattern>, Vec<ValueMap>) {

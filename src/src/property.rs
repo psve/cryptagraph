@@ -244,7 +244,7 @@ pub struct MaskMap {
 }
 
 impl MaskMap {
-    pub fn new(cipher: &Cipher,
+    pub fn new(cipher: &dyn Cipher,
                property_type: PropertyType) 
                -> MaskMap {
         let non_property = match property_type {
@@ -307,7 +307,7 @@ impl MaskMap {
     limit       Maximum number of inputs to generate.
     */
     pub fn get_best_inputs(&self,
-                           cipher: &Cipher,
+                           cipher: &dyn Cipher,
                            output: u128,
                            limit: usize)
                            -> Vec<(u128, f64)> {
@@ -368,7 +368,7 @@ impl MaskMap {
     limit       Maximum number of outputs to generate.
     */
     pub fn get_best_outputs(&self,
-                            cipher: &Cipher,
+                            cipher: &dyn Cipher,
                             input: u128,
                             limit: usize)
                             -> Vec<(u128, f64)> {

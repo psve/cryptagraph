@@ -463,7 +463,7 @@ cipher          The cipher being analysed.
 property_type   The type of property being analysed.
 graph           The graph to modify.
 */
-fn anchor_ends(cipher: &Cipher,
+fn anchor_ends(cipher: &dyn Cipher,
                property_type: PropertyType,
                graph: &mut MultistageGraph,
                anchors: Option<usize>,
@@ -554,7 +554,7 @@ cipher          The cipher being analysed.
 property_type   The type of property being analysed.
 graph           The graph to modify.
 */
-fn patch(cipher: &Cipher,
+fn patch(cipher: &dyn Cipher,
          property_type: PropertyType,
          graph: &mut MultistageGraph) {
     // Get LATs/DDTs
@@ -714,7 +714,7 @@ patterns            The number of S-box patterns to generate.
 allowed             A set of allowed input/output values for the properties. 
                     If empty, all values are allowed.
 */
-pub fn generate_graph(cipher: &Cipher, 
+pub fn generate_graph(cipher: &dyn Cipher, 
                       property_type: PropertyType,
                       rounds: usize, 
                       patterns: usize,
