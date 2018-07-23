@@ -1,4 +1,4 @@
-use crossbeam_utils::scoped;
+use crossbeam_utils;
 use fnv::{FnvHashSet, FnvHashMap};
 use indexmap::{IndexMap, IndexSet};
 use itertools::interleave;
@@ -30,7 +30,7 @@ fn one_round(properties: &mut SortedProperties)
     let (result_tx, result_rx) = mpsc::channel();
 
     // Start scoped worker threads
-    scoped::scope(|scope| {
+    crossbeam_utils::thread::scope(|scope| {
         for t in 0..*THREADS {
             let mut thread_properties = properties.clone();
             let result_tx = result_tx.clone();
@@ -88,7 +88,7 @@ fn two_rounds(properties: &mut SortedProperties)
     let (result_tx, result_rx) = mpsc::channel();
 
     // Start scoped worker threads
-    scoped::scope(|scope| {
+    crossbeam_utils::thread::scope(|scope| {
         for t in 0..*THREADS {
             let mut thread_properties = properties.clone();
             let result_tx = result_tx.clone();
@@ -173,7 +173,7 @@ fn get_middle_vertices (properties: &SortedProperties,
     let (result_tx, result_rx) = mpsc::channel();
 
     // Start scoped worker threads
-    scoped::scope(|scope| {
+    crossbeam_utils::thread::scope(|scope| {
         for t in 0..*THREADS {
             let mut thread_properties = properties.clone();
             let barrier = barrier.clone();
@@ -293,7 +293,7 @@ fn add_middle_edges(graph: &MultistageGraph,
     let mut base_graph = graph.clone();
     
     // Start scoped worker threads
-    scoped::scope(|scope| {
+    crossbeam_utils::thread::scope(|scope| {
         for t in 0..*THREADS {
             let mut thread_properties = properties.clone();
             let result_tx = result_tx.clone();
@@ -379,7 +379,7 @@ fn add_outer_edges(graph: &MultistageGraph,
     let mut base_graph = graph.clone();
     
     // Start scoped worker threads
-    scoped::scope(|scope| {
+    crossbeam_utils::thread::scope(|scope| {
         for t in 0..*THREADS {
             let mut thread_properties = properties.clone();
             let result_tx = result_tx.clone();
@@ -490,7 +490,7 @@ fn anchor_ends(cipher: &Cipher,
     println!("Adding {:?} anchors.", limit);
     
     // Start scoped worker threads
-    scoped::scope(|scope| {
+    crossbeam_utils::thread::scope(|scope| {
         for t in 0..*THREADS {
             let result_tx = result_tx.clone();
             let mask_map = mask_map.clone();

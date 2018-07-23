@@ -1,4 +1,4 @@
-use crossbeam_utils::scoped;
+use crossbeam_utils;
 use fnv::FnvHashSet;
 use indexmap::IndexMap;
 use num_cpus;
@@ -85,7 +85,7 @@ pub fn parallel_find_properties(graph: &MultistageGraph,
     let (result_tx, result_rx) = mpsc::channel();
 
     // Start scoped worker threads
-    scoped::scope(|scope| {
+    crossbeam_utils::thread::scope(|scope| {
         for t in 0..num_threads {
             let result_tx = result_tx.clone();
 
