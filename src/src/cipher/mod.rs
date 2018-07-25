@@ -229,10 +229,12 @@ mod epcbc96;
 mod fly;
 mod gift64;
 mod gift128;
+mod iceberg;
 mod khazad;
 mod klein;
 mod led;
 mod mantis;
+mod mcrypton;
 mod mibs;
 mod midori;
 mod present;
@@ -256,10 +258,12 @@ pub fn name_to_cipher(name : &str) -> Option<Box<dyn Cipher>> {
         "fly"       => Some(Box::new(fly::new())),
         "gift64"    => Some(Box::new(gift64::new())),
         "gift128"   => Some(Box::new(gift128::new())),
+        "iceberg"   => Some(Box::new(iceberg::new())),
         "khazad"    => Some(Box::new(khazad::new())),
         "klein"     => Some(Box::new(klein::new())),
         "led"       => Some(Box::new(led::new())),
         "mantis"    => Some(Box::new(mantis::new())),
+        "mcrypton"  => Some(Box::new(mcrypton::new())),
         "mibs"      => Some(Box::new(mibs::new())),
         "midori"    => Some(Box::new(midori::new())),
         "present"   => Some(Box::new(present::new())),
