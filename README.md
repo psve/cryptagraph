@@ -1,4 +1,4 @@
-<img src="cryptagraph-logo.svg" alt="cryptagraph logo" />
+![](cryptagraph-logo.svg)
 
 # Cryptagraph
 
