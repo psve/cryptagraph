@@ -1,4 +1,4 @@
-![](cryptagraph-logo.svg)
+![](cryptagraph-logo.png)
 
 # Cryptagraph
 
