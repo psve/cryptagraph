@@ -1,20 +1,14 @@
-use cipher::{Sbox, CipherStructure, Cipher};
+//! Implementation of Midori.
+
+use sbox::Sbox;
+use cipher::{CipherStructure, Cipher};
 use property::PropertyType;
 
 /*****************************************************************
                             Midori
 ******************************************************************/
 
-/** 
-A structure representing the Midori cipher.
-
-size                    Size of the cipher in bits. This is fixed to 64.
-key_size                Size of the cipher key in bits. This is fixed to 128.
-sbox                    The Midori S-box.
-shuffle_cell_table      Table for ShuffleCells.
-ishuffle_cell_table     Table for inverse ShuffleCells.
-constants               Round constants.
-*/
+/// A structure representing the Midori cipher.
 #[derive(Clone)]
 pub struct Midori {
     size: usize,
@@ -25,74 +19,57 @@ pub struct Midori {
     constants: [u128; 15],
 }
 
-pub fn new() -> Midori {
-    let table = vec![0xc, 0xa, 0xd, 0x3, 0xe, 0xb, 0xf, 0x7, 0x8, 0x9, 0x1, 0x5, 0x0, 0x2, 0x4, 0x6];
-    let shuffle_cell_table = [ 0,  7, 14,  9,  5,  2, 11, 12, 15,  8,  1,  6, 10, 13,  4,  3];
-    let ishuffle_cell_table = [ 0, 10,  5, 15, 14,  4, 11,  1,  9,  3, 12,  6,  7, 13,  2,  8];
-    let constants = [0x0001010110110011,
-                     0x0111100011000000,
-                     0x1010010000110101,
-                     0x0110001000010011,
-                     0x0001000001001111,
-                     0x1101000101110000,
-                     0x0000001001100110,
-                     0x0000101111001100,
-                     0x1001010010000001,
-                     0x0100000010111000,
-                     0x0111000110010111,
-                     0x0010001010001110,
-                     0x0101000100110000,
-                     0x1111100011001010,
-                     0x1101111110010000];
-    Midori{size: 64, 
-           key_size: 128,
-           sbox: Sbox::new(4, table), 
-           shuffle_cell_table,
-           ishuffle_cell_table,
-           constants}
+impl Midori {
+    /// Create a new instance of the cipher.
+    pub fn new() -> Midori {
+        let table = vec![0xc, 0xa, 0xd, 0x3, 0xe, 0xb, 0xf, 0x7, 0x8, 0x9, 0x1, 0x5, 0x0, 0x2, 0x4, 0x6];
+        let shuffle_cell_table = [ 0,  7, 14,  9,  5,  2, 11, 12, 15,  8,  1,  6, 10, 13,  4,  3];
+        let ishuffle_cell_table = [ 0, 10,  5, 15, 14,  4, 11,  1,  9,  3, 12,  6,  7, 13,  2,  8];
+        let constants = [0x0001010110110011,
+                         0x0111100011000000,
+                         0x1010010000110101,
+                         0x0110001000010011,
+                         0x0001000001001111,
+                         0x1101000101110000,
+                         0x0000001001100110,
+                         0x0000101111001100,
+                         0x1001010010000001,
+                         0x0100000010111000,
+                         0x0111000110010111,
+                         0x0010001010001110,
+                         0x0101000100110000,
+                         0x1111100011001010,
+                         0x1101111110010000];
+        Midori{size: 64, 
+               key_size: 128,
+               sbox: Sbox::new(4, table), 
+               shuffle_cell_table,
+               ishuffle_cell_table,
+               constants}
+    }
 }
 
 impl Cipher for Midori {
-    /** 
-    Returns the design type of the cipher. 
-    */
     fn structure(&self) -> CipherStructure {
         CipherStructure::Spn
     }
     
-    /** 
-    Returns the size of the cipher input in bits. 
-    */
     fn size(&self) -> usize {
         self.size
     }
 
-    /** 
-    Returns key-size in bits 
-    */
     fn key_size(&self) -> usize {
         self.key_size
     }
 
-    /** 
-    Returns the number of S-boxes in the non-linear layer. 
-    */
     fn num_sboxes(&self) -> usize {
-        self.size / self.sbox.size
+        self.size / self.sbox.size()
     }
 
-    /** 
-    Returns the i'th S-box of the cipher. 
-    */
     fn sbox(&self, _i: usize) -> &Sbox {
         &self.sbox
     }
 
-    /** 
-    Applies the linear layer of the cipher.
-    
-    input   The input to the linear layer.
-    */
     fn linear_layer(&self, input: u128) -> u128 {
         let mut x = 0;
 
@@ -122,11 +99,6 @@ impl Cipher for Midori {
         output
     }
 
-    /** 
-    Applies the inverse linear layer of the cipher.
-    
-    input   The input to the inverse linear layer. 
-    */
     fn linear_layer_inv(&self, input: u128) -> u128 {
         let mut x = input;
 
@@ -158,23 +130,10 @@ impl Cipher for Midori {
         x
     }
 
-    /**
-    Applies the reflection layer for Prince like ciphers. 
-    For all other cipher types, this can remain unimplemented. 
-
-    input   The input to the reflection layer.
-    */
-    #[allow(unused_variables)]
-    fn reflection_layer(&self, input: u128) -> u128 {
+    fn reflection_layer(&self, _input: u128) -> u128 {
         panic!("Not implemented for this type of cipher")
     }
 
-    /** 
-    Computes a vector of round key from a cipher key.
-
-    rounds      Number of rounds to generate keys for.
-    key         The master key to expand.
-    */
     fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u128> {
         if key.len() * 8 != self.key_size {
             panic!("invalid key-length");
@@ -204,12 +163,6 @@ impl Cipher for Midori {
         keys
     }
 
-    /** 
-    Performs encryption with the cipher. 
-    
-    input       Plaintext to be encrypted.
-    round_keys  Round keys generated by the key-schedule.
-    */
     fn encrypt(&self, input: u128, round_keys: &[u128]) -> u128 {
         let mut output = input;
         output ^= round_keys[0];
@@ -219,7 +172,7 @@ impl Cipher for Midori {
             let mut tmp = 0;
 
             for j in 0..16 {
-                tmp ^= u128::from(self.sbox.table[((output >> (4*j)) & 0xf) as usize]) << (4*j);
+                tmp ^= u128::from(self.sbox.apply((output >> (4*j)) & 0xf)) << (4*j);
             }
 
             // ShuffleCell + MixColumns
@@ -234,18 +187,12 @@ impl Cipher for Midori {
         let mut tmp = 0;
 
         for j in 0..16 {
-            tmp ^= u128::from(self.sbox.table[((output >> (4*j)) & 0xf) as usize]) << (4*j);
+            tmp ^= u128::from(self.sbox.apply((output >> (4*j)) & 0xf)) << (4*j);
         }
 
         tmp ^ round_keys[16]        
     }
 
-    /** 
-    Performs decryption with the cipher. 
-    
-    input       Ciphertext to be decrypted.
-    round_keys  Round keys generated by the key-schedule.
-    */
     fn decrypt(&self, input: u128, round_keys: &[u128]) -> u128 {
         let mut output = input;
         output ^= round_keys[16];
@@ -254,7 +201,7 @@ impl Cipher for Midori {
         let mut tmp = 0;
 
         for j in 0..16 {
-            tmp ^= u128::from(self.sbox.table[((output >> (4*j)) & 0xf) as usize]) << (4*j);
+            tmp ^= u128::from(self.sbox.apply((output >> (4*j)) & 0xf)) << (4*j);
         }
 
         for i in 0..15 {
@@ -269,32 +216,21 @@ impl Cipher for Midori {
             tmp = 0;
 
             for j in 0..16 {
-                tmp ^= u128::from(self.sbox.table[((output >> (4*j)) & 0xf) as usize]) << (4*j);
+                tmp ^= u128::from(self.sbox.apply((output >> (4*j)) & 0xf)) << (4*j);
             }
         }
 
         tmp ^ round_keys[0]
     }
 
-    /** 
-    Returns the name of the cipher. 
-    */
     fn name(&self) -> String {
         String::from("Midori")
     }
 
-    /** 
-    Transforms the input and output mask of the S-box layer to an
-    input and output mask of a round.
-    
-    input    Input mask to the S-box layer.
-    output   Output mask to the S-box layer.
-    */
-    #[allow(unused_variables)]
     fn sbox_mask_transform(&self, 
                            input: u128, 
                            output: u128, 
-                           property_type: PropertyType) 
+                           _property_type: PropertyType) 
                            -> (u128, u128) {
         (input, self.linear_layer(output))
     }

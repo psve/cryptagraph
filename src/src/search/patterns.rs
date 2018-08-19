@@ -1,3 +1,5 @@
+//! Types for representing property patterns for an S-box layer.
+
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -5,15 +7,8 @@ use std::collections::BinaryHeap;
 use cipher::Cipher;
 use property::{Property, PropertyType, PropertyFilter, ValueMap};
 
-/** 
-An internal representation of a partial S-box pattern. An S-box pattern describes a
-truncated property, but where the value is specified for each S-box.
-
-pattern             The partial pattern. Any S-box that has not been specified yet is None.
-determined_length   The number of S-boxes determined so far.
-value               Value of the partial pattern.
-num_active          The number of active S-boxes so far.
- */
+/// An internal representation of a partial S-box pattern. An S-box pattern describes a
+/// truncated property, but where the value is specified for each S-box.
 #[derive(Clone)]
 struct InternalSboxPattern {
     pattern: Vec<Option<i16>>,
@@ -23,18 +18,12 @@ struct InternalSboxPattern {
 }
 
 impl InternalSboxPattern {
-    /** 
-    Returns true if the are no None values in the pattern 
-    */
+    ///Returns true if the are no None values in the pattern 
     fn is_complete(&self) -> bool {
         self.pattern[self.pattern.len() - 1].is_some()
     }
 
-    /** Extends the current pattern to at most two "neighbouring" patterns
-
-    property_values     A list of property values for the S-box in descending order.
-                        Is assumed to contain the value of the trivial property.
-     */
+    /// Extends the current pattern to at most two "neighbouring" patterns
     fn extend(&self, 
               property_values: &[SmallVec<[i16; 128]>], 
               property_type: PropertyType) 
@@ -99,9 +88,6 @@ impl InternalSboxPattern {
     }
 }
 
-/** 
-Ordering traits of the partial S-box patterns. Required for BinaryHeap<InternalSboxPattern> 
-*/
 impl Ord for InternalSboxPattern {
     fn cmp(&self, other: &InternalSboxPattern) -> Ordering {
         self.partial_cmp(&other).unwrap()
@@ -142,13 +128,7 @@ impl Eq for InternalSboxPattern {}
 
 /***********************************************************************************************/
 
-/**
-Enum representing the status of the current pattern
-
-New     The pattern has not been initialised yet.
-Old     The pattern has been initialised.
-Empty   There are no properties left in the pattern.
-*/
+/// Status of a pattern.
 #[derive(Clone, PartialEq, Eq)]
 enum PatternStatus {
     New,
@@ -156,15 +136,8 @@ enum PatternStatus {
     Empty
 }
 
-/** 
-An external interface to InternalSboxPattern. The pattern only stores the active S-box positions.
-
-pattern     A vector describing the first bit index of the S-box, the S-box index, and its property value.
-property    Current property represented by the pattern.
-mask        A bit mask corresponding to a single S-box.
-counter     A vector of counters keep track of the current property in each S-box.
-status      The patterns current status. 
-*/
+/// A pattern describing a set of properties of an S-box layer. All properties in the set have 
+/// the same value and activate the same S-boxes. Internally, only active positions are stored. 
 #[derive(Clone)]
 pub struct SboxPattern {
     pattern: Vec<(usize, usize, i16)>,
@@ -176,13 +149,7 @@ pub struct SboxPattern {
 }
 
 impl SboxPattern {
-    /** 
-    Converts an InternalSboxPattern to an SboxPattern.
-    
-    cipher                  The cipher the pattern belongs to.
-    internal_sbox_pattern   A complete internal S-box pattern.
-    property_type           The type of property represented by the pattern.
-    */
+    /// Converts an InternalSboxPattern to an SboxPattern.
     fn new(cipher: &dyn Cipher,
            internal_sbox_pattern: &InternalSboxPattern,
            property_type: PropertyType) 
@@ -190,7 +157,7 @@ impl SboxPattern {
         // Get the value of an inactive S-box 
         let non_property = match property_type {
             PropertyType::Linear => cipher.sbox(0).linear_balance(),
-            PropertyType::Differential => 1 << cipher.sbox(0).size,
+            PropertyType::Differential => 1 << cipher.sbox(0).size(),
         };
 
         // Collect active S-box positions
@@ -199,7 +166,7 @@ impl SboxPattern {
                                    .map(|x| x.expect("Tried to convert incomplete pattern."))
                                    .enumerate()
                                    .filter(|&(_,x)| x != non_property)
-                                   .map(|(i,x)| (i*cipher.sbox(i).size, i, x))
+                                   .map(|(i,x)| (i*cipher.sbox(i).size(), i, x))
                                    .collect();
 
         let counter = vec![0; pattern.len()];
@@ -208,20 +175,14 @@ impl SboxPattern {
         SboxPattern {
             pattern, 
             property,
-            mask: ((1 << cipher.sbox(0).size) - 1) as u128,
-            sbox_size: cipher.sbox(0).size,
+            mask: ((1 << cipher.sbox(0).size()) - 1) as u128,
+            sbox_size: cipher.sbox(0).size(),
             counter,
             status: PatternStatus::New
         }
     }
 
-    /**
-    Generates the next property matching the S-box pattern. 
-
-    value_maps          Maps from each S-box's values to inputs/outputs.
-    property_filter     A filter determining whether to produce full properties, or only
-                        inputs/outputs.
-    */
+    /// Generate the next property matching the S-box pattern. 
     pub fn next(&mut self, 
                 value_maps: &[ValueMap],
                 property_filter: PropertyFilter) 
@@ -299,35 +260,24 @@ impl SboxPattern {
         Some(result)
     }
 
-    /** 
-    Returns the number of properties described by this pattern 
-    */
+    /// Returns the number of properties described by this pattern.
     pub fn num_prop(&self, value_maps: &[ValueMap]) -> usize {
         self.pattern.iter().fold(1, |acc, &(_, j, x)| acc * value_maps[j].len_of(x))
     }
 
-    /** 
-    Returns the number of inputs described by this pattern 
-    */
+    /// Returns the number of inputs described by this pattern.
     pub fn num_input(&self, value_maps: &[ValueMap]) -> usize {
         self.pattern.iter().fold(1, |acc, &(_, j, x)| acc * value_maps[j].len_of_input(x))
     }
 
-    /** 
-    Returns the number of outputs described by this pattern 
-    */
+    /// Returns the number of outputs described by this pattern.
     pub fn num_output(&self, value_maps: &[ValueMap]) -> usize {
         self.pattern.iter().fold(1, |acc, &(_, j, x)| acc * value_maps[j].len_of_output(x))
     }
 }
 
-/**
-Creates a vector of S-box patterns, sorted by their values. Also returns the associated ValueMap.
-
-cipher          The cipher to generate patterns for.
-pattern_limit   The number of patterns to generate.
-property_type   The type of property to generate patterns for.
-*/
+/// Creates a vector of S-box patterns, sorted by their values. 
+/// Also returns the associated `ValueMap`.
 pub fn get_sorted_patterns(cipher: &dyn Cipher, 
                            pattern_limit: usize, 
                            property_type: PropertyType) -> 
@@ -338,7 +288,7 @@ pub fn get_sorted_patterns(cipher: &dyn Cipher,
     }).collect();
 
     let mut property_values: Vec<SmallVec<[_; 128]>> = value_maps.iter().map(|map| {
-        map.map.keys().cloned().collect()
+        map.keys().cloned().collect()
     }).collect();
 
     // We need the values in descending order

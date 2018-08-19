@@ -1,21 +1,14 @@
-use cipher::{Sbox, CipherStructure, Cipher};
+//! Implementation of LED.
+
+use sbox::Sbox;
+use cipher::{CipherStructure, Cipher};
 use property::PropertyType;
 
 /*****************************************************************
                             LED
 ******************************************************************/
 
-/** 
-A structure representing the LED cipher.
-
-size                Size of the cipher in bits. This is fixed to 64.
-key_size            Size of cipher key in bits. This is fixed to 64.
-sbox                The LED S-box.
-isbox               The inverse LED S-box.
-shift_rows_table    Table for LED ShiftRows.
-ishift_rows_table   Table for inverse LED ShiftRows.
-constants           Round constants.
-*/
+/// A structure representing the LED cipher.
 #[derive(Clone)]
 pub struct Led {
     size: usize,
@@ -27,22 +20,25 @@ pub struct Led {
     constants: [u128; 48]
 }
 
-pub fn new() -> Led {
-    let table = vec![0xc, 0x5, 0x6, 0xb, 0x9, 0x0, 0xa, 0xd, 0x3, 0xe, 0xf, 0x8, 0x4, 0x7, 0x1, 0x2];
-    let itable = vec![0x5, 0xe, 0xf, 0x8, 0xc, 0x1, 0x2, 0xd, 0xb, 0x4, 0x6, 0x3, 0x0, 0x7, 0x9, 0xa];
-    let shift_rows_table = [0, 1, 2, 3, 7, 4, 5, 6, 10, 11, 8, 9, 13, 14, 15, 12];
-    let ishift_rows_table = [0, 1, 2, 3, 5, 6, 7, 4, 10, 11, 8, 9, 15, 12, 13, 14];
-    let constants = [0x01,0x03,0x07,0x0f,0x1f,0x3e,0x3d,0x3b,0x37,0x2f,0x1e,0x3c,0x39,0x33,0x27,
-                     0x0e,0x1d,0x3a,0x35,0x2b,0x16,0x2c,0x18,0x30,0x21,0x02,0x05,0x0b,0x17,0x2e,
-                     0x1c,0x38,0x31,0x23,0x06,0x0d,0x1b,0x36,0x2d,0x1a,0x34,0x29,0x12,0x24,0x08,
-                     0x11,0x22,0x04];
-    Led{size: 64,
-        key_size: 64,
-        sbox: Sbox::new(4, table), 
-        isbox: Sbox::new(4, itable), 
-        shift_rows_table,
-        ishift_rows_table,
-        constants }
+impl Led {
+    /// Create a new instance of the cipher.
+    pub fn new() -> Led {
+        let table = vec![0xc, 0x5, 0x6, 0xb, 0x9, 0x0, 0xa, 0xd, 0x3, 0xe, 0xf, 0x8, 0x4, 0x7, 0x1, 0x2];
+        let itable = vec![0x5, 0xe, 0xf, 0x8, 0xc, 0x1, 0x2, 0xd, 0xb, 0x4, 0x6, 0x3, 0x0, 0x7, 0x9, 0xa];
+        let shift_rows_table = [0, 1, 2, 3, 7, 4, 5, 6, 10, 11, 8, 9, 13, 14, 15, 12];
+        let ishift_rows_table = [0, 1, 2, 3, 5, 6, 7, 4, 10, 11, 8, 9, 15, 12, 13, 14];
+        let constants = [0x01,0x03,0x07,0x0f,0x1f,0x3e,0x3d,0x3b,0x37,0x2f,0x1e,0x3c,0x39,0x33,0x27,
+                         0x0e,0x1d,0x3a,0x35,0x2b,0x16,0x2c,0x18,0x30,0x21,0x02,0x05,0x0b,0x17,0x2e,
+                         0x1c,0x38,0x31,0x23,0x06,0x0d,0x1b,0x36,0x2d,0x1a,0x34,0x29,0x12,0x24,0x08,
+                         0x11,0x22,0x04];
+        Led{size: 64,
+            key_size: 64,
+            sbox: Sbox::new(4, table), 
+            isbox: Sbox::new(4, itable), 
+            shift_rows_table,
+            ishift_rows_table,
+            constants }
+    }
 }
 
 /**
@@ -53,46 +49,26 @@ fn led_times2(x: u128) -> u128 {
 }
 
 impl Cipher for Led {
-    /** 
-    Returns the design type of the cipher. 
-    */
     fn structure(&self) -> CipherStructure {
         CipherStructure::Spn
     }
     
-    /** 
-    Returns the size of the cipher input in bits. 
-    */
     fn size(&self) -> usize {
         self.size
     }
 
-    /** 
-    Returns key-size in bits 
-    */
     fn key_size(&self) -> usize {
         self.key_size
     }
 
-    /** 
-    Returns the number of S-boxes in the non-linear layer. 
-    */
     fn num_sboxes(&self) -> usize {
-        self.size / self.sbox.size
+        self.size / self.sbox.size()
     }
 
-    /** 
-    Returns the i'th S-box of the cipher. 
-    */
     fn sbox(&self, _i: usize) -> &Sbox {
         &self.sbox
     }
 
-    /** 
-    Applies the linear layer of the cipher.
-    
-    input   The input to the linear layer.
-    */
     fn linear_layer(&self, input: u128) -> u128{
         let mut x = 0;
 
@@ -120,11 +96,6 @@ impl Cipher for Led {
         x
     }
 
-    /** 
-    Applies the inverse linear layer of the cipher.
-    
-    input   The input to the inverse linear layer. 
-    */
     fn linear_layer_inv(&self, input: u128) -> u128 {
         let mut x = input;
 
@@ -160,23 +131,10 @@ impl Cipher for Led {
         y
     }
 
-    /**
-    Applies the reflection layer for Prince like ciphers. 
-    For all other cipher types, this can remain unimplemented. 
-
-    input   The input to the reflection layer.
-    */
-    #[allow(unused_variables)]
-    fn reflection_layer(&self, input: u128) -> u128 {
+    fn reflection_layer(&self, _input: u128) -> u128 {
         panic!("Not implemented for this type of cipher")
     }
 
-    /** 
-    Computes a vector of round key from a cipher key.
-
-    rounds      Number of rounds to generate keys for.
-    key         The master key to expand.
-    */
     fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u128> {
         if key.len() * 8 != self.key_size {
             panic!("invalid key-length");
@@ -194,12 +152,6 @@ impl Cipher for Led {
         vec![k; rounds+1]
     }
 
-    /** 
-    Performs encryption with the cipher. 
-    
-    input       Plaintext to be encrypted.
-    round_keys  Round keys generated by the key-schedule.
-    */
     fn encrypt(&self, input: u128, round_keys: &[u128]) -> u128 {
         let mut output = input;
 
@@ -220,7 +172,7 @@ impl Cipher for Led {
                 let mut tmp = 0;
 
                 for j in 0..16 {
-                    tmp ^= u128::from(self.sbox.table[((output >> (4*j)) & 0xf) as usize]) << (4*j);
+                    tmp ^= u128::from(self.sbox.apply((output >> (4*j)) & 0xf)) << (4*j);
                 }
 
                 // ShiftRows + MixColumns
@@ -233,12 +185,6 @@ impl Cipher for Led {
         output
     }
 
-    /** 
-    Performs decryption with the cipher. 
-    
-    input       Ciphertext to be decrypted.
-    round_keys  Round keys generated by the key-schedule.
-    */
     fn decrypt(&self, input: u128, round_keys: &[u128]) -> u128 {
         let mut output = input;
 
@@ -253,7 +199,7 @@ impl Cipher for Led {
                 let mut tmp = 0;
 
                 for j in 0..16 {
-                    tmp ^= u128::from(self.isbox.table[((output >> (4*j)) & 0xf) as usize]) << (4*j);
+                    tmp ^= u128::from(self.isbox.apply((output >> (4*j)) & 0xf)) << (4*j);
                 }
 
                 // Add constant
@@ -272,25 +218,14 @@ impl Cipher for Led {
         output
     }
 
-    /** 
-    Returns the name of the cipher. 
-    */
     fn name(&self) -> String {
         String::from("LED")
     }
 
-    /** 
-    Transforms the input and output mask of the S-box layer to an
-    input and output mask of a round.
-    
-    input    Input mask to the S-box layer.
-    output   Output mask to the S-box layer.
-    */
-    #[allow(unused_variables)]
     fn sbox_mask_transform(&self, 
                            input: u128, 
                            output: u128, 
-                           property_type: PropertyType) 
+                           _property_type: PropertyType) 
                            -> (u128, u128) {
         (input, self.linear_layer(output))
     }

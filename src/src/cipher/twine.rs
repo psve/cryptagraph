@@ -1,20 +1,14 @@
-use cipher::{Sbox, CipherStructure, Cipher};
+//! Implementation of TWINE.
+
+use sbox::Sbox;
+use cipher::{CipherStructure, Cipher};
 use property::PropertyType;
 
 /*****************************************************************
                             TWINE
 ******************************************************************/
 
-/** 
-A structure representing the TWINE cipher.
-
-size                Size of the cipher in bits. This is fixed to 64.
-key_size            Size of the cipher key in bits. This is fixed to 80.
-sbox                The TWINE S-box.
-permutation         The TWINE permutation.
-inverse             The inverse TWINE permutation.
-constants           Round constants. 
-*/
+/// A structure representing the TWINE cipher.
 #[derive(Clone)]
 pub struct Twine {
     size: usize,
@@ -25,63 +19,46 @@ pub struct Twine {
     constants: [u128; 35],
 }
 
-pub fn new() -> Twine {
-    let table = vec![0xc, 0x0, 0xf, 0xa, 0x2, 0xb, 0x9, 0x5, 0x8, 0x3, 0xd, 0x7, 0x1, 0xe, 0x6, 0x4];
-    let permutation = [1, 4, 5, 0, 13, 6, 9, 2, 7, 12, 3, 8, 11, 14, 15, 10];
-    let inverse     = [3, 0, 7, 10, 1, 2, 5, 8, 11, 6, 15, 12, 9, 4, 13, 14];
-    let constants = [0x01,0x02,0x04,0x08,0x10,0x20,0x03,0x06,0x0c,0x18,0x30,0x23,0x05,0x0a,0x14,
-                    0x28,0x13,0x26,0x0f,0x1e,0x3c,0x3b,0x35,0x29,0x11,0x22,0x07,0x0e,0x1c,0x38,
-                    0x33,0x25,0x09,0x12,0x24];
+impl Twine {
+    /// Create a new instance of the cipher.
+    pub fn new() -> Twine {
+        let table = vec![0xc, 0x0, 0xf, 0xa, 0x2, 0xb, 0x9, 0x5, 0x8, 0x3, 0xd, 0x7, 0x1, 0xe, 0x6, 0x4];
+        let permutation = [1, 4, 5, 0, 13, 6, 9, 2, 7, 12, 3, 8, 11, 14, 15, 10];
+        let inverse     = [3, 0, 7, 10, 1, 2, 5, 8, 11, 6, 15, 12, 9, 4, 13, 14];
+        let constants = [0x01,0x02,0x04,0x08,0x10,0x20,0x03,0x06,0x0c,0x18,0x30,0x23,0x05,0x0a,0x14,
+                        0x28,0x13,0x26,0x0f,0x1e,0x3c,0x3b,0x35,0x29,0x11,0x22,0x07,0x0e,0x1c,0x38,
+                        0x33,0x25,0x09,0x12,0x24];
 
-    Twine{size: 64, 
-          key_size: 80,
-          sbox: Sbox::new(4, table), 
-          permutation, 
-          inverse,
-          constants}
+        Twine{size: 64, 
+              key_size: 80,
+              sbox: Sbox::new(4, table), 
+              permutation, 
+              inverse,
+              constants}
+    }
 }
 
 impl Cipher for Twine {
-    /** 
-    Returns the design type of the cipher. 
-    */
     fn structure(&self) -> CipherStructure {
         CipherStructure::Feistel
     }
 
-    /** 
-    Returns the size of the cipher input in bits. 
-    */
     fn size(&self) -> usize {
         self.size
     }
 
-    /** 
-    Returns key-size in bits 
-    */
     fn key_size(&self) -> usize {
         self.key_size
     }
 
-    /** 
-    Returns the number of S-boxes in the non-linear layer. 
-    */
     fn num_sboxes(&self) -> usize {
-        self.size / self.sbox.size
+        self.size / self.sbox.size()
     }
 
-    /** 
-    Returns the i'th S-box of the cipher. 
-    */
     fn sbox(&self, _i: usize) -> &Sbox {
         &self.sbox
     }
 
-    /** 
-    Applies the linear layer of the cipher.
-    
-    input   The input to the linear layer.
-    */
     fn linear_layer(&self, input: u128) -> u128{
         let mut output = 0;
         
@@ -105,11 +82,6 @@ impl Cipher for Twine {
         u128::from(output)
     }
 
-    /** 
-    Applies the inverse linear layer of the cipher.
-    
-    input   The input to the inverse linear layer. 
-    */
     fn linear_layer_inv(&self, input: u128) -> u128 {
         let mut output = 0;
 
@@ -133,23 +105,10 @@ impl Cipher for Twine {
         u128::from(output)
     }
 
-    /**
-    Applies the reflection layer for Prince like ciphers. 
-    For all other cipher types, this can remain unimplemented. 
-
-    input   The input to the reflection layer.
-    */
-    #[allow(unused_variables)]
-    fn reflection_layer(&self, input: u128) -> u128 {
+    fn reflection_layer(&self, _input: u128) -> u128 {
         panic!("Not implemented for this type of cipher")
     }
 
-    /** 
-    Computes a vector of round key from a cipher key.
-
-    rounds      Number of rounds to generate keys for.
-    key         The master key to expand.
-    */
     fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u128> {
         if key.len() * 8 != self.key_size {
             panic!("invalid key-length");
@@ -188,8 +147,8 @@ impl Cipher for Twine {
             // Update
             k0 ^= self.constants[r] as u64 & 0x7;
             k0 ^= (self.constants[r] as u64 >> 3) << 48;
-            k0 ^= u64::from(self.sbox.table[((k0 >> 12) & 0xf) as usize]) << 60;
-            k1 ^= u64::from(self.sbox.table[((k1 >> 12) & 0xf) as usize]) << 8;
+            k0 ^= u64::from(self.sbox.apply((k0 >> 12) & 0xf)) << 60;
+            k1 ^= u64::from(self.sbox.apply((k1 >> 12) & 0xf)) << 8;
             k1 = (k1 >> 12) ^ ((k1 << 4) & 0xfff0);
             let t = k1;
             k1 = k0 >> 48;
@@ -213,12 +172,6 @@ impl Cipher for Twine {
         keys.iter().map(|&x| u128::from(x)).collect()
     }
 
-    /** 
-    Performs encryption with the cipher. 
-    
-    input       Plaintext to be encrypted.
-    round_keys  Round keys generated by the key-schedule.
-    */
     fn encrypt(&self, input: u128, round_keys: &[u128]) -> u128 {
         let mut output = input;
 
@@ -227,7 +180,7 @@ impl Cipher for Twine {
             let mut tmp = 0;
 
             for j in 0..8 {
-                tmp ^= u128::from(self.sbox.table[((x >> (8*j+4)) & 0xf) as usize]) << (8*j+4);
+                tmp ^= u128::from(self.sbox.apply((x >> (8*j+4)) & 0xf)) << (8*j+4);
             }
 
             output ^= tmp >> 4;
@@ -238,19 +191,13 @@ impl Cipher for Twine {
         let mut tmp = 0;
 
         for j in 0..8 {
-            tmp ^= u128::from(self.sbox.table[((x >> (8*j+4)) & 0xf) as usize]) << (8*j+4);
+            tmp ^= u128::from(self.sbox.apply((x >> (8*j+4)) & 0xf)) << (8*j+4);
         }
 
         output ^= tmp >> 4;
         output
     }
 
-    /** 
-    Performs decryption with the cipher. 
-    
-    input       Ciphertext to be decrypted.
-    round_keys  Round keys generated by the key-schedule.
-    */
     fn decrypt(&self, input: u128, round_keys: &[u128]) -> u128 {
         let mut output = input;
 
@@ -259,7 +206,7 @@ impl Cipher for Twine {
             let mut tmp = 0;
 
             for j in 0..8 {
-                tmp ^= u128::from(self.sbox.table[((x >> (8*j+4)) & 0xf) as usize]) << (8*j+4);
+                tmp ^= u128::from(self.sbox.apply((x >> (8*j+4)) & 0xf)) << (8*j+4);
             }
 
             output ^= tmp >> 4;
@@ -270,28 +217,17 @@ impl Cipher for Twine {
         let mut tmp = 0;
 
         for j in 0..8 {
-            tmp ^= u128::from(self.sbox.table[((x >> (8*j+4)) & 0xf) as usize]) << (8*j+4);
+            tmp ^= u128::from(self.sbox.apply((x >> (8*j+4)) & 0xf)) << (8*j+4);
         }
 
         output ^= tmp >> 4;
         output
     }
 
-    /** 
-    Returns the name of the cipher. 
-    */
     fn name(&self) -> String {
         String::from("TWINE")
     }
 
-    /** 
-    Transforms the input and output mask of the S-box layer to an
-    input and output mask of a round.
-    
-    input    Input mask to the S-box layer.
-    output   Output mask to the S-box layer.
-    */
-    #[allow(unused_variables)]
     fn sbox_mask_transform(&self, 
                            input: u128, 
                            output: u128, 
@@ -363,12 +299,6 @@ impl Cipher for Twine {
         }
     }
 
-    /**
-     * Pre-whiteing key used?
-     * (rounds + 1) round keys
-     *
-     * This is the case for most ciphers
-     */
     #[inline(always)]
     fn whitening(&self) -> bool { 
         false 

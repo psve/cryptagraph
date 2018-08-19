@@ -1,14 +1,23 @@
+//! Representations of various properties of a block cipher. 
+//!
+//! Currently only linear approximations and differentials are represented. 
+
 use itertools::Itertools;
 use std::str::FromStr;
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use fnv::FnvHashMap;
-use cipher::{Cipher, Sbox};
+use std::collections::hash_map::Keys;
+use sbox::Sbox;
+use cipher::Cipher;
 
+/// Types of properties currently representable. 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum PropertyType {
+    /// Linear approximations.
     Linear,
+    /// Differentials.
     Differential
 }
 
@@ -24,38 +33,37 @@ impl FromStr for PropertyType {
     }
 }
 
+/// Indicates what part of a property to output.
 #[derive(Copy, Clone)]
 pub enum PropertyFilter {
+    /// Output both input and output.
     All,
+    /// Output only the input.
     Input,
+    /// Output only the output.
     Output
 }
 
-/** 
-A structure representing a property (e.g. linear approximation or differential).
-
-input    The input value of the property.
-output   The output value of the property.
-value    The value of the property.
-*/
+/// A structure representing a property (e.g. a linear approximation or differential).
 #[derive(Copy, Clone)]
 pub struct Property {
+    /// The input of the property.
     pub input: u128,
+    /// The output of the property.
     pub output: u128,
+    /// The value of the property.
     pub value: f64,
+    /// The number of trains contaiend in the property.
     pub trails: u128,
 }
 
 impl Property {
-    /** 
-    Generates a new property.
-    
-    input    The input mask.
-    output     The output mask.
-     */
-    pub fn new(
-        input: u128, output: u128, 
-        value: f64, trails: u128) -> Property {
+    /// Creates a new property.
+    pub fn new(input: u128, 
+               output: u128, 
+               value: f64, 
+               trails: u128) 
+               -> Property {
         Property {
             input, 
             output, 
@@ -103,28 +111,19 @@ impl fmt::Debug for Property {
     }
 }
 
-
-
-/** 
-A structure that represents a property of an S-box as map from values to matching properties.
-
-map          The mapping from the values to a vector of properties that have this value.
-input_map    Same as map, but where only the input of the property is kept.
-output_map   Same as map, but where only the output of the property is kept.
-*/
+/// A structure that represents a property of an S-box as map from values to matching properties.
 #[derive(Clone)]
 pub struct ValueMap {
-    pub map: FnvHashMap<i16, Vec<Property>>,
+    /// Mapping from values to a vector of properties that have this value.
+    map: FnvHashMap<i16, Vec<Property>>,
+    /// Same as map, but where only the input of the property is kept.
     input_map: FnvHashMap<i16, Vec<Property>>,
+    /// Same as map, but where only the output of the property is kept.
     output_map: FnvHashMap<i16, Vec<Property>>,
 }
 
 impl ValueMap {
-    /** 
-    Generate a new property map from an S-box.
-    
-    sbox     The S-box used as the generator.
-    */
+    /// Create a new property map from an S-box.
     pub fn new(sbox: &Sbox, property_type: PropertyType) -> ValueMap {
         let mut map = FnvHashMap::default();
         let mut input_map = FnvHashMap::default();
@@ -138,8 +137,8 @@ impl ValueMap {
         };
 
         let value_map = match property_type {
-            PropertyType::Linear => sbox.lat.clone(),
-            PropertyType::Differential => sbox.ddt.clone(),
+            PropertyType::Linear => sbox.lat().clone(),
+            PropertyType::Differential => sbox.ddt().clone(),
         };
 
         for (input, row) in value_map.iter().enumerate() {
@@ -161,7 +160,7 @@ impl ValueMap {
             }
         }
 
-        // Remove dubplicates
+        // Remove duplicates
         for inputs in input_map.values_mut() {
             inputs.sort();
             inputs.dedup();
@@ -179,71 +178,55 @@ impl ValueMap {
         }
     }
 
-    /** 
-    Getter to avoid unecessary syntax. Simply reimplements FnvHashMap::get .
-    */
+    /// Reimplementation of `HashMap.keys`.
+    pub fn keys(&self) -> Keys<i16, Vec<Property>> {
+        self.map.keys()
+    }
+
+    /// Reimplementation of `HashMap.get`.
     pub fn get(&self, k: i16) -> Option<&Vec<Property>> {
         self.map.get(&k)
     }
 
-    /** 
-    Getter for the input map.
-    */
+    /// Reimplementation of `HashMap.keys`, but only returns property inputs.
     pub fn get_input(&self, k: i16) -> Option<&Vec<Property>> {
         self.input_map.get(&k)
     }
 
-    /** 
-    Getter for the output map.
-    */
+    /// Reimplementation of `HashMap.keys`, but only returns property outputs.
     pub fn get_output(&self, k: i16) -> Option<&Vec<Property>> {
         self.output_map.get(&k)
     }
 
-    /** 
-    Gets the number of properties that has a certain value.
-    
-    value    The target property value.
-    */
+    /// Returns the number of properties that has a certain value.
     pub fn len_of(&self, value: i16) -> usize {
         self.get(value).unwrap().len()
     }
 
-    /** 
-    Gets the number of inputs that has a value.
-    
-    value    The target property value.
-    */
+    /// Returns the number of property inputs that has a certain value.
     pub fn len_of_input(&self, value: i16) -> usize {
         self.get_input(value).unwrap().len()
     }
 
-    /** 
-    Gets the number of outputs that has a certain value.
-    
-    value    The target property value.
-    */
+    /// Returns the number of property outputs that has a certain value.
     pub fn len_of_output(&self, value: i16) -> usize {
         self.get_output(value).unwrap().len()
     }
 }
 
-/**
-A structure representing a mapping from S-box inputs/outputs to outputs/inputs and 
-corresponding property values. The maps are sorted in descending order by value.
-
-input_map       Map from inputs to outputs.
-output_map      Map from outputs to inputs.
-property_type   The type of property the map represents.
-*/
+/// A structure mapping inputs/outputs of properties of an S-box to corresponding outputs/inputs
+/// and their associated values. The mapping is sorted in descending order by value.
+///
+/// This structure is mainly useful for its methods `get_best_inputs` and `get_best_outputs`.
 #[derive(Clone)]
 pub struct MaskMap {
-    pub input_maps: Vec<FnvHashMap<u128, Vec<(u128, i16)>>>,
-    pub output_maps: Vec<FnvHashMap<u128, Vec<(u128, i16)>>>,
+    input_maps: Vec<FnvHashMap<u128, Vec<(u128, i16)>>>,
+    output_maps: Vec<FnvHashMap<u128, Vec<(u128, i16)>>>,
     property_type: PropertyType,
 }
 
 impl MaskMap {
+    /// Create a new mapping from a specific cipher.
     pub fn new(cipher: &dyn Cipher,
                property_type: PropertyType) 
                -> MaskMap {
@@ -258,8 +241,8 @@ impl MaskMap {
         for i in 0..cipher.num_sboxes() {
             // Get the corresponding property table
             let table = match property_type {
-                PropertyType::Linear => &(cipher.sbox(i).lat),
-                PropertyType::Differential => &(cipher.sbox(i).ddt),
+                PropertyType::Linear => cipher.sbox(i).lat(),
+                PropertyType::Differential => cipher.sbox(i).ddt(),
             };
 
             // Collect data into two maps
@@ -299,20 +282,15 @@ impl MaskMap {
         }
     }
 
-    /**
-    Given an output of an S-box layer, returns the best inputs. 
-
-    cipher      Cipher to consider.
-    output      Output of the S-box layer.
-    limit       Maximum number of inputs to generate.
-    */
+    /// Given the output value of a property over an S-box layer, returns the best input values,
+    /// i.e. those with highest values. 
     pub fn get_best_inputs(&self,
                            cipher: &dyn Cipher,
                            output: u128,
                            limit: usize)
                            -> Vec<(u128, f64)> {
         let mask = cipher.sbox(0).mask();
-        let size = cipher.sbox(0).size;
+        let size = cipher.sbox(0).size();
         let trivial = match self.property_type {
             PropertyType::Linear => f64::from(1 << (size-1)),
             PropertyType::Differential => f64::from(1 << size)
@@ -360,20 +338,15 @@ impl MaskMap {
         inputs
     }
 
-    /**
-    Given an input of an S-box layer, returns the best outputs. 
-
-    cipher      Cipher to consider.
-    input       Input of the S-box layer.
-    limit       Maximum number of outputs to generate.
-    */
+    /// Given the input value of a property over an S-box layer, returns the best output values,
+    /// i.e. those with highest values. 
     pub fn get_best_outputs(&self,
                             cipher: &dyn Cipher,
                             input: u128,
                             limit: usize)
                             -> Vec<(u128, f64)> {
         let mask = cipher.sbox(0).mask();
-        let size = cipher.sbox(0).size;
+        let size = cipher.sbox(0).size();
         let trivial = match self.property_type {
             PropertyType::Linear => f64::from(1 << (size-1)),
             PropertyType::Differential => f64::from(1 << size)

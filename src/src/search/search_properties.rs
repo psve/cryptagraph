@@ -1,3 +1,5 @@
+//! Main functions for searching for properties of a cipher.
+
 use fnv::FnvHashSet;
 use std::fs::{File, OpenOptions};
 use std::io::{Write, BufReader, BufRead};
@@ -9,12 +11,7 @@ use search::graph::MultistageGraph;
 use search::graph_generate::generate_graph;
 use property::{Property, PropertyType};
 
-/**
-Dumps a graph to file for plotting with python graph-tool. 
-
-graph       The input graph to dump.
-path        Prefix of the path of the output file. Gets appended with ".graph".
-*/
+/// Dumps a graph to file for plotting with python graph-tool. 
 fn dump_to_graph_tool(graph: &MultistageGraph,
                       path: &str) {
     let mut path = path.to_string();
@@ -45,12 +42,7 @@ fn dump_to_graph_tool(graph: &MultistageGraph,
     }   
 }
 
-/**
-Dumps all vertices of a graph to the file <file_mask_out>.set. 
-
-graph           The input graph to dump.
-file_mask_out   Prefix of the path of the file created.
-*/
+/// Dumps all vertices of a graph to the file <file_mask_out>.set. 
 fn dump_masks(graph: &MultistageGraph, 
               file_mask_out: &str) {
     let mut file_set_path = file_mask_out.to_string();
@@ -82,12 +74,7 @@ fn dump_masks(graph: &MultistageGraph,
     }
 }
 
-/**
-Dumps a vector of properties to <file_mask_out>.app. 
-
-Properties      A vector of properties to write to file.
-file_mask_out   Prefix of the path of the file created.
-*/
+/// Dumps a vector of properties to <file_mask_out>.app. 
 fn dump_results(properties: &[Property], 
                 file_mask_out: &str) {
     let mut file_set_path = file_mask_out.to_string();
@@ -107,13 +94,9 @@ fn dump_results(properties: &[Property],
     }
 }
 
-/**
-Reads a file of allowed input and output values and stores them in a hash set. 
-The values in the files are assumed to be in hexadecimals, without the '0x' prefix, and
-input/output masks should be separated by a comma. 
-
-file_mask_in        Path of the input file used.
-*/
+/// Reads a file of allowed input and output values and stores them in a hash set. 
+/// The values in the files are assumed to be in hexadecimals, without the '0x' prefix, and
+/// input/output masks should be separated by a comma. 
 fn read_allowed(file_mask_in: &str) -> FnvHashSet<(u128, u128)> {
     let file = File::open(file_mask_in).expect("Could not open file.");
     let mut allowed = FnvHashSet::default();
@@ -131,18 +114,16 @@ fn read_allowed(file_mask_in: &str) -> FnvHashSet<(u128, u128)> {
     allowed
 }
 
-/**
-Searches for properties over a given number of rounds for a given cipher. 
-
-cipher          The cipher to investigate. 
-property_type   The type of property to search for.
-rounds          The number of rounds to consider.
-patterns        The number of S-box patterns to generate. Relates to the number of
-                properties generate per round. 
-file_mask_in    Prefix of two files which restict the input/output values of the properties.
-file_mask_out   Prefix of two files to which results are dumped.
-file_graph      Prefix of a file to which raw graph data is dumped.
-*/
+/// Searches for properties over a given number of rounds for a given cipher. 
+/// 
+/// # Parameters
+/// * `cipher`: The cipher to investigate. 
+/// * `property_type`: The type of property to search for.
+/// * `rounds`: The number of rounds to consider.
+/// * `patterns`: The number of S-box patterns to generate. Relates to the number of properties generate per round. 
+/// * `file_mask_in`: Prefix of two files which restict the input/output values of the properties.
+/// * `file_mask_out`: Prefix of two files to which results are dumped.
+/// * `file_graph`: Prefix of a file to which raw graph data is dumped.
 #[cfg_attr(clippy, allow(too_many_arguments))]
 pub fn search_properties(cipher: &Cipher, 
                          property_type: PropertyType,

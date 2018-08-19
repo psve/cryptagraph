@@ -1,3 +1,5 @@
+//! Types and functions for calculating linear correlations. 
+
 use crossbeam_utils;
 use rand::{OsRng, RngCore};
 use fnv::FnvHashMap;
@@ -8,19 +10,15 @@ use cipher::{Cipher, CipherStructure};
 use property::Property;
 use utility::{ProgressBar, parity};
 
-/* Linear Approximation Table for entire round permutation
- *
- * The linear layer has been applied to the { output } set.
- */
+/// Part of a linear approximation table for an entire round function of a cipher.
 #[derive(Clone)]
 struct MaskLat {
     map_input: FnvHashMap<u128, Vec<Property>>,
 }
 
 impl MaskLat {
-    /* Takes an LAT of a component function and
-     * computes the correlation of parities over the bricklayer function.
-     */
+    /// Takes an LAT of a component function and computes the correlation of parities over the
+    /// bricklayer function.
     #[inline(always)]
     fn correlation(cipher : &dyn Cipher,
                    input  : u128,
@@ -30,12 +28,12 @@ impl MaskLat {
         let mut input = input;
         let mut output = output;
 
-        let w = cipher.sbox(0).size;
+        let w = cipher.sbox(0).size();
         let m = (1 << w) - 1;
-        let values  = f64::from(1 << cipher.sbox(0).size);
+        let values  = f64::from(1 << cipher.sbox(0).size());
 
         for i in 0..cipher.num_sboxes() {
-            let hits = cipher.sbox(i).lat[(input & m) as usize][(output & m) as usize];
+            let hits = cipher.sbox(i).lat()[(input & m) as usize][(output & m) as usize];
             let c = 2.0 * ((hits as f64) / values) - 1.0;
             value *= c;
 
@@ -49,9 +47,7 @@ impl MaskLat {
         value
     }
 
-    /* Constructs a Lat over the bricklayer function
-     * for the particular set of parities
-     */
+    /// Constructs a Lat over the bricklayer function for the particular set of parities.
     fn new(cipher : &dyn Cipher, masks : &[u128]) -> MaskLat {
         /* Assuming SPN; compute possible "outputs" for input set
          *
@@ -106,6 +102,7 @@ impl MaskLat {
         mlat
     }
 
+    /// Inverts the current LAT
     fn invert(&mut self) {
         let mut inverse = FnvHashMap::default();
 
@@ -126,28 +123,32 @@ impl MaskLat {
         self.map_input = inverse;
     }
 
+    /// Gets any outputs matching a specific input.
     fn lookup_input(&self, a : u128) -> Option<&Vec<Property>> {
         self.map_input.get(&a)
     }
 }
 
-
+/// A collection of approximations over a number of rounds as well as their correlation.
 #[derive(Clone)]
 struct MaskPool {
     masks: FnvHashMap<(u128, u128), f64>,
 }
 
 impl MaskPool {
+    /// Create a new empty pool.
     fn new() -> MaskPool {
         MaskPool{
             masks: FnvHashMap::default(),
         }
     }
 
+    /// Add a new approximation over "zero" rounds.
     fn add(&mut self, mask: u128) {
         self.masks.insert((mask, mask), 1.0);
     }
     
+    /// Extend the current set by one round given an LAT and a round key.
     fn step(&mut self,
             lat: &MaskLat,
             key: u128) {
@@ -176,6 +177,14 @@ impl MaskPool {
     }
 }
 
+/// Calculates key dependent correlations for a set of intermediate masks and keys. 
+///
+/// # Parameters
+/// * `cipher`: The cipher to calculate correlations for.
+/// * `allowed`: A set of allowed input-output pairs. All other approximations are ignored.
+/// * `rounds`: Number of rounds to calculate correlations for.
+/// * `num_keys`: Number of master keys to generation correlations for.
+/// * `masks`: A set of intermediate masks to use when generating trails.
 pub fn get_correlations(cipher: &dyn Cipher,
                         allowed: &[(u128, u128)],
                         rounds: usize,

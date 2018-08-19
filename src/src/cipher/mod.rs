@@ -1,214 +1,63 @@
+//! A trait for representing ciphers as well as several cipher implementations.
+
+use sbox::Sbox;
 use property::PropertyType;
-use utility;
 
-/**
-A structure that represents an S-box.
-
-size    Size of the S-box input in number of bits.
-table   The table that describes the S-box.
-lat     The linear approximation table for the S-box.
-ddt     The difference distribution table for the S-box.
-*/
-#[derive(Clone, Debug)]
-pub struct Sbox {
-    pub size: usize,
-    pub table: Vec<u8>,
-    pub lat: Vec<Vec<usize>>,
-    pub ddt: Vec<Vec<usize>>,
-}
-
-impl Sbox {
-    /**
-    Generates a new S-box from a table.
-
-    size    Size of the S-box in bits
-    table   A table discribing the S-box transformation.
-    */
-    fn new(size: usize,
-           table: Vec<u8>) -> Sbox {
-        assert_eq!(1 << size, table.len());
-
-        let lat = Sbox::generate_lat(&table[..], size);
-        let ddt = Sbox::generate_ddt(&table[..], size);
-
-        Sbox {
-            size,
-            table,
-            lat,
-            ddt
-         }
-    }
-
-    /**
-    Generates the LAT associated with the S-box.
-
-    table       The table discribing the S-box.
-    sbox_size   The size of the S-box in bits.
-    */
-    fn generate_lat(table: &[u8], sbox_size: usize) -> Vec<Vec<usize>> {
-        let lat_size = 1 << sbox_size;
-        let mut lat = vec![vec![0; lat_size]; lat_size];
-
-        for (plaintext, &ciphertext) in table.iter().enumerate().take(lat_size) {
-            for alpha in 0..lat_size {
-                for beta in 0..lat_size {
-                    let parity = utility::parity_masks(plaintext as u128,
-                                                       u128::from(ciphertext),
-                                                       alpha as u128,
-                                                       beta as u128);
-
-                    lat[alpha as usize][beta as usize] += (1 - parity) as usize;
-                }
-            }
-        }
-
-        lat
-    }
-
-    /**
-    Generates the DDT associated with the S-box.
-
-    table       The table discribing the S-box.
-    sbox_size   The size of the S-box in bits.
-    */
-    fn generate_ddt(table: &[u8], sbox_size: usize) -> Vec<Vec<usize>> {
-        let ddt_size = 1 << sbox_size;
-        let mut ddt = vec![vec![0; ddt_size]; ddt_size];
-
-        for plaintext_0 in 0..ddt_size {
-            let ciphertext_0 = table[plaintext_0];
-
-            for (in_diff, ddt_row) in ddt.iter_mut().enumerate().take(ddt_size) {
-                let plaintext_1 = plaintext_0 ^ in_diff;
-                let ciphertext_1 = table[plaintext_1];
-
-                ddt_row[(ciphertext_0 ^ ciphertext_1) as usize] += 1;
-            }
-        }
-
-        ddt
-    }
-
-    /**
-    Returns the value of a balanced linear approximation.
-    */
-    pub fn linear_balance(&self) -> i16 {
-        (1 << (self.size - 1)) as i16
-    }
-
-    /**
-    Returns the probability of an impossible differential.
-    */
-    pub fn differential_zero(&self) -> i16 {
-        0
-    }
-
-    /**
-    Returns a bitmask the corresponds to the S-box size.
-    */
-    pub fn mask(&self) -> u128 {
-        (1 << self.size) - 1
-    }
-}
-
-/**
-A structure describing a type of cipher.
-*/
+/// Different type of ciphers.
 #[derive(PartialEq, Eq)]
 pub enum CipherStructure {
+    /// A regular SPN cipher.
     Spn,
+    /// A Feistel cipher.
     Feistel,
+    /// A cipher with a reflective structure similar to PRINCE.
     Prince
 }
 
-/**
-A trait defining a cipher
-*/
+/// A trait defining a cipher.
 pub trait Cipher: Sync {
-    /**
-    Returns the design type of the cipher.
-    */
+    /// Returns the type of the cipher.
     fn structure(&self) -> CipherStructure;
 
-    /**
-    Returns the size of the cipher input in bits.
-    */
+    /// Returns the block size of the cipher in bits.
     fn size(&self) -> usize;
 
-    /**
-    Returns key-size in bits
-    */
+    /// Returns key size in bits.
     fn key_size(&self) -> usize;
 
-    /**
-    Returns the number of S-boxes in the non-linear layer.
-    */
+    /// Returns the number of S-boxes in the non-linear layer.
     fn num_sboxes(&self) -> usize;
 
-    /**
-    Returns the i'th S-box of the cipher.
-    */
+    /// Returns the i'th S-box of the cipher.
     fn sbox(&self, i: usize) -> &Sbox;
 
-    /**
-    Applies the linear layer of the cipher.
-
-    input   The input to the linear layer.
-    */
+    
+    /// Applies the linear layer of the cipher to the input.
     fn linear_layer(&self, input: u128) -> u128;
 
-    /**
-    Applies the inverse linear layer of the cipher.
-    
-    input   The input to the inverse linear layer. 
-    */
+    /// Applies the inverse linear layer of the cipher to the input.
     fn linear_layer_inv(&self, input: u128) -> u128;
 
-    /**
-    Applies the reflection layer for Prince like ciphers.
-    For all other cipher types, this can remain unimplemented.
-
-    input   The input to the reflection layer.
-    */
+    /// Applies the reflection layer for Prince like ciphers.
+    /// For all other cipher types, this can remain unimplemented.
+    #[allow(unused_variables)]
     fn reflection_layer(&self, input: u128) -> u128;
 
-    /**
-    Computes a vector of round key from a cipher key.
-
-    rounds      Number of rounds to generate keys for.
-    key         The master key to expand.
-    */
+    /// Computes a vector of round key from a cipher key. Note that the length of the output
+    /// is not necessarily equal to `rounds`. See the `whitening` function.
     fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u128>;
 
-    /**
-    Performs encryption with the cipher.
-
-    input       Plaintext to be encrypted.
-    round_keys  Round keys generated by the key-schedule.
-    */
+    /// Performs encryption with the cipher.
     fn encrypt(&self, input: u128, round_keys: &[u128]) -> u128;
 
-    /**
-    Performs decryption with the cipher.
-
-    input       Ciphertext to be decrypted.
-    round_keys  Round keys generated by the key-schedule.
-    */
+    /// Performs decryption with the cipher.
     fn decrypt(&self, input: u128, round_keys: &[u128]) -> u128;
 
-    /**
-    Returns the name of the cipher.
-    */
+    /// Returns the name of the cipher.
     fn name(&self) -> String;
 
-    /**
-    Transforms the input and output mask of the S-box layer to an
-    input and output mask of a round.
-
-    input           Input mask to the S-box layer.
-    output          Output mask to the S-box layer.
-    property_type   Type of the property determining the transform.
-    */
+    /// Transforms the input and output mask of the S-box layer to an input and output mask 
+    /// of a round. Note that this transformation can depend on the property type. 
     #[allow(unused_variables)]
     fn sbox_mask_transform(&self,
                            input: u128,
@@ -216,65 +65,61 @@ pub trait Cipher: Sync {
                            property_type: PropertyType)
                            -> (u128, u128);
 
-    /**
-    Specifies if a pre-whitening key is used. In this case, the key-schedule returns 
-    rounds+1 round keys. 
-    */
+    /// Specifies if the cipher uses a pre-whitening key. In this case, the key-schedule returns 
+    /// rounds+1 round keys. 
     fn whitening(&self) -> bool;
 }
 
-mod aes;
-mod epcbc48;
-mod epcbc96;
-mod fly;
-mod gift64;
-mod gift128;
-mod iceberg;
-mod khazad;
-mod klein;
-mod led;
-mod mantis;
-mod mcrypton;
-mod mibs;
-mod midori;
-mod present;
-mod pride;
-mod prince;
-mod puffin;
-mod qarma;
-mod rectangle;
-mod skinny64;
-mod skinny128;
-mod twine;
+pub mod aes;
+pub mod epcbc48;
+pub mod epcbc96;
+pub mod fly;
+pub mod gift64;
+pub mod gift128;
+pub mod iceberg;
+pub mod khazad;
+pub mod klein;
+pub mod led;
+pub mod mantis;
+pub mod mcrypton;
+pub mod mibs;
+pub mod midori;
+pub mod present;
+pub mod pride;
+pub mod prince;
+pub mod puffin;
+pub mod qarma;
+pub mod rectangle;
+pub mod skinny64;
+pub mod skinny128;
+pub mod twine;
 
-/**
-Converts the name of a cipher to an instance of that cipher.
-*/
+/// Converts the name of a cipher to an instance of that cipher.
 pub fn name_to_cipher(name : &str) -> Option<Box<dyn Cipher>> {
     match name {
-        "aes"       => Some(Box::new(aes::new())),
-        "epcbc48"   => Some(Box::new(epcbc48::new())),
-        "epcbc96"   => Some(Box::new(epcbc96::new())),
-        "fly"       => Some(Box::new(fly::new())),
-        "gift64"    => Some(Box::new(gift64::new())),
-        "gift128"   => Some(Box::new(gift128::new())),
-        "iceberg"   => Some(Box::new(iceberg::new())),
-        "khazad"    => Some(Box::new(khazad::new())),
-        "klein"     => Some(Box::new(klein::new())),
-        "led"       => Some(Box::new(led::new())),
-        "mantis"    => Some(Box::new(mantis::new())),
-        "mcrypton"  => Some(Box::new(mcrypton::new())),
-        "mibs"      => Some(Box::new(mibs::new())),
-        "midori"    => Some(Box::new(midori::new())),
-        "present"   => Some(Box::new(present::new())),
-        "pride"     => Some(Box::new(pride::new())),
-        "prince"    => Some(Box::new(prince::new())),
-        "puffin"    => Some(Box::new(puffin::new())),
-        "qarma"     => Some(Box::new(qarma::new())),
-        "rectangle" => Some(Box::new(rectangle::new())),
-        "skinny64"  => Some(Box::new(skinny64::new())),
-        "skinny128" => Some(Box::new(skinny128::new())),
-        "twine"     => Some(Box::new(twine::new())),
+        "aes"       => Some(Box::new(aes::Aes::new())),
+        "epcbc48"   => Some(Box::new(epcbc48::Epcbc48::new())),
+        "epcbc96"   => Some(Box::new(epcbc96::Epcbc96::new())),
+        "fly"       => Some(Box::new(fly::Fly::new())),
+        "gift64"    => Some(Box::new(gift64::Gift64::new())),
+        "gift128"   => Some(Box::new(gift128::Gift128::new())),
+        "iceberg"   => Some(Box::new(iceberg::Iceberg::new())),
+        "khazad"    => Some(Box::new(khazad::Khazad::new())),
+        "klein"     => Some(Box::new(klein::Klein::new())),
+        "led"       => Some(Box::new(led::Led::new())),
+        "mantis"    => Some(Box::new(mantis::Mantis::new())),
+        "mcrypton"  => Some(Box::new(mcrypton::Mcrypton::new())),
+        "mibs"      => Some(Box::new(mibs::Mibs::new())),
+        "midori"    => Some(Box::new(midori::Midori::new())),
+        "present"   => Some(Box::new(present::Present::new())),
+        "pride"     => Some(Box::new(pride::Pride::new())),
+        "prince"    => Some(Box::new(prince::Prince::new())),
+        "puffin"    => Some(Box::new(puffin::Puffin::new())),
+        "qarma"     => Some(Box::new(qarma::Qarma::new())),
+        "rectangle" => Some(Box::new(rectangle::Rectangle::new())),
+        "skinny64"  => Some(Box::new(skinny64::Skinny64::new())),
+        "skinny128" => Some(Box::new(skinny128::Skinny128::new())),
+        "twine"     => Some(Box::new(twine::Twine::new())),
         _ => None
     }
 }

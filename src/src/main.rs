@@ -1,4 +1,6 @@
-#![feature(iterator_step_by)]
+//! Cryptagraph is a tool for finding linear approximations and differentials of block ciphers. 
+
+#![feature(iterator_step_by, try_from)]
 
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate smallvec;
@@ -13,12 +15,13 @@ extern crate rand;
 extern crate structopt;
 extern crate time;
 
-mod cipher;
 mod options;
-mod property;
-mod utility;
-mod search;
-mod dist;
+pub mod cipher;
+pub mod dist;
+pub mod property;
+pub mod sbox;
+pub mod search;
+pub mod utility;
 
 use options::CryptagraphOptions;
 use structopt::StructOpt;
@@ -44,8 +47,16 @@ fn main() {
                 }
             };
 
-            search::search_properties::search_properties(cipher.as_ref(), property_type, rounds, num_patterns, anchors,
-                                            file_mask_in, file_mask_out, num_keep, file_graph);
+            search::search_properties::search_properties(
+                cipher.as_ref(), 
+                property_type, 
+                rounds, 
+                num_patterns, 
+                anchors,
+                file_mask_in, 
+                file_mask_out, 
+                num_keep, 
+                file_graph);
         },
         CryptagraphOptions::Dist {cipher,
                                   file_mask_in,
@@ -62,7 +73,13 @@ fn main() {
                 }
             };
 
-            dist::distributions::get_distributions(cipher.as_ref(), &file_mask_in, rounds, keys, &masks, &output);
+            dist::distributions::get_distributions(
+                cipher.as_ref(), 
+                &file_mask_in, 
+                rounds, 
+                keys, 
+                &masks, 
+                &output);
         }
     }
 }

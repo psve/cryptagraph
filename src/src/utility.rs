@@ -1,14 +1,10 @@
+//! A collection of utility functions used throughout the library. 
+
 use std::io::{self, Write};
 
-/**
-Finds the parity of <input, alpha> ^ <outout, beta>, where <_,_> is the inner product
-over F_2. Taken from http://www.graphics.stanford.edu/~seander/bithacks.html#ParityMultiply
-
-input   Input value.
-output  Output value.
-alpha   Input mask.
-beta    Output mask.
-*/
+/// Finds the parity of `<input, alpha> ^ <outout, beta>`, where `<_,_>` is the inner product
+/// over GF(2). Taken from 
+/// [here](http://www.graphics.stanford.edu/~seander/bithacks.html#ParityMultiply).
 pub fn parity_masks(input: u128,
                     output: u128,
                     alpha: u128,
@@ -22,7 +18,7 @@ pub fn parity_masks(input: u128,
     (y >> 124) & 1
 }
 
-#[allow(dead_code)]
+/// Calculates the modulo 2 sum of the bits in the input. 
 pub fn parity(input: u128) -> u128 {
     let mut y = input;
 
@@ -40,13 +36,8 @@ static COMP_PATTERN: [u128; 4] = [
     0xffffffffffffffffffffffffffffffff
 ]; 
 
-/**
-"Compresses" a 64-bit value such that if a block of 2^(3-level) bits is non-zero, than that 
-block is set to the value 1.
-
-x       The value to compress
-level   The compression level to use.
-*/
+/// Compresses `x` such that if a block of 2<sup>(3-`level`)</sup> bits is non-zero, then that 
+/// block is set to the value 1 in the output.
 #[inline(always)]
 pub fn compress(x: u128, 
                 level: usize) 
@@ -60,13 +51,7 @@ pub fn compress(x: u128,
     y & COMP_PATTERN[level]
 }
 
-/**
-A struct representing a progress bar for progress printing on the command line.
-
-num_items       Number of items to count the progress for.
-progress        The current progress.
-percentage      The current progress in percent.
-*/
+/// A struct representing a progress bar for progress printing on the command line.
 pub struct ProgressBar {
     current_items: f64,
     item_size: f64,
@@ -74,11 +59,7 @@ pub struct ProgressBar {
 }
 
 impl ProgressBar {
-    /**
-    Crate a new progress bar.
-
-    num_items       Number of items to count the progress for.
-    */
+    /// Creates a new progress for tracking progress of `num_items` steps.
     pub fn new(num_items: usize) -> ProgressBar {
         let item_size = 100.0 / (num_items as f64);
 
@@ -89,10 +70,8 @@ impl ProgressBar {
         }
     }
 
-    /**
-    Increment the current progress of the progress bar. The progress bar prints if
-    a new step was reached.
-    */
+    /// Increment the current progress of the bar. The progress bar prints if
+    /// a new step was reached.
     #[inline(always)]
     pub fn increment(&mut self) {
         self.current_items += self.item_size;

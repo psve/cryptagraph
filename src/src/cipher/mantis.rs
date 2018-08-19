@@ -1,21 +1,14 @@
-use cipher::{Sbox, CipherStructure, Cipher};
+//! Implementation of MANTIS.
+
+use sbox::Sbox;
+use cipher::{CipherStructure, Cipher};
 use property::PropertyType;
 
 /*****************************************************************
                             MANTIS
 ******************************************************************/
 
-/** 
-A structure representing the MANTIS cipher.
-
-size                Size of the cipher in bits. This is fixed to 64.
-key_size            Size of the cipher key in bits. This is fixed to 128.
-sbox                The MANTIS S-box.
-shift_rows_table    Permutation used for ShiftRows.
-permute_cell_table  Table for PermuteCells.
-ipermute_cell_table Table for inverse PermuteCells.
-constants           Round constants. 
-*/
+/// A structure representing the MANTIS cipher.
 #[derive(Clone)]
 pub struct Mantis {
     size: usize,
@@ -29,74 +22,57 @@ pub struct Mantis {
 
 }
 
-pub fn new() -> Mantis {
-    let table = vec![0xc, 0xa, 0xd, 0x3, 0xe, 0xb, 0xf, 0x7, 0x8, 0x9, 0x1, 0x5, 0x0, 0x2, 0x4, 0x6];
-    let constants = [0x44370730e2a89131,
-                     0x0d13f9922283904a,
-                     0x98c6e4ce89afe280,
-                     0x77310d836e128254,
-                     0xc6c09e43fc6645eb,
-                     0xdd05c79c7b92ca0c,
-                     0x7190745b5b5d48f3,
-                     0xb1bf97989d5d6129];
-    let tweak_permute = [4, 5, 6, 7, 11, 1, 0, 8, 12, 13, 14, 15, 9, 10, 2, 3];
-    let itweak_permute = [6, 5, 14, 15, 0, 1, 2, 3, 7, 12, 13, 4, 8, 9, 10, 11];
-    let permute_cell_table = [0, 5, 15, 10, 13, 8, 2, 7, 11, 14, 4, 1, 6, 3, 9, 12];
-    let ipermute_cell_table = [0, 11, 6, 13, 10, 1, 12, 7, 5, 14, 3, 8, 15, 4, 9, 2];
+impl Mantis {
+    /// Create a new instance of the cipher.
+    pub fn new() -> Mantis {
+        let table = vec![0xc, 0xa, 0xd, 0x3, 0xe, 0xb, 0xf, 0x7, 0x8, 0x9, 0x1, 0x5, 0x0, 0x2, 0x4, 0x6];
+        let constants = [0x44370730e2a89131,
+                         0x0d13f9922283904a,
+                         0x98c6e4ce89afe280,
+                         0x77310d836e128254,
+                         0xc6c09e43fc6645eb,
+                         0xdd05c79c7b92ca0c,
+                         0x7190745b5b5d48f3,
+                         0xb1bf97989d5d6129];
+        let tweak_permute = [4, 5, 6, 7, 11, 1, 0, 8, 12, 13, 14, 15, 9, 10, 2, 3];
+        let itweak_permute = [6, 5, 14, 15, 0, 1, 2, 3, 7, 12, 13, 4, 8, 9, 10, 11];
+        let permute_cell_table = [0, 5, 15, 10, 13, 8, 2, 7, 11, 14, 4, 1, 6, 3, 9, 12];
+        let ipermute_cell_table = [0, 11, 6, 13, 10, 1, 12, 7, 5, 14, 3, 8, 15, 4, 9, 2];
 
-    Mantis {
-        size: 64,
-        key_size: 128,
-        sbox: Sbox::new(4, table),
-        constants,
-        tweak_permute,
-        itweak_permute,
-        permute_cell_table,
-        ipermute_cell_table 
+        Mantis {
+            size: 64,
+            key_size: 128,
+            sbox: Sbox::new(4, table),
+            constants,
+            tweak_permute,
+            itweak_permute,
+            permute_cell_table,
+            ipermute_cell_table 
+        }
     }
 }
 
 impl Cipher for Mantis {
-    /** 
-    Returns the design type of the cipher. 
-    */
     fn structure(&self) -> CipherStructure {
         CipherStructure::Prince
     }
 
-    /** 
-    Returns the size of the cipher input in bits. 
-    */
     fn size(&self) -> usize {
         self.size
     }
 
-    /** 
-    Returns key-size in bits 
-    */
     fn key_size(&self) -> usize {
         self.key_size
     }
 
-    /** 
-    Returns the number of S-boxes in the non-linear layer. 
-    */
     fn num_sboxes(&self) -> usize {
-        self.size / self.sbox.size
+        self.size / self.sbox.size()
     }
 
-    /** 
-    Returns the i'th S-box of the cipher. 
-    */
     fn sbox(&self, _i: usize) -> &Sbox {
         &self.sbox
     }
 
-    /** 
-    Applies the linear layer of the cipher.
-    
-    input   The input to the linear layer.
-    */
     fn linear_layer(&self, input: u128) -> u128 {
         let mut output = 0;
 
@@ -126,11 +102,6 @@ impl Cipher for Mantis {
         output
     }
 
-    /** 
-    Applies the inverse linear layer of the cipher.
-    
-    input   The input to the inverse linear layer. 
-    */
     fn linear_layer_inv(&self, input: u128) -> u128 {
         let mut output = input;
 
@@ -197,12 +168,6 @@ impl Cipher for Mantis {
         output
     }
 
-    /** 
-    Computes a vector of round key from a cipher key.
-
-    rounds      Number of rounds to generate keys for.
-    key         The master key to expand.
-    */
     fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u128> {
         if key.len() * 8 != self.key_size {
             panic!("invalid key-length");
@@ -260,12 +225,6 @@ impl Cipher for Mantis {
         keys
     }
 
-    /** 
-    Performs encryption with the cipher. 
-    
-    input       Plaintext to be encrypted.
-    round_keys  Round keys generated by the key-schedule.
-    */
     fn encrypt(&self, input: u128, round_keys: &[u128]) -> u128 {
         let mut output = input;
 
@@ -278,7 +237,7 @@ impl Cipher for Mantis {
             let mut tmp = 0;
 
             for j in 0..16 {
-                tmp ^= u128::from(self.sbox.table[((output >> (j*4)) & 0xf) as usize]) << (j*4);
+                tmp ^= u128::from(self.sbox.apply((output >> (j*4)) & 0xf)) << (j*4);
             }
 
 
@@ -294,7 +253,7 @@ impl Cipher for Mantis {
         let mut tmp = 0;
 
         for j in 0..16 {
-            tmp ^= u128::from(self.sbox.table[((output >> (j*4)) & 0xf) as usize]) << (j*4);
+            tmp ^= u128::from(self.sbox.apply((output >> (j*4)) & 0xf)) << (j*4);
         }
 
         // Apply MixColumns
@@ -318,7 +277,7 @@ impl Cipher for Mantis {
         tmp = 0;
 
         for j in 0..16 {
-            tmp ^= u128::from(self.sbox.table[((output >> (j*4)) & 0xf) as usize]) << (j*4);
+            tmp ^= u128::from(self.sbox.apply((output >> (j*4)) & 0xf)) << (j*4);
         }
 
 
@@ -334,7 +293,7 @@ impl Cipher for Mantis {
             tmp = 0;
 
             for j in 0..16 {
-                tmp ^= u128::from(self.sbox.table[((output >> (j*4)) & 0xf) as usize]) << (j*4);
+                tmp ^= u128::from(self.sbox.apply((output >> (j*4)) & 0xf)) << (j*4);
             }
         }
 
@@ -344,12 +303,6 @@ impl Cipher for Mantis {
         output
     }
 
-    /** 
-    Performs decryption with the cipher. 
-    
-    input       Ciphertext to be decrypted.
-    round_keys  Round keys generated by the key-schedule.
-    */
     #[allow(unused_variables)]
     fn decrypt(&self, input: u128, round_keys: &[u128]) -> u128 {
         let mut round_keys = round_keys.to_vec();
@@ -358,9 +311,6 @@ impl Cipher for Mantis {
         self.encrypt(input, &round_keys)
     }
 
-    /** 
-    Returns the name of the cipher. 
-    */
     fn name(&self) -> String {
         String::from("MANTIS")
     }
@@ -377,7 +327,7 @@ impl Cipher for Mantis {
     fn sbox_mask_transform(&self, 
                            input: u128, 
                            output: u128, 
-                           property_type: PropertyType) 
+                           _property_type: PropertyType) 
                            -> (u128, u128) {
         (input, self.linear_layer(output))
     }

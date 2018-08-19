@@ -1,3 +1,5 @@
+//! Functions for searching for properties once a graph has been generated.
+
 use crossbeam_utils;
 use fnv::FnvHashSet;
 use indexmap::IndexMap;
@@ -12,13 +14,7 @@ use utility::ProgressBar;
 
 /***********************************************************************************************/
 
-/**
-Find all properties for a given graph starting with a specific input value. 
-
-graph           The graph to search through.
-property_type   The type of peroperty to find.
-input           The input value to start the search from.
-*/
+/// Find all properties for a given graph starting with a specific input value. 
 fn find_properties(graph: &MultistageGraph, 
                    property_type: PropertyType,
                    input: u128,
@@ -64,14 +60,13 @@ fn find_properties(graph: &MultistageGraph,
     edge_map
 }
 
-/**
-Find all properties for a given graph in parallel. 
-
-graph               The graph to search through.
-property_type       The type of peroperty to find.
-allowed       A set of allowed input/output values. Other input/output pairs are ignored.
-num_keep            The number of properties to keep. The best <num_keep> properties are kept.
-*/
+/// Find all properties for a given graph in a parallelised way. 
+///
+/// # Parameters
+/// * `graph`: A graph generated with `generate_graph`.
+/// * `property_type': The type of property the graph represents.
+/// * `allowed`: A set of allowed input-output pairs. Properties not matching these are filtered. 
+/// * `num_keep`: Only the best `num_keep` properties are returned. 
 pub fn parallel_find_properties(graph: &MultistageGraph,
                                 property_type: PropertyType,
                                 allowed: &FnvHashSet<(u128, u128)>,

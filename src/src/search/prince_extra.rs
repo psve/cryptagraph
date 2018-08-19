@@ -1,17 +1,13 @@
+//! Extra functions for handling Prince-like ciphers.
+
 use fnv::FnvHashSet;
 use indexmap::IndexMap;
 
 use cipher::*;
 use search::graph::MultistageGraph;
 
-
-/**
-Special pruning for Prince-like ciphers. The last layer is also pruned with regards to the
-reflection function. 
-
-cipher      The cipher that specifies the reflection layer.
-graph       The graph to prune.
-*/
+/// Special graph pruning for Prince-like ciphers. The last layer is also pruned with regards to the
+/// reflection function. 
 pub fn prince_pruning(cipher: &dyn Cipher,
                       graph: &mut MultistageGraph) {
     let mut pruned = true;
@@ -43,13 +39,8 @@ pub fn prince_pruning(cipher: &dyn Cipher,
     }
 }
 
-/**
-Creates a Prince-like graph from a normal SPN graph, i.e. it reflects the graph and connects 
-the two halves through a reflection layer.
-
-cipher          The cipher that specifies the reflection layer.
-graph_firs      The first half of the final graph. 
-*/
+/// Creates a Prince-like graph from a normal SPN graph, i.e. it reflects the graph and connects 
+/// the two halves through a reflection layer.
 pub fn prince_modification(cipher: &dyn Cipher, 
                            graph_first: &mut MultistageGraph)
                            -> MultistageGraph {

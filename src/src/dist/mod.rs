@@ -1,2 +1,4 @@
+//! Functions for generation correlation distributions.
+
 pub mod distributions;
-mod correlations;
+pub mod correlations;

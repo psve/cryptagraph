@@ -1,3 +1,5 @@
+//! Main functions for generating correlations distributions.
+
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use fnv::FnvHashMap;
@@ -6,13 +8,9 @@ use time;
 use cipher::*;
 use dist::correlations::get_correlations;
 
-/**
-Reads a file of allowed input and output values and stores them in a hash set. 
-The values in the files are assumed to be in hexadecimals, without the '0x' prefix, and
-input/output masks should be separated by a comma. 
-
-file_mask_in        Path of the input file used.
-*/
+/// Reads a file of allowed input and output values and stores them in a hash set.  The values in
+/// the files are assumed to be in hexadecimals, without the '0x' prefix, and input/output masks
+/// should be separated by a comma.
 fn read_allowed(file_mask_in: &str) -> Vec<(u128, u128)> {
     let file = File::open(file_mask_in).expect("Could not open file.");
     let mut allowed = Vec::new();
@@ -30,6 +28,8 @@ fn read_allowed(file_mask_in: &str) -> Vec<(u128, u128)> {
     allowed
 }
 
+/// Loads a set of intermediate masks from file. The values in the files are assumed to be in
+/// hexadecimals, without the '0x' prefix.
 fn load_masks(path : &str) -> Option<Vec<u128>> {
     let file      = File::open(path).unwrap();
     let reader    = BufReader::new(&file);
@@ -45,6 +45,8 @@ fn load_masks(path : &str) -> Option<Vec<u128>> {
     Some(masks)
 }
 
+/// Saves a set of correlations in a file. The file format is csv, and the headers have the form
+/// `input_output`. 
 fn dump_correlations(correlations: &FnvHashMap<(u128, u128), Vec<f64>>,
                      path: &str) {
     let mut file = OpenOptions::new()
@@ -75,6 +77,16 @@ fn dump_correlations(correlations: &FnvHashMap<(u128, u128), Vec<f64>>,
     }
 }
 
+/// Generates correlation distributions for a given cipher. The correlations are saved in a csv file
+/// with the suffix '.corrs'. The headers have the form `input_output`. 
+///
+/// # Parameters
+/// * `cipher`: The cipher to calculate correlations for.
+/// * `file_mask_in`: Path to a file containing allowed input-output masks. 
+/// * `rounds`: Number of rounds to calculate correlations for.
+/// * `keys`: Number of master keys to generation correlations for.
+/// * `masks`: Path to a file containing a set of intermediate masks used when generating trails.
+/// * `output`: Prefix of the output file. 
 pub fn get_distributions(cipher: &dyn Cipher,
                          file_mask_in: &str,
                          rounds: usize,

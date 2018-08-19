@@ -1,3 +1,6 @@
+//! Functions for generating a graph representing a set of properties over multiple 
+//! rounds of a cipher.
+
 use crossbeam_utils;
 use fnv::{FnvHashSet, FnvHashMap};
 use indexmap::{IndexMap, IndexSet};
@@ -20,11 +23,7 @@ lazy_static! {
     static ref THREADS: usize = num_cpus::get();
 }
 
-/**
-Generates a graph with only a single round.
-
-properties      Properties representing the edges of the graph.
-*/
+/// Generates a graph with only a single round.
 fn one_round(properties: &mut SortedProperties) 
              -> MultistageGraph {
     let (result_tx, result_rx) = mpsc::channel();
@@ -40,12 +39,12 @@ fn one_round(properties: &mut SortedProperties)
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
                 thread_properties.set_type_all();
-                let tmp = thread_properties.sbox_patterns.iter()
+                let tmp = thread_properties.patterns().iter()
                                                          .cloned()
                                                          .skip(t)
                                                          .step_by(*THREADS)
                                                          .collect();
-                thread_properties.sbox_patterns = tmp;
+                thread_properties.set_patterns(&tmp);
 
                 // Collect all possible edges in the graph
                 let mut edges = IndexMap::new();
@@ -78,11 +77,7 @@ fn one_round(properties: &mut SortedProperties)
     graph
 }
 
-/**
-Generates a graph with only a single stage, i.e. only vertices are added.
-
-properties      Properties representing the vertices of the graph.
-*/
+/// Generates an initial graph with only a single stage, i.e. only vertices are added.
 fn two_rounds(properties: &mut SortedProperties) 
               -> MultistageGraph {
     let (result_tx, result_rx) = mpsc::channel();
@@ -97,12 +92,12 @@ fn two_rounds(properties: &mut SortedProperties)
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
-                let tmp = thread_properties.sbox_patterns.iter()
+                let tmp = thread_properties.patterns().iter()
                                                          .cloned()
                                                          .skip(t)
                                                          .step_by(*THREADS)
                                                          .collect();
-                thread_properties.sbox_patterns = tmp;
+                thread_properties.set_patterns(&tmp);
 
                 // Collect all vertices corresponding to property inputs and outputs
                 let mut vertices = IndexSet::new();
@@ -153,17 +148,10 @@ fn two_rounds(properties: &mut SortedProperties)
     graph
 }
 
-/**
-Generates a graph only with vertices. The vertices are generated from the input properties in such
-a way that a vertex only exists in a round if there exists a property with that vertex as input as 
-well as a (maybe different) property with the vertex as output. Additionally, the values of the
-vertices are filtered, and input/output vertices are not added. 
-
-properties      The properties considered when generating vertices.
-rounds          The number of rounds, i.e. one less than the number of stages in the graph.
-filters         Filters used to restrict the vertices in each round.
-level           Compression level to use for vertex values. 
-*/
+/// Generates a graph only with vertices. The vertices are generated from the input properties in
+/// such a way that a vertex only exists in a round if there exists a property with that vertex as
+/// input as  well as a (maybe different) property with the vertex as output. Additionally, the
+/// values of the vertices are filtered, and input/output vertices are not added.
 fn get_middle_vertices (properties: &SortedProperties, 
                         rounds: usize, 
                         filters: &[FnvHashSet<u128>],
@@ -183,12 +171,12 @@ fn get_middle_vertices (properties: &SortedProperties,
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
-                let tmp = thread_properties.sbox_patterns.iter()
+                let tmp = thread_properties.patterns().iter()
                                                          .cloned()
                                                          .skip(t)
                                                          .step_by(*THREADS)
                                                          .collect();
-                thread_properties.sbox_patterns = tmp;
+                thread_properties.set_patterns(&tmp);
                 
                 // First, collect all input values allowed by the filters
                 // Store them in a hash set for each round
@@ -273,15 +261,8 @@ fn get_middle_vertices (properties: &SortedProperties,
     graph
 }
 
-/**
-Add edges to a graph generated by get_middle_vertices. Edges represent properties, and are only 
-added if there are matching vertices in two adjacent stages. Input and output edges are ignored.
-
-graph           Graph to add edges to.
-properties      The properties consideres when adding edges. 
-rounds          The number of rounds, i.e. one less than the number of stages in the graph.
-level           Compression level to use for vertex values. 
-*/
+/// Add edges to a graph generated by get_middle_vertices. Edges represent properties, and are only
+/// added if there are matching vertices in two adjacent stages. Input and output edges are ignored.
 fn add_middle_edges(graph: &MultistageGraph,
                     properties: &SortedProperties, 
                     rounds: usize, 
@@ -301,8 +282,8 @@ fn add_middle_edges(graph: &MultistageGraph,
             scope.spawn(move || {
                 // For SPN ciphers, we can exploit the structure when the compressiond is 
                 // sufficiently coarse and not generate all properties explicitly 
-                if block >= thread_properties.cipher.sbox(0).size  && 
-                   thread_properties.cipher.structure() == CipherStructure::Spn {
+                if block >= thread_properties.cipher().sbox(0).size()  && 
+                   thread_properties.cipher().structure() == CipherStructure::Spn {
                     thread_properties.set_type_output();
                 } else {
                     thread_properties.set_type_all();
@@ -312,12 +293,12 @@ fn add_middle_edges(graph: &MultistageGraph,
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
-                let tmp = thread_properties.sbox_patterns.iter()
+                let tmp = thread_properties.patterns().iter()
                                                          .cloned()
                                                          .skip(t)
                                                          .step_by(*THREADS)
                                                          .collect();
-                thread_properties.sbox_patterns = tmp;
+                thread_properties.set_patterns(&tmp);
 
                 // Collect all edges that have corresponding vertices in the graph
                 let mut edges = IndexMap::new();
@@ -354,18 +335,9 @@ fn add_middle_edges(graph: &MultistageGraph,
     base_graph
 }
 
-/**
-Add input/output edges to a graph generated by get_middle_vertices as well as any missing vertices
-in the first/last stage. Vertices in other stages are respected such that edges are not added if 
-they don't have a matching output/input vertex. 
-
-graph           Graph to add edges to.
-properties      The properties consideres when adding edges. 
-rounds          The number of rounds, i.e. one less than the number of stages in the graph.
-level           Compression level to use for vertex values. 
-input_allowed   A set of allowed input values. Other inputs are ignored.
-output_allowed  A set of allowed output values. Other outputs are ignored.
-*/
+/// Add input/output edges to a graph generated by get_middle_vertices as well as any missing
+/// vertices in the first/last stage. Vertices in other stages are respected such that edges are not
+/// added if they don't have a matching output/input vertex.
 fn add_outer_edges(graph: &MultistageGraph,
                    properties: &SortedProperties, 
                    rounds: usize, 
@@ -387,8 +359,8 @@ fn add_outer_edges(graph: &MultistageGraph,
             scope.spawn(move || {
                 // For SPN ciphers, we can exploit the structure when the compressiond is 
                 // sufficiently coarse and not generate all properties explicitly 
-                if block >= thread_properties.cipher.sbox(0).size  && 
-                   thread_properties.cipher.structure() == CipherStructure::Spn {
+                if block >= thread_properties.cipher().sbox(0).size()  && 
+                   thread_properties.cipher().structure() == CipherStructure::Spn {
                     thread_properties.set_type_output();
                 } else {
                     thread_properties.set_type_all();
@@ -398,12 +370,12 @@ fn add_outer_edges(graph: &MultistageGraph,
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
-                let tmp = thread_properties.sbox_patterns.iter()
+                let tmp = thread_properties.patterns().iter()
                                                          .cloned()
                                                          .skip(t)
                                                          .step_by(*THREADS)
                                                          .collect();
-                thread_properties.sbox_patterns = tmp;
+                thread_properties.set_patterns(&tmp);
 
                 // Collect all edges that have corresponding output/input vertices in the 
                 // second/second to last stage
@@ -420,7 +392,7 @@ fn add_outer_edges(graph: &MultistageGraph,
                         if let Some(vertex_ref) = graph.get_vertex(1, output) {
                             // Only insert if the output vertex has an outgoing edge,
                             // unless there are only two rounds
-                            if rounds == 2 || !vertex_ref.successors.is_empty() {
+                            if rounds == 2 || vertex_ref.has_successors() {
                                 edges.insert((0, input, output), length);
                             }
                         }
@@ -431,7 +403,7 @@ fn add_outer_edges(graph: &MultistageGraph,
                         if let Some(vertex_ref) = graph.get_vertex(rounds-1, input) {
                             // Only insert if the input vertex has an incoming edge,
                             // unless there are only two rounds
-                            if rounds == 2 || !vertex_ref.predecessors.is_empty() {
+                            if rounds == 2 || vertex_ref.has_predecessors() {
                                 edges.insert((rounds-1, input, output), length);
                             }
                         }
@@ -456,13 +428,7 @@ fn add_outer_edges(graph: &MultistageGraph,
     base_graph
 }
 
-/**
-Adds good edges from to/from each vertex in the second/second to last layer.
-
-cipher          The cipher being analysed.
-property_type   The type of property being analysed.
-graph           The graph to modify.
-*/
+/// Adds good edges from to/from each vertex in the second/second to last layer.
 fn anchor_ends(cipher: &dyn Cipher,
                property_type: PropertyType,
                graph: &mut MultistageGraph,
@@ -547,13 +513,7 @@ fn anchor_ends(cipher: &dyn Cipher,
     }
 }
 
-/** 
-Patches the graph, i.e. adds any missing edges between already existing vertices. 
-
-cipher          The cipher being analysed.
-property_type   The type of property being analysed.
-graph           The graph to modify.
-*/
+/// Patches the graph, i.e. adds any missing edges between already existing vertices. 
 fn patch(cipher: &dyn Cipher,
          property_type: PropertyType,
          graph: &mut MultistageGraph) {
@@ -562,14 +522,14 @@ fn patch(cipher: &dyn Cipher,
 
     for i in 0..cipher.num_sboxes() {
         match property_type {
-            PropertyType::Linear       => tables.push(cipher.sbox(i).lat.clone()),
-            PropertyType::Differential => tables.push(cipher.sbox(i).ddt.clone()),
+            PropertyType::Linear       => tables.push(cipher.sbox(i).lat().clone()),
+            PropertyType::Differential => tables.push(cipher.sbox(i).ddt().clone()),
         }
     }
     
     // Set mask and level to match S-box size
-    let mask = (1 << cipher.sbox(0).size) - 1;
-    let level = 3 - (cipher.sbox(0).size as f32).log2()  as usize;
+    let mask = (1 << cipher.sbox(0).size()) - 1;
+    let level = 3 - (cipher.sbox(0).size() as f32).log2()  as usize;
     
     let mut progress_bar = ProgressBar::new(graph.num_vertices());
     
@@ -606,8 +566,8 @@ fn patch(cipher: &dyn Cipher,
                     let mut value = 1.0;
 
                     for (i, table) in tables.iter().enumerate() {
-                        let a = (input  >> (i * cipher.sbox(i).size)) & mask;
-                        let b = (out_inv >> (i * cipher.sbox(i).size)) & mask;
+                        let a = (input  >> (i * cipher.sbox(i).size())) & mask;
+                        let b = (out_inv >> (i * cipher.sbox(i).size())) & mask;
 
                         let v = table[a as usize][b as usize];
 
@@ -643,11 +603,7 @@ fn patch(cipher: &dyn Cipher,
     graph.add_edges(&edges);
 }
 
-/**
-Initialise filters. The resulting filters allow all values with a block size of 8.
-
-rounds      One less than the number of filters to generate.
-*/
+/// Initialise filters. The resulting filters allow all values with a block size of 8.
 fn init_filter(rounds: usize) 
                -> SmallVec<[FnvHashSet<u128>; 65536]> {
     let mut sequence = FnvHashSet::default();
@@ -679,13 +635,8 @@ fn init_filter(rounds: usize)
     output
 }
 
-/**
-Update all filters with new allowed values given by the current vertices in the graph. 
-Returns number of vertices in the graph which were inserted into the filter. 
-
-filters         Filters to update.
-graph           Graph to update from.
-*/
+/// Update all filters with new allowed values given by the current vertices in the graph. 
+/// Returns number of vertices in the graph which were inserted into the filter. 
 fn update_filters(
     filters: &mut [FnvHashSet<u128>], 
     graph: &MultistageGraph)
@@ -703,17 +654,15 @@ fn update_filters(
     good_vertices
 }
 
-/** 
-Creates a graph that represents the set of characteristics over a number of rounds for a 
-given cipher and set of properties. 
+/// Creates a graph that represents a set of properties over a number of rounds for a 
+/// given cipher. 
 
-cipher              The cipher to consider.
-property_type       The property type to consider.
-rounds              The number of rounds.
-patterns            The number of S-box patterns to generate.
-allowed             A set of allowed input/output values for the properties. 
-                    If empty, all values are allowed.
-*/
+/// # Parameters
+/// * `cipher`: The cipher which the graph represents.
+/// * `property_type`: The type of the property the graph represents.
+/// * `rounds`: The number of cipher rounds. For Prince-like ciphers, this is the number of forward rounds.
+/// * `anchors`: The number of anchors added in the input and output stages.
+/// * `allowed`: A set of allowed input-output pairs. Properties not matching these are filtered. 
 pub fn generate_graph(cipher: &dyn Cipher, 
                       property_type: PropertyType,
                       rounds: usize, 
