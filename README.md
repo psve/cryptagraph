@@ -1,56 +1,66 @@
-![](cryptagraph-logo.png)
+![](*cryptagraph*-logo.png)
 
-# Introduction
-cryptagraph is a tool for linear and differential cryptanalysis of block ciphers written in rust. cryptagraph is meant to make the life of cryptanalysts as well as cipher designers easier. cryptagraph is licensed under GNU GPL v3.0. 
+# Introduction <a name="introduction"></a>
+*cryptagraph* is a tool for linear and differential cryptanalysis of block ciphers written in rust. *cryptagraph* is meant to make the life of cryptanalysts, as well as cipher designers, easier. *cryptagraph* is licensed under GNU GPL v3.0. 
 
-# What is cryptagraph?
-cryptagraph is a tool for linear and differential cryptanalysis of block ciphers. More specifically, cryptagraph allows you to search for good linear approximations or differentials of block ciphers, as well as randomly sampling from correlation distributions in the case of linear cryptanalysis. 
+1. [Introduction](#introduction)
+2. [What is *cryptagraph*?](#what)
+3. [Okay, what's the catch?](#catch)
+4. [Compiling and Running](#install)
+5. [Supported Ciphers](#ciphers)
+6. [Usage Example](#example)
+7. [Visualising with `graphtool`](#graphtool)
+8. [How does all this work?](#background)
+9. [Adding Ciphers](#adding)
 
-cryptagraph was born out of a simple frustration: linear and differential cryptanalysis is in principle easy, but finding good approximations and differentials is often a painful process. Indeed, we often found ourselves implementing cipher specific tools with ad hoc search algorithms that couldn't easily be used on other ciphers. 
+# What is *cryptagraph*? <a name="what"></a>
+*cryptagraph* is a tool for linear and differential cryptanalysis of block ciphers. More specifically, *cryptagraph* allows you to search for good linear approximations or differentials of block ciphers, as well as randomly sampling from correlation distributions in the case of linear cryptanalysis. 
 
-While different tools have been proposed in the literature with similar goals to cryptagraph, we see two main drawbacks with these. Firstly, they are almost always based on MILP or SAT. Thus, they require that a user knows how to model the cipher and search criteria in these frameworks. Moreover, MILP and SAT are very general tools, which means that they might not exploit very specific properties of the problem. Secondly, the proposed tools almost always focus on finding either the best trail, or finding one trail at a time. If a linear approximation or differential consists of several billion trails, this seems inefficient. 
+*cryptagraph* was born out of a simple frustration: linear and differential cryptanalysis is in principle easy, but finding good approximations and differentials is often a painful process. Indeed, we often found ourselves implementing cipher specific tools with ad hoc search algorithms that couldn't easily be used on other ciphers. 
 
-cryptagraph tries to address these issues by:
+While different tools have been proposed in the literature with similar goals to *cryptagraph*, we see two main drawbacks with these. Firstly, they are almost always based on MILP or SAT. Thus, they require that a user knows how to model the cipher and search criteria in these frameworks. Moreover, MILP and SAT are very general tools, which means that they might not exploit very specific properties of the problem. Secondly, the proposed tools almost always focus on finding either the best trail, or finding one trail at a time. If a linear approximation or differential consists of several billion trails, this seems inefficient. 
+
+*cryptagraph* tries to address these issues by:
 - Using an algorithm specifically designed for linear/differential trail search. Specifically, all trails in a specific subspace are found simultaneously, making it feasible to find a very large number of trails per approximation/differential.
 - Making it easy to add new ciphers to the tool. In fact, adding ciphers to the tool is more or less the same as implementing the cipher -- no need to mess around with CNFs, etc. (Admittedly, there are some caveats to this step. See the next section for details). 
 
 It is our hope that these properties will help researchers to find better attacks on existing ciphers, as well as help cipher designers make more informed decisions. 
 
-# Okay, what's the catch?
-The problem that cryptagraph tries to solve is basically this: Given an incredibly huge, directed, multistage graph, approximate the sum of the length of all paths between a vertex in the first stage and the last stage. This turns out to be a really hard problem if we want to make the approximation as good as possible. Thus, cryptagraph has some limitations.
+# Okay, what's the catch? <a name="catch"></a>
+The problem that *cryptagraph* tries to solve is basically this: Given an incredibly huge, directed, multistage graph, approximate the sum of the length of all paths between a vertex in the first stage and the last stage. This turns out to be a really hard problem if we want to make the approximation as good as possible. Thus, *cryptagraph* has some limitations.
 
 ### Cipher support
-Currently, cryptagraph only supports a specific range of block ciphers. The limitations are outlined below.
+Currently, *cryptagraph* only supports a specific range of block ciphers. The limitations are outlined below.
 - SPN ciphers with a round function that can somehow be expressed as an application of parallel S-boxes, followed by some linear function. A prime example of this would be the AES. 
-- Feistel ciphers with SPN-like round functions are supported, but many of the optimisations cryptagraph uses only applies to SPN ciphers. Thus, expect poorer results for Feistel ciphers. Hopefully, we'll figure out how to improve this. 
+- Feistel ciphers with SPN-like round functions are supported, but many of the optimisations *cryptagraph* uses only applies to SPN ciphers. Thus, expect poorer results for Feistel ciphers. Hopefully, we'll figure out how to improve this. 
 - Block sizes up to 128 bits are supported. 
 - The use of different S-boxes inside the round function is supported. However, the use of different S-boxes in different rounds is not. 
 - Ciphers with a Prince-like structure (i.e. with reflection in the middle) are supported. 
 - ARX and Addtion-RX ciphers are not currently supported. We have some ideas on how to do this, but haven't implemented it yet. 
 
 ### Resource requirements
-While cryptagraph has been tuned to be relatively fast and use relatively little memory, it can't perform magic. Thus, the resource usage can get pretty heavy. For serious use, we recommend having a high-performance computing cluster on hand. 
+While *cryptagraph* has been tuned to be relatively fast and use relatively little memory, it can't perform magic. Thus, the resource usage can get pretty heavy. For serious use, we recommend having a high-performance computing cluster on hand. 
 
- - **CPU:** Most of the code is fully threaded, so cryptagraph will happily use all the cores you give it. Additionally, it scales fairly well, so the more cores the merrier.
- - **RAM:** The memory usage is highly dependent on the specific cipher and search space. We have done a lot to minimise RAM consumption, but if we chose a large enough search space, cryptagraph will easily consume more than 250 GB of RAM. Basically, the more accurate results you want, the more memory you will likely need. 
+ - **CPU:** Most of the code is fully threaded, so *cryptagraph* will happily use all the cores you give it. Additionally, it scales fairly well, so the more cores the merrier.
+ - **RAM:** The memory usage is highly dependent on the specific cipher and search space. We have done a lot to minimise RAM consumption, but if we chose a large enough search space, *cryptagraph* will easily consume more than 250 GB of RAM. Basically, the more accurate results you want, the more memory you will likely need. 
 
 
-# Compiling and Running
+# Compiling and Running <a name="install"></a>
 
-## Compiling cryptagraph
-In order to compile cryptagraph, you will need the nightly verson of the rust compiler, `rustc`. The easiest way to do this is to install the rust toolchain using `rustup`. For instructions, click [here](https://rustup.rs/). Once installed, you can set the nightly compiler as your default by running
+## Compiling *cryptagraph*
+In order to compile *cryptagraph*, you will need the nightly verson of the rust compiler, `rustc`. The easiest way to do this is to install the rust toolchain using `rustup`. For instructions, click [here](https://rustup.rs/). Once installed, you can set the nightly compiler as your default by running
 ```
 rustup default nightly
 ```
-You can then compile cryptagraph using the following commands.
+You can then compile *cryptagraph* using the following commands.
 ```
 git clone https://gitlab.com/psve/cryptagraph
-cd cryptagraph/src
+cd *cryptagraph*/src
 cargo build --release
 ```
 
-## Running cryptagraph
-cryptagraph has two modes: `search` and `dist`. The `search` mode will try to find good approximations or differentials, while the `dist` mode will allow you to sample key-dependent linear correlations. For more details, see the example section.
+## Running *cryptagraph*
+*cryptagraph* has two modes: `search` and `dist`. The `search` mode will try to find good approximations or differentials, while the `dist` mode will allow you to sample key-dependent linear correlations. For more details, see the example section.
 
 **Search Mode**
 Search mode can be invoked by calling `cryptagraph search`. It takes nine parameters.
@@ -74,7 +84,7 @@ Distribution mode can be invoked by calling `cryptagraph dist`. It takes six par
  - `--output` (`-o`): Path to a file where the results will be saved. The file `file_name.corrs` will be generated. 
  - `--mask_in` (`-i`): (*Optional*) Path to a file which restricts the input and output values of the approximations/differentials. Each line of the file must have the form `input,output` where both values are in hexadecimal without the `0x` prefix. 
 
-# Supported Ciphers
+# Supported Ciphers <a name="ciphers"></a>
 The following ciphers are currently supported. 
 | Cipher | Name |
 |---|---|
@@ -102,8 +112,8 @@ SKINNY-64 | skinny64
 SKINNY-128 | skinny128
 TWINE | twine
 
-# Usage Example
-We will demonstrate how to use cryptagraph by using it to find linear approximations for 22 rounds of the block cipher PRESENT. We do this by running the command
+# Usage Example <a name="example"></a>
+We will demonstrate how to use *cryptagraph* by using it to find linear approximations for 22 rounds of the block cipher PRESENT. We do this by running the command
 ```
 cryptagraph search --type linear --cipher present --rounds 22 --patterns 900 --anchors 0
 ```
@@ -209,7 +219,7 @@ Approximation: (000000000000000000000a0000000000,0000000000000000200000002000200
 Approximation: (000000000000000000000a0000000000,00000000000000000080000000800080) [66232114, -58.69704433392103]
 Approximation: (000000000000000000000a0000000000,00000000000000008000000080008000) [66232114, -58.69704433392103]
 ```
-We first see a graph generation stage, in which a graph representing linear trails is generated. Then, this graph is searched in order to find good linear approximations. The input and output masks for the 20 best approximations found are output, as well as the number of linear trails and the ELP for each approximation. cryptagraph tells us that it found a total of 253209895592119 (2<sup>47.85</sup>) trails across 22794018 approximations in just 10 seconds. For the best approximation, we found 86698690 trails for a total ELP of 2<sup>58.53</sup>. 
+We first see a graph generation stage, in which a graph representing linear trails is generated. Then, this graph is searched in order to find good linear approximations. The input and output masks for the 20 best approximations found are output, as well as the number of linear trails and the ELP for each approximation. *cryptagraph* tells us that it found a total of 253209895592119 (2<sup>47.85</sup>) trails across 22794018 approximations in just 10 seconds. For the best approximation, we found 86698690 trails for a total ELP of 2<sup>58.53</sup>. 
 
 If we next want to take a closer look at the key-dependent correlation distribution of these approximations, we need to first add the `--mask_out` option to the above call. Say we use the command
 ```
@@ -217,7 +227,7 @@ cryptagraph search --type linear --cipher present --rounds 22 --patterns 900 --a
 ```
 A file called `present.set` will be created which we can pass to the distribution mode, e.g. by running
 ```
-crytagraph dist --cipher present --rounds 22 --keys 1000 --masks present.set --mask_in present.io --output present
+cryptagraph dist --cipher present --rounds 22 --keys 1000 --masks present.set --mask_in present.io --output present
 ```
 The file `present.io` contains a list of the 20 approximations we found above. We get the following output
 ```
@@ -232,8 +242,8 @@ Generation finished. [74.2320677459993 s]
 ```
 A CSV file `present.corrs` with the result is generated. The first header line of the file contains the names of the approximations. Each subsequent line is a list of 20 correlations, one for each approximation, generated for a specific master key. 
 
-# Visualising with `graphtool`
-By specifying the `--file_graph` option, the python module `graphtool` (found [here](https://graph-tool.skewed.de/)) can be used to visualise the search graph generated by cryptagraph (warning: the resulting output file when using this option can be very large). 
+# Visualising with `graphtool` <a name="graphtool"></a>
+By specifying the `--file_graph` option, the python module `graphtool` (found [here](https://graph-tool.skewed.de/)) can be used to visualise the search graph generated by *cryptagraph* (warning: the resulting output file when using this option can be very large). 
 
 For example, if we run 
 ```
@@ -242,8 +252,8 @@ cryptagraph -t linear -c mantis -r 4 -p 2000 -g mantis
 a file `mantis.graph` is generated. The `graph_plot.py` script found in the `utility` folder can the be used to generate the following picture. 
 ![](mantis.png)
 
-# How does all this work?
-If you want to know more about the algorithm cryptagraph uses you can read (most of) the details in our paper "Generating Graphs Packed with Paths" published in Transactions on Symmetric Cryptology 2018, Issue 3. The paper can be accessed for free [here](foo.bar). 
+# How does all this work? <a name="background"></a>
+If you want to know more about the algorithm *cryptagraph* uses you can read (most of) the details in our paper "Generating Graphs Packed with Paths" published in Transactions on Symmetric Cryptology 2018, Issue 3. The paper can be accessed for free [here](https://tosc.iacr.org/index.php/ToSC/issue/archive). 
 
 If you want to know more about the rust library, you can view the code documentation by running
 ```
@@ -252,5 +262,5 @@ cargo doc --no-deps --open
 
 If you, after reading all that, have any ideas on how to improve the algorithm, please do let us know! 
 
-# Adding Ciphers
+# Adding Ciphers <a name="adding"></a>
 
