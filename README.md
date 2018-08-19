@@ -55,7 +55,7 @@ rustup default nightly
 You can then compile *cryptagraph* using the following commands.
 ```
 git clone https://gitlab.com/psve/cryptagraph
-cd *cryptagraph*/src
+cd cryptagraph/src
 cargo build --release
 ```
 
