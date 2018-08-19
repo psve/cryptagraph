@@ -62,7 +62,7 @@ cargo build --release
 ## Running *cryptagraph*
 *cryptagraph* has two modes: `search` and `dist`. The `search` mode will try to find good approximations or differentials, while the `dist` mode will allow you to sample key-dependent linear correlations. For more details, see the example section.
 
-**Search Mode**
+#### Search Mode
 Search mode can be invoked by calling `cryptagraph search`. It takes nine parameters.
 
  - `--type` (`-t`): Either `linear` or `differential`, depending on the type of property to search for.
@@ -75,7 +75,7 @@ Search mode can be invoked by calling `cryptagraph search`. It takes nine parame
  - `--mask_out` (`-o`): (*Optional*) Path to a file where the result will be saved. The file `file_name.set` will be generated.
  - `--file_graph` (`-g`): (*Optional*) Path to a file where graph data will be saved. This can be used to visualise the search graph. See the section on `graphtool` for details. 
 
-**Dist Mode**
+#### Dist Mode
 Distribution mode can be invoked by calling `cryptagraph dist`. It takes six parameters.
  - `--cipher` (`-c`): The cipher to generate correlations for.
  - `--rounds` (`-r`): The number of rounds to generate correlations for.
@@ -86,31 +86,33 @@ Distribution mode can be invoked by calling `cryptagraph dist`. It takes six par
 
 # Supported Ciphers <a name="ciphers"></a>
 The following ciphers are currently supported. 
-| Cipher | Name |
-|---|---|
-AES | aes
-EPCBC(48,96) | epcbc48
-EPCBC(96,96) | epcbc96
-Fly | fly
-GIFT-64 | gift64
-GIFT-128 | gift128
-Iceberg | iceberg
-Khazad | khazad
-KLEIN | klein
-LED | led
-MANTIS | mantis
-mCrypton | mcrypton
-MIBS | mibs
-Midori | midori
-PRESENT | present
-PRIDE | pride
-PRINCE | prince
-PUFFIN | puffin
-Qarma | qarma
-RECTANGLE | rectangle
-SKINNY-64 | skinny64
-SKINNY-128 | skinny128
-TWINE | twine
+
+| Cipher       | Name        |
+| ------------ | ----------- |
+| AES          | `aes`       |
+| EPCBC(48,96) | `epcbc48`   |
+| EPCBC(96,96) | `epcbc96`   |
+| Fly          | `fly`       |
+| GIFT-64      | `gift64`    |
+| GIFT-128     | `gift128`   |
+| Iceberg      | `iceberg`   |
+| Khazad       | `khazad`    |
+| KLEIN        | `klein`     |
+| LED          | `led`       |
+| MANTIS       | `mantis`    |
+| mCrypton     | `mcrypton`  |
+| MIBS         | `mibs`      |
+| Midori       | `midori`    |
+| PRESENT      | `present`   |
+| PRIDE        | `pride`     |
+| PRINCE       | `prince`    |
+| PUFFIN       | `puffin`    |
+| Qarma        | `qarma`     |
+| RECTANGLE    | `rectangle` |
+| SKINNY-64    | `skinny64`  |
+| SKINNY-128   | `skinny128` |
+| TWINE        | `twine`     |
+
 
 # Usage Example <a name="example"></a>
 We will demonstrate how to use *cryptagraph* by using it to find linear approximations for 22 rounds of the block cipher PRESENT. We do this by running the command
