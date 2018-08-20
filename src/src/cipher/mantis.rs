@@ -132,12 +132,6 @@ impl Cipher for Mantis {
         tmp
     }
 
-    /**
-    Applies the reflection layer for Prince like ciphers. 
-    For all other cipher types, this can remain unimplemented. 
-
-    input   The input to the reflection layer.
-    */
     fn reflection_layer(&self, input: u128) -> u128 {
         // Note that this reflection layer is not as defined in 
         // the specification. It is specified such that if the S-box
@@ -315,15 +309,6 @@ impl Cipher for Mantis {
         String::from("MANTIS")
     }
 
-    /** 
-    Transforms the input and output mask of the S-box layer to an
-    input and output mask of a round.
-    
-    input           Input mask to the S-box layer.
-    output          Output mask to the S-box layer.
-    property_type   Type of the property determining the transform.
-    */
-    #[allow(unused_variables)]
     fn sbox_mask_transform(&self, 
                            input: u128, 
                            output: u128, 
@@ -332,10 +317,6 @@ impl Cipher for Mantis {
         (input, self.linear_layer(output))
     }
 
-    /**
-    Specifies if a pre-whitening key is used. In this case, the key-schedule returns 
-    rounds+1 round keys. 
-    */
     #[inline(always)]
     fn whitening(&self) -> bool {
         true
