@@ -1,7 +1,7 @@
 ![](cryptagraph-logo.png)
 
 # Introduction <a name="introduction"></a>
-*cryptagraph* is a tool for linear and differential cryptanalysis of block ciphers written in rust. *cryptagraph* is meant to make the life of cryptanalysts, as well as cipher designers, easier. *cryptagraph* is licensed under GNU GPL v3.0. 
+*cryptagraph* is a tool for linear and differential cryptanalysis of block ciphers written in Rust. *cryptagraph* is meant to make the life of cryptanalysts, as well as cipher designers, easier. *cryptagraph* is licensed under GNU GPL v3.0. 
 
 1. [Introduction](#introduction)
 2. [What is *cryptagraph*?](#what)
@@ -36,7 +36,7 @@ Currently, *cryptagraph* only supports a specific range of block ciphers. The li
 - Block sizes up to 128 bits are supported. 
 - The use of different S-boxes inside the round function is supported. However, the use of different S-boxes in different rounds is not. 
 - Ciphers with a Prince-like structure (i.e. with reflection in the middle) are supported. 
-- ARX and Addtion-RX ciphers are not currently supported. We have some ideas on how to do this, but haven't implemented it yet. 
+- ARX and And-RX ciphers are not currently supported. We have some ideas on how to do this, but haven't implemented it yet. 
 
 ### Resource requirements
 While *cryptagraph* has been tuned to be relatively fast and use relatively little memory, it can't perform magic. Thus, the resource usage can get pretty heavy. For serious use, we recommend having a high-performance computing cluster on hand. 
@@ -48,7 +48,7 @@ While *cryptagraph* has been tuned to be relatively fast and use relatively litt
 # Compiling and Running <a name="install"></a>
 
 ## Compiling *cryptagraph*
-In order to compile *cryptagraph*, you will need the nightly verson of the rust compiler, `rustc`. The easiest way to do this is to install the rust toolchain using `rustup`. For instructions, click [here](https://rustup.rs/). Once installed, you can set the nightly compiler as your default by running
+In order to compile *cryptagraph*, you will need the nightly verson of the Rust compiler, `rustc`. The easiest way to do this is to install the rust toolchain using `rustup`. For instructions, click [here](https://rustup.rs/). Once installed, you can set the nightly compiler as your default by running
 ```
 rustup default nightly
 ```
@@ -257,7 +257,7 @@ a file `mantis.graph` is generated. The `graph_plot.py` script found in the `uti
 # How does all this work? <a name="background"></a>
 If you want to know more about the algorithm *cryptagraph* uses you can read (most of) the details in our paper "Generating Graphs Packed with Paths" published in Transactions on Symmetric Cryptology 2018, Issue 3. The paper can be accessed for free [here](https://tosc.iacr.org/index.php/ToSC/issue/archive). 
 
-If you want to know more about the rust library, you can view the code documentation by running
+If you want to know more about the Rust library, you can view the code documentation by running
 ```
 cargo doc --no-deps --open
 ```
