@@ -30,7 +30,7 @@ It is our hope that these properties will help researchers to find better attack
 The problem that *cryptagraph* tries to solve is basically this: Given an incredibly huge, directed, multistage graph, approximate the sum of the length of all paths between a vertex in the first stage and the last stage. This turns out to be a really hard problem if we want to make the approximation as good as possible. Thus, *cryptagraph* has some limitations.
 
 ### Cipher support
-Currently, *cryptagraph* only supports a specific range of block ciphers. The limitations are outlined below.
+Currently, *cryptagraph* only supports a specific range of block ciphers. The limitations are outlined below. Note that despite these, *cryptagraph* currently supports 23 different ciphers. 
 - SPN ciphers with a round function that can somehow be expressed as an application of parallel S-boxes, followed by some linear function. A prime example of this would be the AES. 
 - Feistel ciphers with SPN-like round functions are supported, but many of the optimisations *cryptagraph* uses only applies to SPN ciphers. Thus, expect poorer results for Feistel ciphers. Hopefully, we'll figure out how to improve this. 
 - Block sizes up to 128 bits are supported. 
@@ -42,7 +42,7 @@ Currently, *cryptagraph* only supports a specific range of block ciphers. The li
 While *cryptagraph* has been tuned to be relatively fast and use relatively little memory, it can't perform magic. Thus, the resource usage can get pretty heavy. For serious use, we recommend having a high-performance computing cluster on hand. 
 
  - **CPU:** Most of the code is fully threaded, so *cryptagraph* will happily use all the cores you give it. Additionally, it scales fairly well, so the more cores the merrier.
- - **RAM:** The memory usage is highly dependent on the specific cipher and search space. We have done a lot to minimise RAM consumption, but if we chose a large enough search space, *cryptagraph* will easily consume more than 250 GB of RAM. Basically, the more accurate results you want, the more memory you will likely need. 
+ - **RAM:** The memory usage is highly dependent on the specific cipher and search space. We have done a lot to minimise RAM consumption, but if we choose a large enough search space, *cryptagraph* will easily consume more than 250 GB of RAM. Basically, the more accurate results you want, the more memory you will likely need. 
 
 
 # Compiling and Running <a name="install"></a>
@@ -58,6 +58,7 @@ git clone https://gitlab.com/psve/cryptagraph
 cd cryptagraph/src
 cargo build --release
 ```
+The executable can then be found in the `cryptagraph/src/target/release` folder. 
 
 ## Running *cryptagraph*
 *cryptagraph* has two modes: `search` and `dist`. The `search` mode will try to find good approximations or differentials, while the `dist` mode will allow you to sample key-dependent linear correlations. For more details, see the example section.
@@ -221,9 +222,9 @@ Approximation: (000000000000000000000a0000000000,0000000000000000200000002000200
 Approximation: (000000000000000000000a0000000000,00000000000000000080000000800080) [66232114, -58.69704433392103]
 Approximation: (000000000000000000000a0000000000,00000000000000008000000080008000) [66232114, -58.69704433392103]
 ```
-We first see a graph generation stage, in which a graph representing linear trails is generated. Then, this graph is searched in order to find good linear approximations. The input and output masks for the 20 best approximations found are output, as well as the number of linear trails and the ELP for each approximation. *cryptagraph* tells us that it found a total of 253209895592119 (2<sup>47.85</sup>) trails across 22794018 approximations in just 10 seconds. For the best approximation, we found 86698690 trails for a total ELP of 2<sup>58.53</sup>. 
+We first see a graph generation stage, in which a graph representing linear trails is generated. Then, this graph is searched in order to find good linear approximations. The input and output masks for the 20 best approximations found are output, as well as the number of linear trails and the ELP for each approximation. *cryptagraph* tells us that it found a total of 253209895592119 (2<sup>47.85</sup>) trails across 22794018 approximations in just 10 seconds. For the best approximation, we found 86698690 trails for a total ELP of 2<sup>-58.53</sup>. 
 
-If we next want to take a closer look at the key-dependent correlation distribution of these approximations, we need to first add the `--mask_out` option to the above call. Say we use the command
+If we next want to take a closer look at the key-dependent correlation distribution of these approximations, we first need to add the `--mask_out` option to the above call. Say we use the command
 ```
 cryptagraph search --type linear --cipher present --rounds 22 --patterns 900 --anchors 0 --mask_out present
 ```
