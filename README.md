@@ -1,4 +1,4 @@
-![](*cryptagraph*-logo.png)
+![](cryptagraph-logo.png)
 
 # Introduction <a name="introduction"></a>
 *cryptagraph* is a tool for linear and differential cryptanalysis of block ciphers written in rust. *cryptagraph* is meant to make the life of cryptanalysts, as well as cipher designers, easier. *cryptagraph* is licensed under GNU GPL v3.0. 
