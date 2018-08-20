@@ -255,7 +255,7 @@ a file `mantis.graph` is generated. The `graph_plot.py` script found in the `uti
 ![](mantis.png)
 
 # How does all this work? <a name="background"></a>
-If you want to know more about the algorithm *cryptagraph* uses you can read (most of) the details in our paper "Generating Graphs Packed with Paths" published in Transactions on Symmetric Cryptology 2018, Issue 3. The paper can be accessed for free [here](https://tosc.iacr.org/index.php/ToSC/issue/archive). 
+If you want to know more about the algorithm *cryptagraph* uses you can read (most of) the details in our paper "Generating Graphs Packed with Paths" published in Transactions on Symmetric Cryptology 2018, Issue 3. The paper can be accessed for free [here](https://eprint.iacr.org/2018/764). 
 
 If you want to know more about the Rust library, you can view the code documentation by running
 ```
@@ -266,3 +266,13 @@ If you, after reading all that, have any ideas on how to improve the algorithm, 
 
 # Adding Ciphers <a name="adding"></a>
 
+In *cryptagraph* a cipher is essentially a struct which implements the `Cipher` trait. For more information on Rust traits, click [here](https://doc.rust-lang.org/book/second-edition/ch10-02-traits.html). For a good example, see the [SKINNY implementation](https://gitlab.com/psve/cryptagraph/blob/master/src/src/cipher/skinny64.rs). We will breifly cover the most important functions of the `Cipher` trait in the following. 
+
+ - `sbox` should return a reference to a variable of type `Sbox` which represents the S-box used by the cipher. Usually, the given cipher struct contains this variable. Note that `sbox` takes an index as argument, which can be used in the case of multiple different S-boxes being used in each round. 
+ - `linear_layer` (and `linear_layer_inv`) should implement the linear part of the round function (respectively, its inverse), excluding the key addition.
+ - `key_schedule` should return a vector of round-keys (potentially combined with constants). Note that for `r` rounds this should include any whitening keys (see also the `whitening` function of the `Cipher` trait). 
+ - `sbox_mask_transform` should transform a set of input/output masks or differences of the S-boxes layer to a set of input/output masks for a round. For most SPN ciphers, this simply consists of applying the linear layer to the output mask. Note however, that for Feistel ciphers, this transformation is only possible if we consider two rounds of the cipher. Moreover, the transformation for linear approximations and differentials are different. See e.g. the [MIBS implementation](https://gitlab.com/psve/cryptagraph/blob/master/src/src/cipher/mibs.rs) for an example. 
+ - `encrypt` and `decrypt` should simply perform encryption and decryption, and are only included so that tests can be written. 
+ - For Prince-like ciphers, the `reflection_layer` function must be implemented. See the [Prince implementation](https://gitlab.com/psve/cryptagraph/blob/master/src/src/cipher/prince.rs) for an example. 
+
+Finally, note that (aside from `encrypt` and `decrypt`) the `key_schedule` and `whitening` functions are not needed for the `search` mode to work. This can greatly simplify adding ciphers for an initial analysis. 
