@@ -1,7 +1,7 @@
-![](*cryptagraph*-logo.png)
+![](cryptagraph-logo.png)
 
 # Introduction <a name="introduction"></a>
-*cryptagraph* is a tool for linear and differential cryptanalysis of block ciphers written in rust. *cryptagraph* is meant to make the life of cryptanalysts, as well as cipher designers, easier. *cryptagraph* is licensed under GNU GPL v3.0. 
+*cryptagraph* is a tool for linear and differential cryptanalysis of block ciphers written in Rust. *cryptagraph* is meant to make the life of cryptanalysts, as well as cipher designers, easier. *cryptagraph* is licensed under GNU GPL v3.0. 
 
 1. [Introduction](#introduction)
 2. [What is *cryptagraph*?](#what)
@@ -30,25 +30,25 @@ It is our hope that these properties will help researchers to find better attack
 The problem that *cryptagraph* tries to solve is basically this: Given an incredibly huge, directed, multistage graph, approximate the sum of the length of all paths between a vertex in the first stage and the last stage. This turns out to be a really hard problem if we want to make the approximation as good as possible. Thus, *cryptagraph* has some limitations.
 
 ### Cipher support
-Currently, *cryptagraph* only supports a specific range of block ciphers. The limitations are outlined below.
+Currently, *cryptagraph* only supports a specific range of block ciphers. The limitations are outlined below. Note that despite these, *cryptagraph* currently supports 23 different ciphers. 
 - SPN ciphers with a round function that can somehow be expressed as an application of parallel S-boxes, followed by some linear function. A prime example of this would be the AES. 
 - Feistel ciphers with SPN-like round functions are supported, but many of the optimisations *cryptagraph* uses only applies to SPN ciphers. Thus, expect poorer results for Feistel ciphers. Hopefully, we'll figure out how to improve this. 
 - Block sizes up to 128 bits are supported. 
 - The use of different S-boxes inside the round function is supported. However, the use of different S-boxes in different rounds is not. 
 - Ciphers with a Prince-like structure (i.e. with reflection in the middle) are supported. 
-- ARX and Addtion-RX ciphers are not currently supported. We have some ideas on how to do this, but haven't implemented it yet. 
+- ARX and And-RX ciphers are not currently supported. We have some ideas on how to do this, but haven't implemented it yet. 
 
 ### Resource requirements
 While *cryptagraph* has been tuned to be relatively fast and use relatively little memory, it can't perform magic. Thus, the resource usage can get pretty heavy. For serious use, we recommend having a high-performance computing cluster on hand. 
 
  - **CPU:** Most of the code is fully threaded, so *cryptagraph* will happily use all the cores you give it. Additionally, it scales fairly well, so the more cores the merrier.
- - **RAM:** The memory usage is highly dependent on the specific cipher and search space. We have done a lot to minimise RAM consumption, but if we chose a large enough search space, *cryptagraph* will easily consume more than 250 GB of RAM. Basically, the more accurate results you want, the more memory you will likely need. 
+ - **RAM:** The memory usage is highly dependent on the specific cipher and search space. We have done a lot to minimise RAM consumption, but if we choose a large enough search space, *cryptagraph* will easily consume more than 250 GB of RAM. Basically, the more accurate results you want, the more memory you will likely need. 
 
 
 # Compiling and Running <a name="install"></a>
 
 ## Compiling *cryptagraph*
-In order to compile *cryptagraph*, you will need the nightly verson of the rust compiler, `rustc`. The easiest way to do this is to install the rust toolchain using `rustup`. For instructions, click [here](https://rustup.rs/). Once installed, you can set the nightly compiler as your default by running
+In order to compile *cryptagraph*, you will need the nightly verson of the Rust compiler, `rustc`. The easiest way to do this is to install the rust toolchain using `rustup`. For instructions, click [here](https://rustup.rs/). Once installed, you can set the nightly compiler as your default by running
 ```
 rustup default nightly
 ```
@@ -58,6 +58,7 @@ git clone https://gitlab.com/psve/cryptagraph
 cd cryptagraph/src
 cargo build --release
 ```
+The executable can then be found in the `cryptagraph/src/target/release` folder. 
 
 ## Running *cryptagraph*
 *cryptagraph* has two modes: `search` and `dist`. The `search` mode will try to find good approximations or differentials, while the `dist` mode will allow you to sample key-dependent linear correlations. For more details, see the example section.
@@ -221,9 +222,9 @@ Approximation: (000000000000000000000a0000000000,0000000000000000200000002000200
 Approximation: (000000000000000000000a0000000000,00000000000000000080000000800080) [66232114, -58.69704433392103]
 Approximation: (000000000000000000000a0000000000,00000000000000008000000080008000) [66232114, -58.69704433392103]
 ```
-We first see a graph generation stage, in which a graph representing linear trails is generated. Then, this graph is searched in order to find good linear approximations. The input and output masks for the 20 best approximations found are output, as well as the number of linear trails and the ELP for each approximation. *cryptagraph* tells us that it found a total of 253209895592119 (2<sup>47.85</sup>) trails across 22794018 approximations in just 10 seconds. For the best approximation, we found 86698690 trails for a total ELP of 2<sup>58.53</sup>. 
+We first see a graph generation stage, in which a graph representing linear trails is generated. Then, this graph is searched in order to find good linear approximations. The input and output masks for the 20 best approximations found are output, as well as the number of linear trails and the ELP for each approximation. *cryptagraph* tells us that it found a total of 253209895592119 (2<sup>47.85</sup>) trails across 22794018 approximations in just 10 seconds. For the best approximation, we found 86698690 trails for a total ELP of 2<sup>-58.53</sup>. 
 
-If we next want to take a closer look at the key-dependent correlation distribution of these approximations, we need to first add the `--mask_out` option to the above call. Say we use the command
+If we next want to take a closer look at the key-dependent correlation distribution of these approximations, we first need to add the `--mask_out` option to the above call. Say we use the command
 ```
 cryptagraph search --type linear --cipher present --rounds 22 --patterns 900 --anchors 0 --mask_out present
 ```
@@ -255,9 +256,9 @@ a file `mantis.graph` is generated. The `graph_plot.py` script found in the `uti
 ![](mantis.png)
 
 # How does all this work? <a name="background"></a>
-If you want to know more about the algorithm *cryptagraph* uses you can read (most of) the details in our paper "Generating Graphs Packed with Paths" published in Transactions on Symmetric Cryptology 2018, Issue 3. The paper can be accessed for free [here](https://tosc.iacr.org/index.php/ToSC/issue/archive). 
+If you want to know more about the algorithm *cryptagraph* uses you can read (most of) the details in our paper "Generating Graphs Packed with Paths" published in Transactions on Symmetric Cryptology 2018, Issue 3. The paper can be accessed for free [here](https://eprint.iacr.org/2018/764). 
 
-If you want to know more about the rust library, you can view the code documentation by running
+If you want to know more about the Rust library, you can view the code documentation by running
 ```
 cargo doc --no-deps --open
 ```
@@ -266,3 +267,13 @@ If you, after reading all that, have any ideas on how to improve the algorithm, 
 
 # Adding Ciphers <a name="adding"></a>
 
+In *cryptagraph* a cipher is essentially a struct which implements the `Cipher` trait. For more information on Rust traits, click [here](https://doc.rust-lang.org/book/second-edition/ch10-02-traits.html). For a good example, see the [SKINNY implementation](https://gitlab.com/psve/cryptagraph/blob/master/src/src/cipher/skinny64.rs). We will breifly cover the most important functions of the `Cipher` trait in the following. 
+
+ - `sbox` should return a reference to a variable of type `Sbox` which represents the S-box used by the cipher. Usually, the given cipher struct contains this variable. Note that `sbox` takes an index as argument, which can be used in the case of multiple different S-boxes being used in each round. 
+ - `linear_layer` (and `linear_layer_inv`) should implement the linear part of the round function (respectively, its inverse), excluding the key addition.
+ - `key_schedule` should return a vector of round-keys (potentially combined with constants). Note that for `r` rounds this should include any whitening keys (see also the `whitening` function of the `Cipher` trait). 
+ - `sbox_mask_transform` should transform a set of input/output masks or differences of the S-boxes layer to a set of input/output masks for a round. For most SPN ciphers, this simply consists of applying the linear layer to the output mask. Note however, that for Feistel ciphers, this transformation is only possible if we consider two rounds of the cipher. Moreover, the transformation for linear approximations and differentials are different. See e.g. the [MIBS implementation](https://gitlab.com/psve/cryptagraph/blob/master/src/src/cipher/mibs.rs) for an example. 
+ - `encrypt` and `decrypt` should simply perform encryption and decryption, and are only included so that tests can be written. 
+ - For Prince-like ciphers, the `reflection_layer` function must be implemented. See the [Prince implementation](https://gitlab.com/psve/cryptagraph/blob/master/src/src/cipher/prince.rs) for an example. 
+
+Finally, note that (aside from `encrypt` and `decrypt`) the `key_schedule` and `whitening` functions are not needed for the `search` mode to work. This can greatly simplify adding ciphers for an initial analysis. 
