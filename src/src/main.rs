@@ -1,6 +1,6 @@
 //! Cryptagraph is a tool for finding linear approximations and differentials of block ciphers. 
 
-#![feature(iterator_step_by, try_from)]
+#![feature(try_from)]
 
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate smallvec;

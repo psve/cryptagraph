@@ -41,7 +41,7 @@ impl Khazad {
 
         Khazad{size: 64, 
                 key_size: 128, 
-                sbox: Sbox::new(8, table)}
+                sbox: Sbox::new(8, 8, table)}
     }
 }
 
@@ -60,7 +60,7 @@ impl Cipher for Khazad {
     }
 
     fn num_sboxes(&self) -> usize {
-        self.size / self.sbox.size()
+        self.size / self.sbox.size_in()
     }
 
     fn sbox(&self, _i: usize) -> &Sbox {

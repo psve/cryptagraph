@@ -28,7 +28,7 @@ impl Pride {
         Pride {
             size: 64, 
             key_size: 128, 
-            sbox: Sbox::new(4, table),
+            sbox: Sbox::new(4, 4, table),
             perm,
             iperm
         }
@@ -104,7 +104,7 @@ impl Cipher for Pride {
     }
 
     fn num_sboxes(&self) -> usize {
-        self.size / self.sbox.size()
+        self.size / self.sbox.size_in()
     }
 
     fn sbox(&self, _i: usize) -> &Sbox {

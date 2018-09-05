@@ -35,8 +35,8 @@ impl Present {
         let itable: Vec<_> = From::from(&Present::ISBOX[0..]);
         Present{size: 64,
                 key_size: 80,
-                sbox: Sbox::new(4, table),
-                isbox: Sbox::new(4, itable)}
+                sbox: Sbox::new(4, 4, table),
+                isbox: Sbox::new(4, 4, itable)}
     }
 }
 
@@ -54,7 +54,7 @@ impl Cipher for Present {
     }
 
     fn num_sboxes(&self) -> usize {
-        self.size / self.sbox.size()
+        self.size / self.sbox.size_in()
     }
 
     fn sbox(&self, _i: usize) -> &Sbox {

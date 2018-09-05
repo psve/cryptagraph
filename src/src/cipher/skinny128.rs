@@ -69,8 +69,8 @@ impl Skinny128 {
                          0x11,0x22,0x04];
         Skinny128{size: 128, 
                key_size: 128,
-               sbox: Sbox::new(8, table), 
-               isbox: Sbox::new(8, itable), 
+               sbox: Sbox::new(8, 8, table), 
+               isbox: Sbox::new(8, 8, itable), 
                shift_rows_table,
                ishift_rows_table,
                key_permute,
@@ -92,7 +92,7 @@ impl Cipher for Skinny128 {
     }
 
     fn num_sboxes(&self) -> usize {
-        self.size / self.sbox.size()
+        self.size / self.sbox.size_in()
     }
 
     fn sbox(&self, _i: usize) -> &Sbox {

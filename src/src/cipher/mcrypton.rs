@@ -32,10 +32,10 @@ impl Mcrypton {
                          0xcccc, 0xbbbb, 0x5555, 0xaaaa, 0x7777, 0xeeee, 0xffff];
         Mcrypton{size: 64, 
                key_size: 64,
-               sbox0: Sbox::new(4, table0), 
-               sbox1: Sbox::new(4, table1), 
-               sbox2: Sbox::new(4, table2), 
-               sbox3: Sbox::new(4, table3), 
+               sbox0: Sbox::new(4, 4, table0), 
+               sbox1: Sbox::new(4, 4, table1), 
+               sbox2: Sbox::new(4, 4, table2), 
+               sbox3: Sbox::new(4, 4, table3), 
                constants}
     }
 }
@@ -54,7 +54,7 @@ impl Cipher for Mcrypton {
     }
 
     fn num_sboxes(&self) -> usize {
-        self.size / self.sbox0.size()
+        self.size / self.sbox0.size_in()
     }
 
     fn sbox(&self, i: usize) -> &Sbox {

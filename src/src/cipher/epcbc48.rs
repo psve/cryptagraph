@@ -34,8 +34,8 @@ impl Epcbc48 {
         let itable: Vec<_> = From::from(&Epcbc48::ISBOX[0..]);
         Epcbc48{size: 48,
                 key_size: 96,
-                sbox: Sbox::new(4, table),
-                isbox: Sbox::new(4, itable)}
+                sbox: Sbox::new(4, 4, table),
+                isbox: Sbox::new(4, 4, itable)}
     }
 }
 
@@ -54,7 +54,7 @@ impl Cipher for Epcbc48 {
     }
 
     fn num_sboxes(&self) -> usize {
-        self.size / self.sbox.size()
+        self.size / self.sbox.size_in()
     }
 
     fn sbox(&self, _i: usize) -> &Sbox {

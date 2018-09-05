@@ -1,6 +1,7 @@
 //! Functions for generating a graph representing a set of properties over multiple 
 //! rounds of a cipher.
 
+use std::cmp;
 use crossbeam_utils;
 use fnv::{FnvHashSet, FnvHashMap};
 use indexmap::{IndexMap, IndexSet};
@@ -282,7 +283,9 @@ fn add_middle_edges(graph: &MultistageGraph,
             scope.spawn(move || {
                 // For SPN ciphers, we can exploit the structure when the compressiond is 
                 // sufficiently coarse and not generate all properties explicitly 
-                if block >= thread_properties.cipher().sbox(0).size()  && 
+                let max_sbox_size = cmp::max(thread_properties.cipher().sbox(0).size_in(),
+                                             thread_properties.cipher().sbox(0).size_out());
+                if block >= max_sbox_size  && 
                    thread_properties.cipher().structure() == CipherStructure::Spn {
                     thread_properties.set_type_output();
                 } else {
@@ -359,7 +362,9 @@ fn add_outer_edges(graph: &MultistageGraph,
             scope.spawn(move || {
                 // For SPN ciphers, we can exploit the structure when the compressiond is 
                 // sufficiently coarse and not generate all properties explicitly 
-                if block >= thread_properties.cipher().sbox(0).size()  && 
+                let max_sbox_size = cmp::max(thread_properties.cipher().sbox(0).size_in(),
+                                             thread_properties.cipher().sbox(0).size_out());
+                if block >= max_sbox_size  && 
                    thread_properties.cipher().structure() == CipherStructure::Spn {
                     thread_properties.set_type_output();
                 } else {
@@ -517,6 +522,12 @@ fn anchor_ends(cipher: &dyn Cipher,
 fn patch(cipher: &dyn Cipher,
          property_type: PropertyType,
          graph: &mut MultistageGraph) {
+    // TODO: Find a way to handle this case
+    if cipher.sbox(0).size_in() != cipher.sbox(0).size_out() {
+        println!("Aborting patching due to S-box truncating/expanding S-box");
+        return;
+    }
+
     // Get LATs/DDTs
     let mut tables = Vec::new();
 
@@ -528,8 +539,10 @@ fn patch(cipher: &dyn Cipher,
     }
     
     // Set mask and level to match S-box size
-    let mask = (1 << cipher.sbox(0).size()) - 1;
-    let level = 3 - (cipher.sbox(0).size() as f32).log2()  as usize;
+    let mask_in = (1 << cipher.sbox(0).size_in()) - 1;
+    let mask_out = (1 << cipher.sbox(0).size_out()) - 1;
+    // NOTE: This wouldn't work for truncating/expanding S-boxes
+    let level = 3 - (cipher.sbox(0).size_in() as f32).log2()  as usize;
     
     let mut progress_bar = ProgressBar::new(graph.num_vertices());
     
@@ -566,8 +579,8 @@ fn patch(cipher: &dyn Cipher,
                     let mut value = 1.0;
 
                     for (i, table) in tables.iter().enumerate() {
-                        let a = (input  >> (i * cipher.sbox(i).size())) & mask;
-                        let b = (out_inv >> (i * cipher.sbox(i).size())) & mask;
+                        let a = (input  >> (i * cipher.sbox(i).size_in())) & mask_in;
+                        let b = (out_inv >> (i * cipher.sbox(i).size_out())) & mask_out;
 
                         let v = table[a as usize][b as usize];
 

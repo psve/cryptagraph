@@ -289,21 +289,21 @@ impl MaskMap {
                            output: u128,
                            limit: usize)
                            -> Vec<(u128, f64)> {
-        let mask = cipher.sbox(0).mask();
-        let size = cipher.sbox(0).size();
+        let mask_out = cipher.sbox(0).mask_out();
+        let size_out = cipher.sbox(0).size_out();
         let trivial = match self.property_type {
-            PropertyType::Linear => f64::from(1 << (size-1)),
-            PropertyType::Differential => f64::from(1 << size)
+            PropertyType::Linear => f64::from(cipher.sbox(0).linear_balance()),
+            PropertyType::Differential => f64::from(cipher.sbox(0).differential_trivial())
         };
 
         // Extract active positions and output values
         let mut active = Vec::new();
 
         for i in 0..cipher.num_sboxes() {
-            let x = (output >> (i*size)) & mask;
+            let x = (output >> (i*size_out)) & mask_out;
 
             if x != 0 {
-                active.push(((i*size), i, x));
+                active.push(((i*size_out), i, x));
             }
         }
 
@@ -345,21 +345,21 @@ impl MaskMap {
                             input: u128,
                             limit: usize)
                             -> Vec<(u128, f64)> {
-        let mask = cipher.sbox(0).mask();
-        let size = cipher.sbox(0).size();
+        let mask_in = cipher.sbox(0).mask_in();
+        let size_in = cipher.sbox(0).size_in();
         let trivial = match self.property_type {
-            PropertyType::Linear => f64::from(1 << (size-1)),
-            PropertyType::Differential => f64::from(1 << size)
+            PropertyType::Linear => f64::from(cipher.sbox(0).linear_balance()),
+            PropertyType::Differential => f64::from(cipher.sbox(0).differential_trivial())
         };
 
         // Extract active positions and output values
         let mut active = Vec::new();
 
         for i in 0..cipher.num_sboxes() {
-            let x = (input >> (i*size)) & mask;
+            let x = (input >> (i*size_in)) & mask_in;
 
             if x != 0 {
-                active.push(((i*size), i, x));
+                active.push(((i*size_in), i, x));
             }
         }
 

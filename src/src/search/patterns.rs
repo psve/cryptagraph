@@ -140,10 +140,12 @@ enum PatternStatus {
 /// the same value and activate the same S-boxes. Internally, only active positions are stored. 
 #[derive(Clone)]
 pub struct SboxPattern {
-    pattern: Vec<(usize, usize, i16)>,
+    pattern: Vec<(usize, usize, usize, i16)>,
     property: Property,
-    mask: u128,
-    sbox_size: usize,
+    mask_in: u128,
+    mask_out: u128,
+    // sbox_size_in: usize,
+    // sbox_size_out: usize,
     counter: Vec<usize>,
     status: PatternStatus,
 }
@@ -157,7 +159,7 @@ impl SboxPattern {
         // Get the value of an inactive S-box 
         let non_property = match property_type {
             PropertyType::Linear => cipher.sbox(0).linear_balance(),
-            PropertyType::Differential => 1 << cipher.sbox(0).size(),
+            PropertyType::Differential => cipher.sbox(0).differential_trivial(),
         };
 
         // Collect active S-box positions
@@ -166,7 +168,9 @@ impl SboxPattern {
                                    .map(|x| x.expect("Tried to convert incomplete pattern."))
                                    .enumerate()
                                    .filter(|&(_,x)| x != non_property)
-                                   .map(|(i,x)| (i*cipher.sbox(i).size(), i, x))
+                                   .map(|(i,x)| (i*cipher.sbox(i).size_in(), 
+                                                 i*cipher.sbox(i).size_out(), 
+                                                 i, x))
                                    .collect();
 
         let counter = vec![0; pattern.len()];
@@ -175,8 +179,10 @@ impl SboxPattern {
         SboxPattern {
             pattern, 
             property,
-            mask: ((1 << cipher.sbox(0).size()) - 1) as u128,
-            sbox_size: cipher.sbox(0).size(),
+            mask_in: cipher.sbox(0).mask_in() as u128,
+            mask_out: cipher.sbox(0).mask_out() as u128,
+            // sbox_size_in: cipher.sbox(0).size_in(),
+            // sbox_size_out: cipher.sbox(0).size_out(),
             counter,
             status: PatternStatus::New
         }
@@ -199,7 +205,7 @@ impl SboxPattern {
 
         // Initialise and return first property if the pattern is new
         if self.status == PatternStatus::New {
-            for &(i, j, x) in &self.pattern {
+            for &(i_in, i_out, j, x) in &self.pattern {
                 let sbox_property = match property_filter {
                     PropertyFilter::All   => value_maps[j].get(x).unwrap()[0],
                     PropertyFilter::Input => value_maps[j].get_input(x).unwrap()[0],
@@ -209,8 +215,8 @@ impl SboxPattern {
                 let input = sbox_property.input;
                 let output = sbox_property.output;
 
-                self.property.input ^= input << i;
-                self.property.output ^= output << i;
+                self.property.input ^= input << i_in;
+                self.property.output ^= output << i_out;
             }
 
             self.status = PatternStatus::Old;
@@ -222,9 +228,10 @@ impl SboxPattern {
         for i in 0..self.counter.len() {
             // We can consider counter as a mixed radix number. We simply increment the value of
             // this number. 
-            let idx  = self.pattern[i].0;
-            let sbox = self.pattern[i].1;
-            let val  = self.pattern[i].2;
+            let idx_in  = self.pattern[i].0;
+            let idx_out = self.pattern[i].1;
+            let sbox    = self.pattern[i].2;
+            let val     = self.pattern[i].3;
             let modulus = match property_filter {
                 PropertyFilter::All    => value_maps[sbox].len_of(val),
                 PropertyFilter::Input  => value_maps[sbox].len_of_input(val),
@@ -247,9 +254,9 @@ impl SboxPattern {
             };
 
             self.property.input = 
-                (self.property.input & !(self.mask << idx)) ^ (app.input << idx);
+                (self.property.input & !(self.mask_in << idx_in)) ^ (app.input << idx_in);
             self.property.output = 
-                (self.property.output & !(self.mask << idx)) ^ (app.output << idx);
+                (self.property.output & !(self.mask_out << idx_out)) ^ (app.output << idx_out);
 
             // Continue only if current "digit" rolls over
             if self.counter[i] != 0 {
@@ -262,17 +269,17 @@ impl SboxPattern {
 
     /// Returns the number of properties described by this pattern.
     pub fn num_prop(&self, value_maps: &[ValueMap]) -> usize {
-        self.pattern.iter().fold(1, |acc, &(_, j, x)| acc * value_maps[j].len_of(x))
+        self.pattern.iter().fold(1, |acc, &(_, _, j, x)| acc * value_maps[j].len_of(x))
     }
 
     /// Returns the number of inputs described by this pattern.
     pub fn num_input(&self, value_maps: &[ValueMap]) -> usize {
-        self.pattern.iter().fold(1, |acc, &(_, j, x)| acc * value_maps[j].len_of_input(x))
+        self.pattern.iter().fold(1, |acc, &(_, _, j, x)| acc * value_maps[j].len_of_input(x))
     }
 
     /// Returns the number of outputs described by this pattern.
     pub fn num_output(&self, value_maps: &[ValueMap]) -> usize {
-        self.pattern.iter().fold(1, |acc, &(_, j, x)| acc * value_maps[j].len_of_output(x))
+        self.pattern.iter().fold(1, |acc, &(_, _, j, x)| acc * value_maps[j].len_of_output(x))
     }
 }
 

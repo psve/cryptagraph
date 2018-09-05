@@ -42,7 +42,7 @@ impl Midori {
                          0x1101111110010000];
         Midori{size: 64, 
                key_size: 128,
-               sbox: Sbox::new(4, table), 
+               sbox: Sbox::new(4, 4, table), 
                shuffle_cell_table,
                ishuffle_cell_table,
                constants}
@@ -63,7 +63,7 @@ impl Cipher for Midori {
     }
 
     fn num_sboxes(&self) -> usize {
-        self.size / self.sbox.size()
+        self.size / self.sbox.size_in()
     }
 
     fn sbox(&self, _i: usize) -> &Sbox {

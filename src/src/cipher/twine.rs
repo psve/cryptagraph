@@ -31,7 +31,7 @@ impl Twine {
 
         Twine{size: 64, 
               key_size: 80,
-              sbox: Sbox::new(4, table), 
+              sbox: Sbox::new(4, 4, table), 
               permutation, 
               inverse,
               constants}
@@ -52,7 +52,7 @@ impl Cipher for Twine {
     }
 
     fn num_sboxes(&self) -> usize {
-        self.size / self.sbox.size()
+        self.size / self.sbox.size_in()
     }
 
     fn sbox(&self, _i: usize) -> &Sbox {

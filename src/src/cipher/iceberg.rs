@@ -59,8 +59,8 @@ impl Iceberg {
 
         Iceberg{size: 64, 
                 key_size: 128,
-                sbox_8: Sbox::new(8, sbox_8),
-                sbox_4: Sbox::new(4, sbox_4),
+                sbox_8: Sbox::new(8, 8, sbox_8),
+                sbox_4: Sbox::new(4, 4, sbox_4),
                 table_64,
                 table_d,
                 table_4,
@@ -83,7 +83,7 @@ impl Cipher for Iceberg {
     }
 
     fn num_sboxes(&self) -> usize {
-        self.size / self.sbox_8.size()
+        self.size / self.sbox_8.size_in()
     }
 
     fn sbox(&self, _i: usize) -> &Sbox {

@@ -27,8 +27,8 @@ impl Mibs {
         let itable = vec![7, 14, 12, 2, 0, 9, 13, 10, 3, 15, 5, 8, 6, 4, 11, 1];
         Mibs{size: 64,
              key_size: 64, 
-             sbox: Sbox::new(4, table),
-             isbox: Sbox::new(4, itable)}
+             sbox: Sbox::new(4, 4, table),
+             isbox: Sbox::new(4, 4, itable)}
     }
 }
 
@@ -47,7 +47,7 @@ impl Cipher for Mibs {
     }
 
     fn num_sboxes(&self) -> usize {
-        self.size / self.sbox.size()
+        self.size / self.sbox.size_in()
     }
 
     fn sbox(&self, _i: usize) -> &Sbox {

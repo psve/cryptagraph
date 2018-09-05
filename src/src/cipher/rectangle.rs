@@ -37,8 +37,8 @@ impl Rectangle {
                          0x1e,0x1c,0x18,0x11,0x03,0x06,0x0d,0x1b,0x17,0x0e,0x1d];
         Rectangle{size: 64, 
                   key_size: 80,
-                  sbox: Sbox::new(4, table),
-                  isbox: Sbox::new(4, itable),
+                  sbox: Sbox::new(4, 4, table),
+                  isbox: Sbox::new(4, 4, itable),
                   constants}
     }
 }
@@ -58,7 +58,7 @@ impl Cipher for Rectangle {
     }
 
     fn num_sboxes(&self) -> usize {
-        self.size / self.sbox.size()
+        self.size / self.sbox.size_in()
     }
 
     fn sbox(&self, _i: usize) -> &Sbox {
