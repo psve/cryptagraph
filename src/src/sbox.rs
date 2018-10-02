@@ -117,7 +117,7 @@ impl Sbox {
 
     /// Returns the output size of the S-box in bits.
     pub fn size_out(&self) -> usize {
-        self.in_size
+        self.out_size
     }
 
     /// Returns a reference to the LAT of the S-box.
