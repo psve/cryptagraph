@@ -76,6 +76,7 @@ pub mod epcbc96;
 pub mod fly;
 pub mod gift64;
 pub mod gift128;
+pub mod halka;
 pub mod iceberg;
 pub mod khazad;
 pub mod klein;
@@ -104,6 +105,7 @@ pub fn name_to_cipher(name : &str) -> Option<Box<dyn Cipher>> {
         "fly"       => Some(Box::new(fly::Fly::new())),
         "gift64"    => Some(Box::new(gift64::Gift64::new())),
         "gift128"   => Some(Box::new(gift128::Gift128::new())),
+        "halka"     => Some(Box::new(halka::Halka::new())),
         "iceberg"   => Some(Box::new(iceberg::Iceberg::new())),
         "khazad"    => Some(Box::new(khazad::Khazad::new())),
         "klein"     => Some(Box::new(klein::Klein::new())),
