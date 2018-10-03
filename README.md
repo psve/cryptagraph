@@ -91,6 +91,7 @@ The following ciphers are currently supported.
 | Cipher       | Name        |
 | ------------ | ----------- |
 | AES          | `aes`       |
+| BORON        | `boron`     |
 | EPCBC(48,96) | `epcbc48`   |
 | EPCBC(96,96) | `epcbc96`   |
 | Fly          | `fly`       |
