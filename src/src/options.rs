@@ -8,7 +8,7 @@ pub enum CryptagraphOptions {
         #[structopt(short = "c", long = "cipher")]
         /**
         Name of the cipher to analyse. Current available ciphers are: 
-        aes, epcbc48, epcbc96, fly, gift64, gift128, iceberg, khazad, klein, led, mantis, mcrypton, mibs, midori, present, pride, prince, puffin, qarma, rectangle, skinny64, skinny128, twine
+        aes, boron, des, epcbc48, epcbc96, fly, gift64, gift128, halka, iceberg, khazad, klein, led, mantis, mcrypton, mibs, midori, present, pride, prince, puffin, qarma, rectangle, skinny64, skinny128, twine
         */
         cipher: String,
 

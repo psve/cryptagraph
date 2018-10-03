@@ -71,6 +71,7 @@ pub trait Cipher: Sync {
 
 pub mod aes;
 pub mod boron;
+pub mod des;
 pub mod epcbc48;
 pub mod epcbc96;
 pub mod fly;
@@ -100,6 +101,7 @@ pub fn name_to_cipher(name : &str) -> Option<Box<dyn Cipher>> {
     match name {
         "aes"       => Some(Box::new(aes::Aes::new())),
         "boron"     => Some(Box::new(boron::Boron::new())),
+        "des"       => Some(Box::new(des::Des::new())),
         "epcbc48"   => Some(Box::new(epcbc48::Epcbc48::new())),
         "epcbc96"   => Some(Box::new(epcbc96::Epcbc96::new())),
         "fly"       => Some(Box::new(fly::Fly::new())),
