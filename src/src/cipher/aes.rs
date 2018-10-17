@@ -1,8 +1,8 @@
 //! Implementation of AES with 128 bit key.
 
-use sbox::Sbox;
-use cipher::{CipherStructure, Cipher};
-use property::PropertyType;
+use crate::sbox::Sbox;
+use crate::cipher::{CipherStructure, Cipher};
+use crate::property::PropertyType;
 
 /*****************************************************************
                             AES

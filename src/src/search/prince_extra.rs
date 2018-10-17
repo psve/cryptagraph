@@ -3,8 +3,8 @@
 use fnv::FnvHashSet;
 use indexmap::IndexMap;
 
-use cipher::*;
-use search::graph::MultistageGraph;
+use crate::cipher::*;
+use crate::search::graph::MultistageGraph;
 
 /// Special graph pruning for Prince-like ciphers. The last layer is also pruned with regards to the
 /// reflection function. 

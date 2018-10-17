@@ -5,11 +5,11 @@ use std::fs::{File, OpenOptions};
 use std::io::{Write, BufReader, BufRead};
 use time;
 
-use cipher::Cipher;
-use search::find_properties::parallel_find_properties;
-use search::graph::MultistageGraph;
-use search::graph_generate::generate_graph;
-use property::{Property, PropertyType};
+use crate::cipher::Cipher;
+use crate::search::find_properties::parallel_find_properties;
+use crate::search::graph::MultistageGraph;
+use crate::search::graph_generate::generate_graph;
+use crate::property::{Property, PropertyType};
 
 /// Dumps a graph to file for plotting with python graph-tool. 
 fn dump_to_graph_tool(graph: &MultistageGraph,

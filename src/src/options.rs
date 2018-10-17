@@ -1,4 +1,4 @@
-use property::PropertyType;
+use crate::property::PropertyType;
 
 #[derive(Clone, StructOpt)]
 #[structopt(name = "Cryptagraph", about = "Search for linear and differential properties of block ciphers.")]

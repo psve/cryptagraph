@@ -12,12 +12,12 @@ use std::sync::mpsc;
 use std::sync::{Arc, Barrier};
 use time;
 
-use cipher::*;
-use search::graph::MultistageGraph;
-use search::prince_extra::{prince_pruning, prince_modification};
-use property::{PropertyType, PropertyFilter, MaskMap};
-use search::single_round::SortedProperties;
-use utility::{ProgressBar, compress};
+use crate::cipher::*;
+use crate::search::graph::MultistageGraph;
+use crate::search::prince_extra::{prince_pruning, prince_modification};
+use crate::property::{PropertyType, PropertyFilter, MaskMap};
+use crate::search::single_round::SortedProperties;
+use crate::utility::{ProgressBar, compress};
 
 // The number of threads used for parallel calls is fixed
 lazy_static! {

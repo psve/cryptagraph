@@ -1,7 +1,7 @@
 //! A trait for representing ciphers as well as several cipher implementations.
 
-use sbox::Sbox;
-use property::PropertyType;
+use crate::sbox::Sbox;
+use crate::property::PropertyType;
 
 /// Different type of ciphers.
 #[derive(PartialEq, Eq)]

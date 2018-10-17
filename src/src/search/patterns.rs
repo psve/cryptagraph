@@ -4,8 +4,8 @@ use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
-use cipher::Cipher;
-use property::{Property, PropertyType, PropertyFilter, ValueMap};
+use crate::cipher::Cipher;
+use crate::property::{Property, PropertyType, PropertyFilter, ValueMap};
 
 /// An internal representation of a partial S-box pattern. An S-box pattern describes a
 /// truncated property, but where the value is specified for each S-box.

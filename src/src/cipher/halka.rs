@@ -1,8 +1,8 @@
 //! Implementation of Halka.
 
-use sbox::Sbox;
-use cipher::{CipherStructure, Cipher};
-use property::PropertyType;
+use crate::sbox::Sbox;
+use crate::cipher::{CipherStructure, Cipher};
+use crate::property::PropertyType;
 
 /*****************************************************************
                             Halka

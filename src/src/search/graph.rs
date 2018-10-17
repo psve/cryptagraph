@@ -151,14 +151,14 @@ impl MultistageGraph {
             if let Some(vertex) = mid[0].get(&label) {
                 if let Some(other_stage) = before.last_mut() {
                     for other in vertex.predecessors.keys() {
-                        let mut other_vertex = other_stage.get_mut(&other).expect("Error 5");
+                        let other_vertex = other_stage.get_mut(&other).expect("Error 5");
                         other_vertex.successors.remove(&label);
                     }
                 }
 
                 if let Some(other_stage) = after.first_mut() {
                     for other in vertex.successors.keys() {
-                        let mut other_vertex = other_stage.get_mut(&other).expect("Error 6");
+                        let other_vertex = other_stage.get_mut(&other).expect("Error 6");
                         other_vertex.predecessors.remove(&label);
                     }
                 }

@@ -5,10 +5,10 @@ use fnv::FnvHashSet;
 use num_cpus;
 use std::sync::mpsc;
 
-use cipher::Cipher;
-use property::{Property, PropertyType, PropertyFilter, ValueMap};
-use search::patterns::{SboxPattern, get_sorted_patterns};
-use utility::{ProgressBar, compress};
+use crate::cipher::Cipher;
+use crate::property::{Property, PropertyType, PropertyFilter, ValueMap};
+use crate::search::patterns::{SboxPattern, get_sorted_patterns};
+use crate::utility::{ProgressBar, compress};
 
 // The number of threads used for parallel calls is fixed
 lazy_static! {

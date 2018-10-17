@@ -1,6 +1,6 @@
 //! Type representing an S-box. 
 
-use utility::parity_masks;
+use crate::utility::parity_masks;
 use std::convert::TryInto;
 
 /// A structure that represents an S-box.

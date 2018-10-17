@@ -23,9 +23,9 @@ pub mod sbox;
 pub mod search;
 pub mod utility;
 
-use options::CryptagraphOptions;
+use crate::options::CryptagraphOptions;
 use structopt::StructOpt;
-use cipher::*;
+use crate::cipher::*;
 
 fn main() {
     match CryptagraphOptions::from_args() {

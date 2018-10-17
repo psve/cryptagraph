@@ -8,9 +8,9 @@ use std::f64;
 use std::sync::mpsc;
 use time;
 
-use search::graph::MultistageGraph;
-use property::{Property, PropertyType};
-use utility::ProgressBar;
+use crate::search::graph::MultistageGraph;
+use crate::property::{Property, PropertyType};
+use crate::utility::ProgressBar;
 
 /***********************************************************************************************/
 

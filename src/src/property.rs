@@ -9,8 +9,8 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use fnv::FnvHashMap;
 use std::collections::hash_map::Keys;
-use sbox::Sbox;
-use cipher::Cipher;
+use crate::sbox::Sbox;
+use crate::cipher::Cipher;
 
 /// Types of properties currently representable. 
 #[derive(PartialEq, Eq, Clone, Copy)]

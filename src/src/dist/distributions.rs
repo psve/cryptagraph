@@ -5,8 +5,8 @@ use std::io::{BufRead, BufReader, Write};
 use fnv::FnvHashMap;
 use time;
 
-use cipher::*;
-use dist::correlations::get_correlations;
+use crate::cipher::*;
+use crate::dist::correlations::get_correlations;
 
 /// Reads a file of allowed input and output values and stores them in a hash set.  The values in
 /// the files are assumed to be in hexadecimals, without the '0x' prefix, and input/output masks

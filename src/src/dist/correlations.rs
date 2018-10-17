@@ -6,9 +6,9 @@ use fnv::FnvHashMap;
 use num_cpus;
 use std::sync::mpsc;
 
-use cipher::{Cipher, CipherStructure};
-use property::Property;
-use utility::{ProgressBar, parity};
+use crate::cipher::{Cipher, CipherStructure};
+use crate::property::Property;
+use crate::utility::{ProgressBar, parity};
 
 /// Part of a linear approximation table for an entire round function of a cipher.
 #[derive(Clone)]
@@ -219,8 +219,8 @@ pub fn get_correlations(cipher: &dyn Cipher,
         for t in 0..num_threads {
             let result_tx = result_tx.clone();
             let keys = keys.clone();
-            let mut lat = lat.clone();
-            let mut lat_inv = lat_inv.clone();
+            let lat = lat.clone();
+            let lat_inv = lat_inv.clone();
 
             scope.spawn(move || {
                 let mut pool = MaskPool::new();
