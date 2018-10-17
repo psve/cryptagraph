@@ -166,8 +166,21 @@ pub fn search_properties(cipher: &Cipher,
 
     println!("\n--------------------------------------- GENERATING GRAPH ---------------------------------------\n");
 
+    let foo = time::precise_time_s();
+    crate::search::graph_generate_new::generate_graph(cipher, property_type, rounds, patterns, 
+                                                      anchors, &allowed);
+    println!("New gen: [{} s]", time::precise_time_s()-foo);
+
+    let bar = time::precise_time_s();
+
+    while time::precise_time_s() - bar < 5.0 {
+        continue
+    }
+
+    let foo = time::precise_time_s();
     let graph = generate_graph(cipher, property_type, rounds, patterns, 
                                anchors, &allowed);
+    println!("Old gen: [{} s]", time::precise_time_s()-foo);
 
     if let Some(path) = file_graph {
         dump_to_graph_tool(&graph, &path);

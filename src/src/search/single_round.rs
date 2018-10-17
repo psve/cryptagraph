@@ -7,6 +7,7 @@ use std::sync::mpsc;
 
 use crate::cipher::Cipher;
 use crate::property::{Property, PropertyType, PropertyFilter, ValueMap};
+use crate::search::graph_new::MultistageGraph;
 use crate::search::patterns::{SboxPattern, get_sorted_patterns};
 use crate::utility::{ProgressBar, compress};
 
@@ -154,6 +155,79 @@ impl<'a> SortedProperties<'a> {
                             }
                         }
 
+                        good_patterns[pattern_idx] |= good;
+                        
+                        if t == 0 {
+                            progress_bar.increment();
+                        }
+                    }
+
+                    // Keep only good patterns
+                    let mut new_patterns = vec![];
+
+                    for (i, keep) in good_patterns.iter().enumerate() {
+                        if *keep {
+                            new_patterns.push(thread_properties.patterns()[i].clone());
+                        }
+                    }
+
+                    result_tx.send(new_patterns).expect("Thread could not send result");
+                });
+            }
+        });
+
+        // Collect patterns from each thread and update properties
+        let mut new_patterns = Vec::new();
+
+        for _ in 0..*THREADS {
+            let mut thread_result = result_rx.recv().expect("Main could not receive result");
+            new_patterns.append(&mut thread_result);
+        }
+
+        self.sbox_patterns = new_patterns;
+        self.set_type_all();
+    }
+
+    pub fn remove_dead_patterns_new(&mut self,
+                                graph: &MultistageGraph, 
+                                level: usize) {
+        let (result_tx, result_rx) = mpsc::channel();
+        
+        // Start scoped worker threads
+        crossbeam_utils::thread::scope(|scope| {
+            for t in 0..*THREADS {
+                let mut thread_properties = self.clone();
+                let result_tx = result_tx.clone();
+
+                scope.spawn(move || {
+                    thread_properties.set_type_input();
+                    
+                    // Split the S-box patterns equally across threads
+                    // Note that this does not equally split the number of properties across threads,
+                    // but hopefully it is close enough
+                    let tmp = thread_properties.patterns().iter()
+                                                             .cloned()
+                                                             .skip(t)
+                                                             .step_by(*THREADS)
+                                                             .collect();
+                    thread_properties.set_patterns(&tmp);
+
+                    // Find patterns to keep
+                    let mut good_patterns = vec![false; thread_properties.len_patterns()];
+                    let mut progress_bar = ProgressBar::new(thread_properties.len());
+
+                    for (property, pattern_idx) in &thread_properties {
+                        // Skip if pattern is already marked good
+                        if good_patterns[pattern_idx] {
+                            if t == 0 {
+                                progress_bar.increment();
+                            }
+                            continue;
+                        }
+
+                        let input = compress(property.input, level);
+                        let good = graph.forward_edges().contains_key(&input) 
+                                || graph.backward_edges().contains_key(&input);
                         good_patterns[pattern_idx] |= good;
                         
                         if t == 0 {
