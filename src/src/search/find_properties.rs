@@ -12,6 +12,11 @@ use crate::search::graph::MultistageGraph;
 use crate::property::{Property, PropertyType};
 use crate::utility::ProgressBar;
 
+// The number of threads used for parallel calls is fixed
+lazy_static! {
+    static ref THREADS: usize = num_cpus::get();
+}
+
 /***********************************************************************************************/
 
 /// Find all properties for a given graph starting with a specific input value. 
@@ -76,18 +81,17 @@ pub fn parallel_find_properties(graph: &MultistageGraph,
              graph.get_stage(0).unwrap().len(), graph.num_edges());
 
     let start = time::precise_time_s();
-    let num_threads = num_cpus::get();
     let (result_tx, result_rx) = mpsc::channel();
 
     // Start scoped worker threads
     crossbeam_utils::thread::scope(|scope| {
-        for t in 0..num_threads {
+        for t in 0..*THREADS {
             let result_tx = result_tx.clone();
 
             scope.spawn(move || {
                 let mut progress_bar = ProgressBar::new(graph.get_stage(0).unwrap()
                                                              .keys().skip(t)
-                                                             .step_by(num_threads).len());
+                                                             .step_by(*THREADS).len());
                 let rounds = graph.stages()-1;
                 let mut result = vec![];
                 let mut min_value = 1.0_f64;
@@ -95,7 +99,7 @@ pub fn parallel_find_properties(graph: &MultistageGraph,
                 let mut paths = 0;
 
                 // Split input values between threads and call find_properties
-                for &input in graph.get_stage(0).unwrap().keys().skip(t).step_by(num_threads) {
+                for &input in graph.get_stage(0).unwrap().keys().skip(t).step_by(*THREADS) {
                     let properties = find_properties(&graph, property_type, input as u128, 0, rounds);
                     num_found += properties.len();
                     
@@ -132,7 +136,7 @@ pub fn parallel_find_properties(graph: &MultistageGraph,
     let mut min_value = 1.0_f64;;
     let mut result = vec![];
 
-    for _ in 0..num_threads {
+    for _ in 0..*THREADS {
         let mut thread_result = result_rx.recv().expect("Main could not receive result");
         
         result.append(&mut thread_result.0);
