@@ -69,30 +69,6 @@ impl MultistageGraph {
         self.stages += 1;
     }
 
-    fn add_edge(&mut self, tail: u128, head: u128, stage: usize, length: f64) {
-        if stage >= self.stages {
-            return
-        }
-
-        let entry_tail = self.forward.entry(tail).or_insert_with(FnvHashMap::default);
-        let entry_head = entry_tail.entry(head).or_insert((0, length));
-
-        if entry_head.1 != length {
-            panic!("Lengths are incompatible.");
-        }
-
-        entry_head.0 |= 1 << stage;
-        
-        let entry_head = self.backward.entry(head).or_insert_with(FnvHashMap::default);
-        let entry_tail = entry_head.entry(tail).or_insert((0, length));
-
-        if entry_tail.1 != length {
-            panic!("Lengths are incompatible.");
-        }
-
-        entry_tail.0 |= 1 << stage;
-    }
-
     pub fn add_edges(&mut self, tail: u128, head: u128, stages: u64, length: f64) {
         if stages == 0 || stages >= (1 << self.stages) {
             return
@@ -115,57 +91,6 @@ impl MultistageGraph {
         }
 
         entry_tail.0 |= stages;
-    }
-
-    fn remove_edge(&mut self, tail: u128, head: u128, stage: usize) {
-        if stage >= self.stages {
-            return
-        }
-
-        let empty_edge;
-
-        let entry_tail_f = match self.forward.get_mut(&tail) {
-            Some(entry_tail_f) => {
-                match entry_tail_f.get_mut(&head) {
-                    Some(entry_head_f) => {
-                        entry_head_f.0 &= !(1 << stage);
-
-                        empty_edge = entry_head_f.0 == 0;
-                    },
-                    None => return,
-                };
-
-                entry_tail_f
-            },
-            None => return,
-        };
-
-        let entry_head_b = match self.backward.get_mut(&head) {
-            Some(entry_head_b) => {
-                match entry_head_b.get_mut(&tail) {
-                    Some(entry_tail_b) => {
-                        entry_tail_b.0 &= !(1 << stage);
-                    },
-                    None => return,
-                };
-
-                entry_head_b
-            },
-            None => return,
-        };
-
-        if empty_edge {
-            entry_tail_f.remove(&head);
-            entry_head_b.remove(&tail);
-        }
-
-        if entry_tail_f.is_empty() {
-            self.forward.remove(&tail);
-        }
-
-        if entry_head_b.is_empty() {
-            self.backward.remove(&head);
-        }
     }
 
     fn remove_edges(&mut self, tail: u128, head: u128, stages: u64) {
@@ -219,15 +144,21 @@ impl MultistageGraph {
         }
     }
 
-    pub fn has_vertex(&self, v: u128, stage: usize) -> bool {
-        if let Some(heads) = self.forward.get(&v) {
-            for (stages, _) in heads.values() {
-                if ((stages >> stage) & 0x1) == 1 {
-                    return true
+    pub fn has_vertex_outgoing(&self, v: u128, stage: usize) -> bool {
+        if stage < self.stages {
+            if let Some(heads) = self.forward.get(&v) {
+                for (stages, _) in heads.values() {
+                    if ((stages >> stage) & 0x1) == 1 {
+                        return true
+                    }
                 }
             }
         }
 
+        false
+    }
+
+    pub fn has_vertex_incoming(&self, v: u128, stage: usize) -> bool {
         if stage > 0 {
             if let Some(tails) = self.backward.get(&v) {
                 for (stages, _) in tails.values() {
@@ -242,6 +173,11 @@ impl MultistageGraph {
     }
 
 
+    pub fn has_vertex(&self, v: u128, stage: usize) -> bool {
+        return self.has_vertex_outgoing(v, stage) || self.has_vertex_incoming(v, stage)
+    }
+
+
     pub fn get_edge(&self, tail: u128, head: u128) -> u64 {
         if let Some(heads) = self.forward.get(&tail) {
             if let Some(&(edge, _)) = heads.get(&head) {
@@ -250,18 +186,6 @@ impl MultistageGraph {
         }
 
         0
-    }
-
-    pub fn has_edge(&self, tail: u128, head: u128) -> bool {
-        if let Some(heads) = self.forward.get(&tail) {
-            if heads.contains_key(&head) {
-                return true
-            } else {
-                return false
-            }
-        }
-
-        false
     }
 
     fn has_predecessors(&self, v: u128) -> u64 {
