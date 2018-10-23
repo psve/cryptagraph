@@ -352,27 +352,8 @@ fn anchor_ends(cipher: &dyn Cipher,
     let rounds = graph.stages();
 
     // Collect vertices in the second/second to last layer.
-    let mut start_labels = Vec::new();
-
-    for (tail, heads) in graph.forward_edges() {
-        for &(stages, _) in heads.values() {
-            if ((stages >> 1) & 0x1) == 1 {
-                start_labels.push((*tail, 0));
-                break;
-            }
-        }
-    }
-
-    let mut end_labels = Vec::new();
-
-    for (head, tails) in graph.backward_edges() {
-        for &(stages, _) in tails.values() {
-            if ((stages >> (rounds-2)) & 0x1) == 1 {
-                end_labels.push((*head, rounds-1));
-                break;
-            }
-        }
-    }
+    let start_labels: Vec<_> = graph.get_vertices_outgoing(0).iter().map(|&x| (x, 0)).collect();
+    let end_labels: Vec<_> = graph.get_vertices_incoming(rounds-1).iter().map(|&x| (x, rounds-1)).collect();
 
     // Determine number of anchors to add
     let num_labels = start_labels.len() + end_labels.len();

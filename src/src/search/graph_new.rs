@@ -188,6 +188,40 @@ impl MultistageGraph {
         0
     }
 
+    pub fn get_vertices_outgoing(&self, stage: usize) -> Vec<u128> {
+        let mut vertices = Vec::new();
+
+        for (tail, heads) in self.forward_edges() {
+            for &(stages, _) in heads.values() {
+                if ((stages >> stage) & 0x1) == 1 {
+                    vertices.push(*tail);
+                    break;
+                }
+            }
+        }
+
+        vertices
+    }
+
+    pub fn get_vertices_incoming(&self, stage: usize) -> Vec<u128> {
+        if stage < 1 {
+            return Vec::new();
+        }
+
+        let mut vertices = Vec::new();
+
+        for (head, tails) in self.backward_edges() {
+            for &(stages, _) in tails.values() {
+                if ((stages >> (stage-1)) & 0x1) == 1 {
+                    vertices.push(*head);
+                    break;
+                }
+            }
+        }
+
+        vertices
+    }
+
     fn has_predecessors(&self, v: u128) -> u64 {
         if let Some(entry) = self.backward.get(&v) {
             return entry.values().fold(0, |sum, x| sum | x.0) << 1
