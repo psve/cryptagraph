@@ -20,6 +20,7 @@ lazy_static! {
 
 /// Finds the set of all vertices that have both an input and an output.
 fn get_vertex_set(properties: &SortedProperties,
+                  previous: Option<&FnvHashSet<u128>>,
                   level: usize)
                   -> FnvHashSet<u128> {
     let (result_tx, result_rx) = mpsc::channel();
@@ -48,6 +49,18 @@ fn get_vertex_set(properties: &SortedProperties,
                 let mut progress_bar = ProgressBar::new(thread_properties.len());
 
                 for (property, _) in &thread_properties {
+                    if let Some(previous) = previous {
+                        let old = compress(property.input, level-1);
+
+                        if !previous.contains(&old) {
+                            if t == 0 {
+                                progress_bar.increment();
+                            }
+
+                            continue
+                        }
+                    }
+
                     let new = compress(property.input, level);
                     input_set.insert(new);
 
@@ -501,7 +514,7 @@ pub fn generate_graph(cipher: &dyn Cipher,
             println!("Finding vertex set: {} properties ({} input, {} output).", 
                 num_prop, num_input, num_output);
             let start = time::precise_time_s();
-            let vertex_set = get_vertex_set(&properties, 3);
+            let vertex_set = get_vertex_set(&properties, None, 3);
             println!("{} vertices in set [{} s]\n", 
                     vertex_set.len(), time::precise_time_s()-start);
 
@@ -515,6 +528,7 @@ pub fn generate_graph(cipher: &dyn Cipher,
         if rounds > 4 {
             let rounds = rounds - 2;
             graph = MultistageGraph::new(rounds);
+            let mut vertex_set = FnvHashSet::default();
 
             // Iteratively generate graphs with finer compression functions
             for level in 1..4 {
@@ -537,7 +551,11 @@ pub fn generate_graph(cipher: &dyn Cipher,
 
                 let start = time::precise_time_s();
                 println!("Finding vertex set.");
-                let vertex_set = get_vertex_set(&properties, level);
+                vertex_set = if level == 1 {
+                    get_vertex_set(&properties, None, level)
+                } else {
+                    get_vertex_set(&properties, Some(&vertex_set), level)
+                };
                 println!("{} vertices in set [{} s]\n", 
                         vertex_set.len(), time::precise_time_s()-start);
 
