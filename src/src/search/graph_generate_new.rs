@@ -1,5 +1,5 @@
 use crossbeam_utils;
-use fnv::FnvHashSet;
+use fnv::{FnvHashSet, FnvHashMap};
 use indexmap::IndexMap;
 use itertools::interleave;
 use num_cpus;
@@ -434,6 +434,114 @@ fn anchor_ends(cipher: &dyn Cipher,
     }
 }
 
+/// Patches the graph, i.e. adds any missing edges between already existing vertices. 
+fn patch(cipher: &dyn Cipher,
+         property_type: PropertyType,
+         graph: &mut MultistageGraph) 
+         -> usize {
+    // TODO: Find a way to handle this case
+    if cipher.sbox(0).size_in() != cipher.sbox(0).size_out() {
+        println!("Aborting patching due to S-box truncating/expanding S-box");
+        return 0;
+    }
+
+    // Get LATs/DDTs
+    let mut tables = Vec::new();
+
+    for i in 0..cipher.num_sboxes() {
+        match property_type {
+            PropertyType::Linear       => tables.push(cipher.sbox(i).lat().clone()),
+            PropertyType::Differential => tables.push(cipher.sbox(i).ddt().clone()),
+        }
+    }
+    
+    // Set mask and level to match S-box size
+    let mask_in = (1 << cipher.sbox(0).size_in()) - 1;
+    let mask_out = (1 << cipher.sbox(0).size_out()) - 1;
+    // NOTE: This wouldn't work for truncating/expanding S-boxes
+    let level = 3 - (cipher.sbox(0).size_in() as f32).log2()  as usize;
+    
+    let num_vertices = (0..=graph.stages()).fold(0, |num, x| num + graph.num_vertices(x));
+    let mut progress_bar = ProgressBar::new(num_vertices);
+    let mut num_added = 0;
+    
+    // Initialise maps for first stage
+    let stages = graph.stages();
+    let mut input_map = FnvHashMap::default();
+    let mut input_map_tmp = FnvHashMap::default();
+
+    let vertices = graph.get_vertices_outgoing(0);
+
+    for &input in &vertices{
+        let input_c = compress(input, level);
+        let entry = input_map.entry(input_c).or_insert_with(Vec::new);
+        entry.push(input);
+        progress_bar.increment();
+    }    
+
+    for s in 0..stages {
+        let vertices = if s+1 == graph.stages() {
+            graph.get_vertices_incoming(s+1)
+        } else {
+            graph.get_vertices_outgoing(s+1)
+        };
+
+        for &output in &vertices {
+            // Build map for next stage
+            let input_c = compress(output, level);
+            let entry = input_map_tmp.entry(input_c).or_insert_with(Vec::new);
+            entry.push(output);
+
+            // Check if the output has non-zero correlation with any input
+            let out_inv = cipher.linear_layer_inv(output);
+
+            if let Some(inputs) = input_map.get(&compress(out_inv, level)) {
+                for &input in inputs {
+                    if ((graph.get_edge(input, output) >> s) & 0x1) == 1 {
+                        continue;
+                    }
+
+                    // Calculate length
+                    let mut value = 1.0;
+
+                    for (i, table) in tables.iter().enumerate() {
+                        let a = (input  >> (i * cipher.sbox(i).size_in())) & mask_in;
+                        let b = (out_inv >> (i * cipher.sbox(i).size_out())) & mask_out;
+
+                        let v = table[a as usize][b as usize];
+
+                        if v == 0 {
+                            value = 0.0;
+                            break;
+                        }
+
+                        match property_type {
+                            PropertyType::Linear => {
+                                value *= (2.0 * v as f64 / tables[i][0][0] as f64 - 1.0).powi(2);
+                            },
+                            PropertyType::Differential => {
+                                value *= v as f64 / tables[i][0][0] as f64;  
+                            }
+                        }
+                    }
+
+                    if value != 0.0 {
+                        graph.add_edges(input, output, 1 << s, value);
+                        num_added += 1;
+                    }
+                }
+            }
+
+            progress_bar.increment();
+        }
+
+        input_map = input_map_tmp.clone();
+        input_map_tmp.clear();
+    }
+
+    num_added
+}
+
 /// Creates a graph that represents a set of properties over a number of rounds for a 
 /// given cipher. 
 
@@ -561,13 +669,13 @@ pub fn generate_graph(cipher: &dyn Cipher,
 
                 let start = time::precise_time_s();
                 graph.prune(0, rounds);
-                println!("Pruned graph has {} edges [{} s]\n", 
+                println!("Pruned graph has {} edges [{} s]", 
                         graph.num_edges(), time::precise_time_s()-start);
 
                 // Update filters and remove dead patterns if we havn't generated the final graph
                 if level != 3 {
                     let start = time::precise_time_s();
-                    println!("Removing dead patterns.");
+                    println!("\nRemoving dead patterns.");
                     let patterns_before = properties.len_patterns();
                     properties.remove_dead_patterns_new(&graph, level);
                     let patterns_after = properties.len_patterns();
@@ -579,6 +687,9 @@ pub fn generate_graph(cipher: &dyn Cipher,
             }
         }
     }
+
+    println!("#### Final steps: {} properties ({} input, {} output). ####\n", 
+        num_prop, num_input, num_output);
 
     // Extending
     if rounds > 2 {
@@ -599,6 +710,15 @@ pub fn generate_graph(cipher: &dyn Cipher,
         anchor_ends(cipher, property_type, &mut graph, anchors, input_allowed, output_allowed);
         println!("Anchored graph has {} edges [{} s]\n", 
                  graph.num_edges(), time::precise_time_s()-start);
+    }
+
+    // Patch graph
+    if cipher.structure() != CipherStructure::Feistel {
+        let start = time::precise_time_s();
+        println!("Patching graph.");
+        let added = patch(cipher, property_type, &mut graph);
+        println!("Added {} edges. Patched graph has {} edges [{} s]\n", 
+            added, graph.num_edges(), time::precise_time_s()-start);
     }
     
     let start = time::precise_time_s();
