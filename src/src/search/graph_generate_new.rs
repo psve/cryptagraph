@@ -599,7 +599,15 @@ pub fn generate_graph(cipher: &dyn Cipher,
         println!("Graph has {} edges [{} s]\n", 
             graph.num_edges(), time::precise_time_s()-start);
     } else {
-        if rounds == 2 || rounds == 4 {
+        if rounds == 2 {
+            let start = time::precise_time_s();
+            println!("Generating graph.");
+            graph = gen_with_stages(&mut properties, 2, 0b11, 3, None, None);
+            println!("Graph has {} edges [{} s]\n", 
+                graph.num_edges(), time::precise_time_s()-start);
+        }
+
+        if rounds == 4 {
             println!("Finding vertex set: {} properties ({} input, {} output).", 
                 num_prop, num_input, num_output);
             let start = time::precise_time_s();
