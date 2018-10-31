@@ -3,7 +3,6 @@
 #![feature(try_from)]
 
 #[macro_use] extern crate lazy_static;
-#[macro_use] extern crate smallvec;
 #[macro_use] extern crate structopt_derive;
 
 extern crate crossbeam_utils;
@@ -12,6 +11,7 @@ extern crate indexmap;
 extern crate itertools;
 extern crate num_cpus;
 extern crate rand;
+extern crate smallvec;
 extern crate structopt;
 extern crate time;
 

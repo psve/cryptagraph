@@ -8,6 +8,7 @@ use std::f64;
 use std::sync::mpsc;
 use time;
 
+use crate::cipher::{Cipher, CipherStructure};
 use crate::search::graph::MultistageGraph;
 use crate::property::{Property, PropertyType};
 use crate::utility::ProgressBar;
@@ -17,14 +18,11 @@ lazy_static! {
     static ref THREADS: usize = num_cpus::get();
 }
 
-/***********************************************************************************************/
-
 /// Find all properties for a given graph starting with a specific input value. 
-fn find_properties(graph: &MultistageGraph, 
+fn find_properties(cipher: &Cipher,
+                   graph: &MultistageGraph, 
                    property_type: PropertyType,
-                   input: u128,
-                   start: usize,
-                   stop: usize) 
+                   input: u128) 
                    -> IndexMap<u128, Property> {
     let start_property = Property::new(input, input, 1.0, 1);
     
@@ -34,14 +32,18 @@ fn find_properties(graph: &MultistageGraph,
     edge_map.insert(input, start_property);
 
     // Extend the edge map the desired number of rounds
-    for r in start..stop {
+    for r in 0..graph.stages() {
         let mut new_edge_map = IndexMap::new();
 
         // Go through all edges (i.e. properties (input, output)) in the current map
         for (output, &property) in &edge_map {
             // Look up output in the single round map in order to extend one round
-            if let Some(vertex_ref) = graph.get_vertex(r, *output) {
-                for (&new_output, &length) in &vertex_ref.successors {
+            if let Some(inputs) = graph.forward_edges().get(output) {
+                for (&new_output, &(stages, length)) in inputs.iter() {
+                    if ((stages >> r) & 0x1) != 1 {
+                        continue;
+                    }
+
                     // Either add the new path to the current property or create a new one
                     let new_value = match property_type {
                         PropertyType::Linear => length,
@@ -62,23 +64,64 @@ fn find_properties(graph: &MultistageGraph,
         edge_map = new_edge_map;
     }
 
+    // In case of Prince type cipher, go back through the graph as well
+    if cipher.structure() == CipherStructure::Prince {
+        // First apply reflection layer
+        edge_map = edge_map.iter().map(|(&k, &v)| (cipher.reflection_layer(k), v)).collect();
+
+        // Extend the edge map the desired number of rounds backwards
+        for r in 0..graph.stages() {
+            let mut new_edge_map = IndexMap::new();
+
+            // Go through all backward edges (i.e. properties (input, output)) in the current map
+            for (output, &property) in &edge_map {
+                // Look up output in the single round map in order to extend one round
+                if let Some(inputs) = graph.backward_edges().get(output) {
+                    for (&new_output, &(stages, length)) in inputs.iter() {
+                        if ((stages >> (graph.stages()-1-r)) & 0x1) != 1 {
+                            continue;
+                        }
+
+                        // Either add the new path to the current property or create a new one
+                        let new_value = match property_type {
+                            PropertyType::Linear => length,
+                            PropertyType::Differential => length,
+                        };
+
+                        let entry = new_edge_map.entry(new_output as u128)
+                                                .or_insert(Property::new(property.input,
+                                                                         new_output as u128,
+                                                                         0.0, 0));
+
+                        (*entry).trails += property.trails;
+                        (*entry).value += property.value * new_value;
+                    }
+                }
+            }
+
+            edge_map = new_edge_map;
+        }
+    }
+
     edge_map
 }
 
 /// Find all properties for a given graph in a parallelised way. 
 ///
 /// # Parameters
+/// * `cipher`: The cipher we are analysing.
 /// * `graph`: A graph generated with `generate_graph`.
 /// * `property_type': The type of property the graph represents.
 /// * `allowed`: A set of allowed input-output pairs. Properties not matching these are filtered. 
 /// * `num_keep`: Only the best `num_keep` properties are returned. 
-pub fn parallel_find_properties(graph: &MultistageGraph,
+pub fn parallel_find_properties(cipher: &Cipher,
+                                graph: &MultistageGraph,
                                 property_type: PropertyType,
                                 allowed: &FnvHashSet<(u128, u128)>,
                                 num_keep: usize) 
                                 -> (Vec<Property>, f64, u128) {
     println!("Finding properties ({} input values, {} edges):", 
-             graph.get_stage(0).unwrap().len(), graph.num_edges());
+             graph.num_vertices(0), graph.num_edges());
 
     let start = time::precise_time_s();
     let (result_tx, result_rx) = mpsc::channel();
@@ -89,18 +132,16 @@ pub fn parallel_find_properties(graph: &MultistageGraph,
             let result_tx = result_tx.clone();
 
             scope.spawn(move || {
-                let mut progress_bar = ProgressBar::new(graph.get_stage(0).unwrap()
-                                                             .keys().skip(t)
-                                                             .step_by(*THREADS).len());
-                let rounds = graph.stages()-1;
+                let mut progress_bar = ProgressBar::new((0..graph.num_vertices(0))
+                                                        .skip(t).step_by(*THREADS).len());
                 let mut result = vec![];
                 let mut min_value = 1.0_f64;
                 let mut num_found = 0;
                 let mut paths = 0;
 
                 // Split input values between threads and call find_properties
-                for &input in graph.get_stage(0).unwrap().keys().skip(t).step_by(*THREADS) {
-                    let properties = find_properties(&graph, property_type, input as u128, 0, rounds);
+                for &input in graph.get_vertices_outgoing(0).iter().skip(t).step_by(*THREADS) {
+                    let properties = find_properties(cipher, &graph, property_type, input as u128);
                     num_found += properties.len();
                     
                     for property in properties.values() {

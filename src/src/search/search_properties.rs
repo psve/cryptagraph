@@ -14,7 +14,7 @@ use crate::property::{Property, PropertyType};
 /// Dumps a graph to file for plotting with python graph-tool. 
 fn dump_to_graph_tool(graph: &MultistageGraph,
                       path: &str) {
-    let mut path = path.to_string();
+    /*let mut path = path.to_string();
     path.push_str(".graph");
 
     // Contents of previous files are overwritten
@@ -39,7 +39,7 @@ fn dump_to_graph_tool(graph: &MultistageGraph,
                 writeln!(file, "{},{},{},{}", i, j, i+1, k).expect("Could not write to file.");       
             }
         }
-    }   
+    }*/   
 }
 
 /// Dumps all vertices of a graph to the file <file_mask_out>.set. 
@@ -49,17 +49,9 @@ fn dump_masks(graph: &MultistageGraph,
     file_set_path.push_str(".set");
 
     // Collect edges and vertices
-    let mut mask_set = FnvHashSet::default();
-    let stages = graph.stages();
-
-    for stage in 0..stages-1 {
-        for (&input, vertex_ref) in graph.get_stage(stage).unwrap() {
-            for &output in vertex_ref.successors.keys() {
-                mask_set.insert(input);
-                mask_set.insert(output);
-            }
-        }
-    }
+    let mut mask_set = FnvHashSet::<u128>::default();
+    mask_set.extend(graph.forward_edges().keys());
+    mask_set.extend(graph.backward_edges().keys());
 
     // Contents of previous files are overwritten
     let mut file = OpenOptions::new()
@@ -165,22 +157,9 @@ pub fn search_properties(cipher: &Cipher,
     };
 
     println!("\n--------------------------------------- GENERATING GRAPH ---------------------------------------\n");
-
-    let foo = time::precise_time_s();
-    crate::search::graph_generate_new::generate_graph(cipher, property_type, rounds, patterns, 
-                                                      anchors, &allowed);
-    println!("New gen: [{} s]", time::precise_time_s()-foo);
-
-    let bar = time::precise_time_s();
-
-    while time::precise_time_s() - bar < 5.0 {
-        continue
-    }
-
-    let foo = time::precise_time_s();
+    
     let graph = generate_graph(cipher, property_type, rounds, patterns, 
                                anchors, &allowed);
-    println!("Old gen: [{} s]", time::precise_time_s()-foo);
 
     if let Some(path) = file_graph {
         dump_to_graph_tool(&graph, &path);
@@ -192,7 +171,7 @@ pub fn search_properties(cipher: &Cipher,
 
     println!("\n------------------------------------- FINDING PROPERTIES ---------------------------------------\n");
 
-    let (result, min_value, paths) = parallel_find_properties(&graph,property_type, 
+    let (result, min_value, paths) = parallel_find_properties(cipher, &graph, property_type, 
                                                               &allowed, keep);
     
     println!("\n------------------------------------------ RESULTS ---------------------------------------------\n");

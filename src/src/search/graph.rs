@@ -1,251 +1,397 @@
 //! Types for representing a multistage graph. 
 
 use fnv::FnvHashMap;
-use indexmap::IndexMap;
-use std::mem;
 
-/// A vertex of a graph. The vertex knows its predecessors and successors as well as 
-/// the distances to these.
-#[derive(Clone, Debug)]
-pub struct Vertex {
-    predecessors: FnvHashMap<u128, f64>,
-    pub successors: FnvHashMap<u128, f64>,
+/// Computes the hamming weight of x.
+fn hw(x: u64) -> u64 {
+    let y = [( x & 0xff) as u8,
+             ((x >>  8) & 0xff) as u8,
+             ((x >> 16) & 0xff) as u8,
+             ((x >> 24) & 0xff) as u8,
+             ((x >> 32) & 0xff) as u8,
+             ((x >> 40) & 0xff) as u8,
+             ((x >> 48) & 0xff) as u8,
+             ((x >> 56) & 0xff) as u8];
+
+    hamming::weight(&y[..])
 }
-
-impl Vertex {
-    /// Create a new vertex without any predecessors or successors.
-    fn new() -> Vertex {
-        Vertex {
-            predecessors: FnvHashMap::default(),
-            successors: FnvHashMap::default(),
-        }
-    }
-
-    /// Add a predecessor to the vertex.
-    fn add_predecessor(&mut self, 
-                       predecessor: u128, 
-                       length: f64) {
-        self.predecessors.insert(predecessor, length);
-    }
-
-    /// Add a successor to the vertex.
-    fn add_successor(&mut self, 
-                     successor: u128, 
-                     length: f64) {
-        self.successors.insert(successor, length);
-    }
-
-    /// Checks if the vertex has any predecessors
-    pub fn has_predecessors(&self) -> bool {
-        !self.predecessors.is_empty()
-    }
-
-    /// Checks if the vertex has any successors
-    pub fn has_successors(&self) -> bool {
-        !self.successors.is_empty()
-    }
-}
-
-/*************************************************************************************************/
 
 /// A structure describing a directed multistage graph. 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MultistageGraph {
-    pub vertices: Vec<FnvHashMap<u128, Vertex>>,
+    forward: FnvHashMap<u128, FnvHashMap<u128,(u64, f64)>>,
+    backward: FnvHashMap<u128, FnvHashMap<u128,(u64, f64)>>,
+    stages: usize,
 }
 
 impl MultistageGraph {
     /// Create a new empty multistage graph with a fixed number of stages.
     pub fn new(stages: usize) -> MultistageGraph {
-        let vertices = vec![FnvHashMap::default(); stages];
-
         MultistageGraph {
-            vertices,
+            forward: FnvHashMap::default(),
+            backward: FnvHashMap::default(),
+            stages
         }
     }
 
-    /// Get the number of stages in the graph.
+    /// Get a map of edges indexed tail to head.
+    pub fn forward_edges(&self) -> &FnvHashMap<u128, FnvHashMap<u128,(u64, f64)>> {
+        &self.forward
+    }
+
+    /// Get a mutable map of edges indexed tail to head.
+    fn forward_edges_mut(&mut self) -> &mut FnvHashMap<u128, FnvHashMap<u128,(u64, f64)>> {
+        &mut self.forward
+    }
+
+    /// Get a map of edges indexed head to tail.
+    pub fn backward_edges(&self) -> &FnvHashMap<u128, FnvHashMap<u128,(u64, f64)>> {
+        &self.backward
+    }
+
+    /// Get a mutable map of edges indexed head to tail.
+    fn backward_edges_mut(&mut self) -> &mut FnvHashMap<u128, FnvHashMap<u128,(u64, f64)>> {
+        &mut self.backward
+    }
+
+    /// Get the number of stages.
     pub fn stages(&self) -> usize {
-        self.vertices.len()
+        self.stages
     }
 
-    /// Adds a vertex to the graph.  Does not insert the vertex if a vertex with the same 
-    /// label already exists in the target stage. 
-    ///
-    /// # Panics
-    /// Panics if the target stage doesn't exist.
-    pub fn add_vertex(&mut self, 
-                      stage: usize, 
-                      label: u128) {    
-        self.vertices.get_mut(stage)
-            .expect("Stage out of range")
-            .entry(label)
-            .or_insert_with(Vertex::new);
-    }
+    /// Insert a new stage at the start of the graph.
+    pub fn insert_stage_before(&mut self) {
+        self.stages += 1;
 
-    /// Adds an edge with a given length to the graph. The tail of the edge is at `stage` and
-    // the head of the edge is at `stage+1`. If the endpoints don't exist, the 
-    /// edge isn't added. 
-    ///
-    /// # Panics
-    /// Panics if the target stage or the following stage doesn't exist.
-    pub fn add_edge(&mut self, 
-                    stage: usize, 
-                    from: u128, 
-                    to: u128, 
-                    length: f64) {
-        if self.vertices.get(stage).expect("Stage out of range").contains_key(&from) &&
-           self.vertices.get(stage+1).expect("Stage out of range").contains_key(&to) {
-            {
-                let from_vertex = self.vertices.get_mut(stage)
-                                      .expect("Stage out of range")
-                                      .get_mut(&from).expect("Error 1");
-                from_vertex.add_successor(to, length);
+        for edges in self.forward.values_mut() {
+            for e in edges.values_mut() {
+                *e = (e.0 << 1, e.1);
             }
-            {
-                let to_vertex = self.vertices.get_mut(stage+1)
-                                    .expect("Stage out of range")
-                                    .get_mut(&to).expect("Error 2");
-                to_vertex.add_predecessor(from, length);
+        }
+
+        for edges in self.backward.values_mut() {
+            for e in edges.values_mut() {
+                *e = (e.0 << 1, e.1);
             }
         }
     }
 
-    /// Add multiple edges to the graph.
+    /// Insert a new stage at the end of the graph.
+    pub fn insert_stage_after(&mut self) {
+        self.stages += 1;
+    }
+
+    /// Add an edge to one or more stages of the graph.
     ///
     /// # Panics
-    /// Panics when `edd_edge` does.
-    pub fn add_edges(&mut self, edges: &IndexMap<(usize, u128, u128), f64>) {
-        for (&(stage, from, to), &length) in edges {
-            self.add_edge(stage, from, to, length);
+    /// Panics if the graph already has an edge of this type but with a different length.
+    pub fn add_edges(&mut self, tail: u128, head: u128, stages: u64, length: f64) {
+        if stages == 0 || stages >= (1 << self.stages) {
+            return
+        }
+
+        let entry_tail = self.forward.entry(tail).or_insert_with(FnvHashMap::default);
+        let entry_head = entry_tail.entry(head).or_insert((0, length));
+
+        if entry_head.1 != length {
+            panic!("Lengths are incompatible.");
+        }
+
+        entry_head.0 |= stages;
+        
+        let entry_head = self.backward.entry(head).or_insert_with(FnvHashMap::default);
+        let entry_tail = entry_head.entry(tail).or_insert((0, length));
+
+        if entry_tail.1 != length {
+            panic!("Lengths are incompatible.");
+        }
+
+        entry_tail.0 |= stages;
+    }
+
+    /// Add an edge from one or more stages of the graph.
+    pub fn remove_edges(&mut self, tail: u128, head: u128, stages: u64) {
+        if stages >= (1 << self.stages) {
+            return
+        }
+
+        let empty_edge;
+
+        let entry_tail_f = match self.forward.get_mut(&tail) {
+            Some(entry_tail_f) => {
+                match entry_tail_f.get_mut(&head) {
+                    Some(entry_head_f) => {
+                        entry_head_f.0 &= !stages;
+
+                        empty_edge = entry_head_f.0 == 0;
+                    },
+                    None => return,
+                };
+
+                entry_tail_f
+            },
+            None => return,
+        };
+
+        let entry_head_b = match self.backward.get_mut(&head) {
+            Some(entry_head_b) => {
+                match entry_head_b.get_mut(&tail) {
+                    Some(entry_tail_b) => {
+                        entry_tail_b.0 &= !stages;
+                    },
+                    None => return,
+                };
+
+                entry_head_b
+            },
+            None => return,
+        };
+
+        if empty_edge {
+            entry_tail_f.remove(&head);
+            entry_head_b.remove(&tail);
+        }
+
+        if entry_tail_f.is_empty() {
+            self.forward.remove(&tail);
+        }
+
+        if entry_head_b.is_empty() {
+            self.backward.remove(&head);
         }
     }
 
-    /// Adds multiple edges to the graph, and crates vertices in the first or last stage if they
-    /// don't exist. Does not create vertices in other stages.
-    ///
-    /// Each try of `edges` is of the form `<(stage, label, label), length>`.
-    pub fn add_edges_and_vertices(&mut self, edges: &IndexMap<(usize, u128, u128), f64>) {
-        for (&(stage, from, to), &length) in edges {
-            if stage == 0 {
-                self.add_vertex(0, from);
-            } 
-
-            if stage == self.vertices.len()-2 {
-                self.add_vertex(stage+1, to);
-            }
-
-            self.add_edge(stage, from, to, length);
-        }
-    }
-
-    /// Removes a vertex from the graph. All other vertices are updates such that successors and 
-    /// predecessors are consistent. 
-    pub fn remove_vertex(&mut self, 
-                         stage: usize, 
-                         label: u128) {
-        {
-            let (before, mid) = self.vertices.split_at_mut(stage);
-            let (mid, after) = mid.split_at_mut(1);
-            
-            if let Some(vertex) = mid[0].get(&label) {
-                if let Some(other_stage) = before.last_mut() {
-                    for other in vertex.predecessors.keys() {
-                        let other_vertex = other_stage.get_mut(&other).expect("Error 5");
-                        other_vertex.successors.remove(&label);
+    /// Check if there is a vertex v with an outgoing edge in the given stage.
+    pub fn has_vertex_outgoing(&self, v: u128, stage: usize) -> bool {
+        if stage < self.stages {
+            if let Some(heads) = self.forward.get(&v) {
+                for (stages, _) in heads.values() {
+                    if ((stages >> stage) & 0x1) == 1 {
+                        return true
                     }
                 }
+            }
+        }
 
-                if let Some(other_stage) = after.first_mut() {
-                    for other in vertex.successors.keys() {
-                        let other_vertex = other_stage.get_mut(&other).expect("Error 6");
-                        other_vertex.predecessors.remove(&label);
+        false
+    }
+
+    /// Check if there is a vertex v with an incoming edge in the given stage.
+    pub fn has_vertex_incoming(&self, v: u128, stage: usize) -> bool {
+        if stage > 0 {
+            if let Some(tails) = self.backward.get(&v) {
+                for (stages, _) in tails.values() {
+                    if ((stages >> (stage-1)) & 0x1) == 1 {
+                        return true
                     }
+                }  
+            }  
+        } 
+
+        false
+    }
+
+    /// Check if the vertex v exists in the given stage.
+    pub fn has_vertex(&self, v: u128, stage: usize) -> bool {
+        return self.has_vertex_outgoing(v, stage) || self.has_vertex_incoming(v, stage)
+    }
+
+    /// Returns the binary representation of thestages where the edge exists
+    pub fn get_edge(&self, tail: u128, head: u128) -> u64 {
+        if let Some(heads) = self.forward.get(&tail) {
+            if let Some(&(edge, _)) = heads.get(&head) {
+                return edge;
+            }
+        }
+
+        0
+    }
+
+    /// Returns all vertices with outgoing edges in the given stage.
+    pub fn get_vertices_outgoing(&self, stage: usize) -> Vec<u128> {
+        let mut vertices = Vec::new();
+
+        for (tail, heads) in self.forward_edges() {
+            for &(stages, _) in heads.values() {
+                if ((stages >> stage) & 0x1) == 1 {
+                    vertices.push(*tail);
+                    break;
                 }
             }
         }
 
-        self.vertices[stage].remove(&label);
+        vertices
+    }
+
+    /// Returns all vertices with incoming edges in the given stage.
+    pub fn get_vertices_incoming(&self, stage: usize) -> Vec<u128> {
+        if stage < 1 {
+            return Vec::new();
+        }
+
+        let mut vertices = Vec::new();
+
+        for (head, tails) in self.backward_edges() {
+            for &(stages, _) in tails.values() {
+                if ((stages >> (stage-1)) & 0x1) == 1 {
+                    vertices.push(*head);
+                    break;
+                }
+            }
+        }
+
+        vertices
+    }
+
+    /// Returns the binary representation of v's predecessors in each stage.
+    fn has_predecessors(&self, v: u128) -> u64 {
+        if let Some(entry) = self.backward.get(&v) {
+            return entry.values().fold(0, |sum, x| sum | x.0) << 1
+        }
+
+        0
+    }
+
+    /// Returns the binary representation of v's successors in each stage.
+    fn has_successors(&self, v: u128) -> u64 {
+        if let Some(entry) = self.forward.get(&v) {
+            return entry.values().fold(0, |sum, x| sum | x.0) >> 1
+        }
+
+        0
     }
 
     /// Remove any edges that aren't part of a path from a vertex in stage `start` to
     /// a vertex in stage `stop`. 
-    pub fn prune(&mut self, 
-                 start: usize, 
-                 stop: usize) {
-        let mut pruned = true;
+    pub fn prune(&mut self, start: usize, stop: usize) {
+        let mask = !0 & !((1 << start) - 1) & ((1 << stop) - 1);
 
-        while pruned {
-            pruned = false;
-
-            for stage in start..stop {
-                let mut remove = Vec::new();
-
-                for (&label, vertex) in self.get_stage(stage).unwrap() {
-                    if (vertex.successors.is_empty() && stage != stop-1) ||
-                       (vertex.predecessors.is_empty() && stage != start) {
-                        remove.push(label);
+        loop {
+            let mut remove = Vec::new();
+            
+            for (&tail, heads) in &self.forward {
+                let no_predecessors = !self.has_predecessors(tail);
+                
+                for (&head, edges) in heads {
+                    let targets = (edges.0 & no_predecessors) & !(1 << start);
+                    let targets = targets & mask;
+                    
+                    if targets != 0 {
+                        remove.push((tail, head, targets));
                     }
                 }
+            }
 
-                for label in remove {
-                    self.remove_vertex(stage, label);
-                    pruned = true;
+            let mut pruned = !remove.is_empty();
+
+            for &(tail, head, stages) in &remove {
+                self.remove_edges(tail, head, stages);
+            }
+
+            remove.clear();
+
+            for (&head, tails) in &self.backward {
+                let no_successors = !self.has_successors(head);
+                
+                for (&tail, edges) in tails {
+                    let targets = (edges.0 & no_successors) & !(1 << (stop-1));
+                    let targets = targets & mask;
+
+                    if targets != 0 {
+                        remove.push((tail, head, targets));
+                    }
+                }
+            }
+
+            pruned |= !remove.is_empty();
+
+            for &(tail, head, stages) in &remove {
+                self.remove_edges(tail, head, stages);
+            }
+
+            if !pruned {
+                break;
+            }
+        }
+    }
+
+    /// Returns the number of edges in the graph.
+    pub fn num_edges(&self) -> usize {
+        self.forward.values().fold(0, |e, v| 
+            e + v.values().fold(0, |e, &v| e + hw(v.0))
+        ) as usize
+    }
+
+    /// Returns the number of vertices in a given stage.
+    pub fn num_vertices(&self, stage: usize) -> usize {
+        let mut count = 0;
+
+        if stage < self.stages {
+            for heads in self.forward.values() {
+                for (stages, _) in heads.values() {
+                    if ((stages >> stage) & 0x1) == 1 {
+                        count += 1;
+                        break;
+                    }
+                }
+            }
+        } else if stage == self.stages {
+            for tails in self.backward.values() {
+                for (stages, _) in tails.values() {
+                    if ((stages >> (stage-1)) & 0x1) == 1 {
+                        count += 1;
+                        break;
+                    }
                 }
             }
         }
+
+        count
     }
 
-    /// Reverses the graph, i.e. all edges are reversed, and the order of the stages are reversed.
-    pub fn reverse(&mut self) {
-        self.vertices.reverse();
-        
-        for stage in &mut self.vertices {
-            for vertex in stage.values_mut() {
-                mem::swap(&mut vertex.predecessors, &mut vertex.successors);
-            }
-        }       
-    }
-
-    /// Get a reference to a vertex. Returns None if the vertex doesn't exist.
-    pub fn get_vertex(&self, 
-                      stage: usize, 
-                      label: u128) 
-                      -> Option<&Vertex> {
-        self.vertices.get(stage).expect("Stage out of range.").get(&label)
-    }
-
-    /// Get a reference to a stage of the graph. Returns None if the stage index is out of range.
-    pub fn get_stage(&self, 
-                     stage: usize) 
-                     -> Option<&FnvHashMap<u128, Vertex>> {
-        self.vertices.get(stage)
-    }
-
-    /// Check if a vertex exists. 
-    pub fn has_vertex(&self, stage: usize, label: u128) -> bool {
-        self.vertices.get(stage).expect("Stage out of range.").contains_key(&label)
-    }
-
-    /// Check if an edge exists.
-    pub fn has_edge(&self, stage: usize, label_from: u128, label_to: u128) -> bool {
-        match self.vertices.get(stage).expect("Stage out of range.").get(&label_from) {
-            Some(vertex) => vertex.successors.contains_key(&label_to),
-            None => false
+    /// Adds all edges of another graph to this graph, leaving the other graph empty.
+    ///
+    /// # Panics
+    /// Panics if the two graphs have a different number of stages.
+    pub fn union(&mut self, other: &mut MultistageGraph) {
+        if self.stages() != other.stages() {
+            panic!("Cannot take union of graphs with different number of stages.")
         }
-    }
 
-    /// Returns the number of vertices in the graph.
-    pub fn num_vertices(&self) -> usize {
-        self.vertices.iter().fold(0, |sum, ref x| sum + x.len())
-    }
+        for (tail, mut heads) in other.forward_edges_mut().drain() {
+            if !self.forward.contains_key(&tail) {
+                self.forward.insert(tail, heads.clone());
+            } else {
+                let entry_tail = self.forward.get_mut(&tail).expect("This shouldn't happen.");
 
-    /// Returns the number of edges in the graph. 
-    pub fn num_edges(&self) -> usize {
-        self.vertices.iter()
-                     .fold(0, 
-                        |sum0, ref x| sum0 + x.values()
-                                           .fold(0, 
-                                                |sum1, ref y| sum1 + y.successors.len()))
+                for (head, (stages, length)) in heads.drain() {
+                    let entry_head = entry_tail.entry(head).or_insert((0, length));
+
+                    if entry_head.1 != length {
+                        panic!("Lengths are incompatible.");
+                    }
+
+                    entry_head.0 |= stages;   
+                }
+            }
+        }
+
+        for (head, mut tails) in other.backward_edges_mut().drain() {
+            if !self.backward.contains_key(&head) {
+                self.backward.insert(head, tails.clone());
+            } else {
+                let entry_head = self.backward.get_mut(&head).expect("This shouldn't happen.");
+
+                for (tail, (stages, length)) in tails.drain() {
+                    let entry_tail = entry_head.entry(tail).or_insert((0, length));
+
+                    if entry_tail.1 != length {
+                        panic!("Lengths are incompatible.");
+                    }
+
+                    entry_tail.0 |= stages;   
+                }
+            }
+        }
     }
 }
