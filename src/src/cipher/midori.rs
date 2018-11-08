@@ -241,10 +241,15 @@ impl Cipher for Midori {
     }
 }
 
+impl Default for Midori {
+    fn default() -> Self {
+        Midori::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
     
     #[test]
     fn encryption_test() {

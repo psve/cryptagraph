@@ -209,9 +209,15 @@ impl Cipher for Skinny64 {
     }
 }
 
+impl Default for Skinny64 {
+    fn default() -> Self {
+        Skinny64::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
     
     #[test]
     fn encryption_test() {

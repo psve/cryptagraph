@@ -318,9 +318,15 @@ impl Cipher for Aes {
     }
 }
 
+impl Default for Aes {
+    fn default() -> Self {
+        Aes::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
 
     #[test]
     fn linear() {

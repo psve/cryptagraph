@@ -323,9 +323,15 @@ impl Cipher for Mantis {
     }
 }
 
+impl Default for Mantis {
+    fn default() -> Self {
+        Mantis::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
 
     #[test]
     fn linear() {

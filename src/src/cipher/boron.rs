@@ -122,13 +122,13 @@ impl Cipher for Boron {
             s |= u128::from(k);
         }
 
-        for r in 0..(rounds+1) {
+        for r in 0..=rounds {
             keys.push(s & 0xffffffffffffffff);
 
             s = ((s << 13) & 0xffffffffffffffffffff) ^  ((s >> 67) & 0xffffffffffffffffffff);
 
             let tmp = s & 0xf;
-            s = s & 0xfffffffffffffffffff0;
+            s &= 0xfffffffffffffffffff0;
             s ^= u128::from(self.sbox.apply(tmp));
 
             let rnd = (r & 0b11111) as u128;
@@ -202,10 +202,15 @@ impl Cipher for Boron {
     }
 }
 
+impl Default for Boron {
+    fn default() -> Self {
+        Boron::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
 
     #[test]
     fn linear_test() {

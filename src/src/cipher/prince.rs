@@ -259,9 +259,15 @@ impl Cipher for Prince {
     }
 }
 
+impl Default for Prince {
+    fn default() -> Self {
+        Prince::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
 
     #[test]
     fn linear() {

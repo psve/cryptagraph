@@ -247,10 +247,15 @@ impl Cipher for Mibs {
     }
 }
 
+impl Default for Mibs {
+    fn default() -> Self {
+        Mibs::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
     
     #[test]
     fn encryption_test() {

@@ -162,7 +162,7 @@ impl Cipher for Klein {
             k0 |= u128::from(key[i+4]);
         }
 
-        for r in 0..(rounds+1) {
+        for r in 0..=rounds {
             keys.push(k0 ^ (k1 << 32));
 
             k0 = ((k0 << 8) & 0xffffff00) ^ ((k0 >> 24) & 0x000000ff);
@@ -244,10 +244,15 @@ impl Cipher for Klein {
     }
 }
 
+impl Default for Klein {
+    fn default() -> Self {
+        Klein::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use cipher; 
+    use crate::cipher; 
 
     #[test]
     fn encryption_test() {

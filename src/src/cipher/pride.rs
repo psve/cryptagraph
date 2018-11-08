@@ -181,7 +181,7 @@ impl Cipher for Pride {
 
         keys.push(k0);
 
-        for r in 0..(rounds+1) {
+        for r in 0..=rounds {
             let mut roundkey = 0;
 
             roundkey ^= k1 & 0xff00ff00ff00ff00;
@@ -317,10 +317,15 @@ impl Cipher for Pride {
     }
 }
 
+impl Default for Pride {
+    fn default() -> Self {
+        Pride::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use cipher; 
+    use crate::cipher; 
 
     #[test]
     fn encryption_test() {

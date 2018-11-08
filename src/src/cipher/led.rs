@@ -236,9 +236,15 @@ impl Cipher for Led {
     }
 }
 
+impl Default for Led {
+    fn default() -> Self {
+        Led::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
     
     #[test]
     fn encryption_test() {

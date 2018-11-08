@@ -93,7 +93,7 @@ impl MultistageGraph {
         let entry_tail = self.forward.entry(tail).or_insert_with(FnvHashMap::default);
         let entry_head = entry_tail.entry(head).or_insert((0, length));
 
-        if entry_head.1 != length {
+        if (entry_head.1 - length).abs() < std::f64::EPSILON {
             panic!("Lengths are incompatible.");
         }
 
@@ -102,7 +102,7 @@ impl MultistageGraph {
         let entry_head = self.backward.entry(head).or_insert_with(FnvHashMap::default);
         let entry_tail = entry_head.entry(tail).or_insert((0, length));
 
-        if entry_tail.1 != length {
+        if (entry_tail.1 - length).abs() < std::f64::EPSILON {
             panic!("Lengths are incompatible.");
         }
 
@@ -193,7 +193,7 @@ impl MultistageGraph {
 
     /// Check if the vertex v exists in the given stage.
     pub fn has_vertex(&self, v: u128, stage: usize) -> bool {
-        return self.has_vertex_outgoing(v, stage) || self.has_vertex_incoming(v, stage)
+        self.has_vertex_outgoing(v, stage) || self.has_vertex_incoming(v, stage)
     }
 
     /// Returns the binary representation of thestages where the edge exists
@@ -264,7 +264,7 @@ impl MultistageGraph {
     /// Remove any edges that aren't part of a path from a vertex in stage `start` to
     /// a vertex in stage `stop`. 
     pub fn prune(&mut self, start: usize, stop: usize) {
-        let mask = !0 & !((1 << start) - 1) & ((1 << stop) - 1);
+        let mask = !((1 << start) - 1) & ((1 << stop) - 1);
 
         loop {
             let mut remove = Vec::new();
@@ -367,7 +367,7 @@ impl MultistageGraph {
                 for (head, (stages, length)) in heads.drain() {
                     let entry_head = entry_tail.entry(head).or_insert((0, length));
 
-                    if entry_head.1 != length {
+                    if (entry_head.1 - length).abs() < std::f64::EPSILON {
                         panic!("Lengths are incompatible.");
                     }
 
@@ -385,7 +385,7 @@ impl MultistageGraph {
                 for (tail, (stages, length)) in tails.drain() {
                     let entry_tail = entry_head.entry(tail).or_insert((0, length));
 
-                    if entry_tail.1 != length {
+                    if (entry_tail.1 - length).abs() < std::f64::EPSILON {
                         panic!("Lengths are incompatible.");
                     }
 

@@ -245,9 +245,15 @@ impl Cipher for Skinny128 {
     }
 }
 
+impl Default for Skinny128 {
+    fn default() -> Self {
+        Skinny128::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
     
     #[test]
     fn linear() {

@@ -146,7 +146,7 @@ impl Cipher for Fly {
             k1 |= u128::from(key[i+8]);
         }
 
-        for r in 0..(rounds+1) {
+        for r in 0..=rounds {
             if r % 2 == 0 {
                 keys.push(k0)
             } else {
@@ -207,6 +207,12 @@ impl Cipher for Fly {
     #[inline(always)]
     fn whitening(&self) -> bool {
         true
+    }
+}
+
+impl Default for Fly {
+    fn default() -> Self {
+        Fly::new()
     }
 }
 

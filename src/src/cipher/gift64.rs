@@ -205,10 +205,15 @@ impl Cipher for Gift64 {
     }
 }
 
+impl Default for Gift64 {
+    fn default() -> Self {
+        Gift64::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use cipher; 
+    use crate::cipher; 
     
     #[test]
     fn encryption_decryption_test() {

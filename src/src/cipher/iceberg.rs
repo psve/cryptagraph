@@ -198,9 +198,15 @@ impl Cipher for Iceberg {
     }
 }
 
+impl Default for Iceberg {
+    fn default() -> Self {
+        Iceberg::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
 
     #[test]
     fn linear_test() {

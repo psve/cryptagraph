@@ -162,9 +162,15 @@ impl Cipher for Qarma {
     }
 }
 
+impl Default for Qarma {
+    fn default() -> Self {
+        Qarma::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
 
     #[test]
     fn linear() {

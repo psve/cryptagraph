@@ -126,13 +126,13 @@ impl Cipher for Halka {
             s |= u128::from(k);
         }
 
-        for r in 0..(rounds+1) {
+        for r in 0..=rounds {
             keys.push((s >> 16) & 0xffffffffffffffff);
 
             s = ((s << 57) & 0xffffffffffffffffffff) ^  ((s >> 23) & 0xffffffffffffffffffff);
 
             let tmp = (s >> 72) & 0xff;
-            s = s & 0x00ffffffffffffffffff;
+            s &= 0x00ffffffffffffffffff;
             s ^= u128::from(self.sbox.apply(tmp)) << 72;
 
             let rnd = ((r+1) & 0b11111) as u128;
@@ -206,10 +206,16 @@ impl Cipher for Halka {
     }
 }
 
+impl Default for Halka {
+    fn default() -> Self {
+        Halka::new()
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
 
     #[test]
     fn linear_test() {

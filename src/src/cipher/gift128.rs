@@ -214,10 +214,15 @@ impl Cipher for Gift128 {
     }
 }
 
+impl Default for Gift128 {
+    fn default() -> Self {
+        Gift128::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use cipher; 
+    use crate::cipher; 
     
     #[test]
     fn encryption_decryption_test() {

@@ -212,10 +212,15 @@ impl Cipher for Puffin {
     }
 }
 
+impl Default for Puffin {
+    fn default() -> Self {
+        Puffin::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
     
     /* No test vectors provided in specification
     #[test]

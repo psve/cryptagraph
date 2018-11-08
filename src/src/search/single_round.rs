@@ -66,6 +66,11 @@ impl<'a> SortedProperties<'a> {
         len
     }
 
+    /// Check wether the set of properties is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Returns a reference to the cipher the struct was generated with.
     pub fn cipher(&self) -> &'a Cipher {
         self.cipher
@@ -77,8 +82,8 @@ impl<'a> SortedProperties<'a> {
     }
 
     /// Overwrites the S-box patterns with a new set.
-    pub fn set_patterns(&mut self, patterns: &Vec<SboxPattern>) {
-        self.sbox_patterns = patterns.clone();
+    pub fn set_patterns(&mut self, patterns: &[SboxPattern]) {
+        self.sbox_patterns = patterns.to_owned();
     }
 
     /// Returns the number of patterns.
@@ -124,11 +129,11 @@ impl<'a> SortedProperties<'a> {
                     // Split the S-box patterns equally across threads
                     // Note that this does not equally split the number of properties across threads,
                     // but hopefully it is close enough
-                    let tmp = thread_properties.patterns().iter()
-                                                             .cloned()
-                                                             .skip(t)
-                                                             .step_by(*THREADS)
-                                                             .collect();
+                    let tmp: Vec<_> = thread_properties.patterns().iter()
+                                                       .cloned()
+                                                       .skip(t)
+                                                       .step_by(*THREADS)
+                                                       .collect();
                     thread_properties.set_patterns(&tmp);
 
                     // Find patterns to keep

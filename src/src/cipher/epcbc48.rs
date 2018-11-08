@@ -197,10 +197,16 @@ impl Cipher for Epcbc48 {
     }
 }
 
+impl Default for Epcbc48 {
+    fn default() -> Self {
+        Epcbc48::new()
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
 
     #[test]
     fn linear() {

@@ -276,9 +276,15 @@ impl Cipher for Rectangle {
     }
 }
 
+impl Default for Rectangle {
+    fn default() -> Self {
+        Rectangle::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
     
     #[test]
     fn encryption_test() {

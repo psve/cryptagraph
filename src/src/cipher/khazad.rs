@@ -118,7 +118,7 @@ impl Cipher for Khazad {
         keys.push(k0);
         keys.push(k1);
 
-        for r in 0..(rounds+1) {
+        for r in 0..=rounds {
             // Apply S-box
             let mut tmp = 0;
 
@@ -224,10 +224,15 @@ impl Cipher for Khazad {
     }
 }
 
+impl Default for Khazad {
+    fn default() -> Self {
+        Khazad::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
 
     #[test]
     fn encryption_test() {

@@ -185,3 +185,8 @@ impl Cipher for Des {
     }
 }
 
+impl Default for Des {
+    fn default() -> Self {
+        Des::new()
+    }
+}

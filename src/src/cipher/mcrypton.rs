@@ -184,9 +184,15 @@ impl Cipher for Mcrypton {
     }
 }
 
+impl Default for Mcrypton {
+    fn default() -> Self {
+        Mcrypton::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
 
     #[test]
     fn linear_test() {

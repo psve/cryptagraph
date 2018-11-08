@@ -187,10 +187,15 @@ impl Cipher for Epcbc96 {
     }
 }
 
+impl Default for Epcbc96 {
+    fn default() -> Self {
+        Epcbc96::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
 
     #[test]
     fn linear() {

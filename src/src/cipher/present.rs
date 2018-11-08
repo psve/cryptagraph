@@ -112,7 +112,7 @@ impl Cipher for Present {
         s1 <<= 8;
         s1 |= u64::from(key[9]);
 
-        for r in 0..(rounds+1) {
+        for r in 0..=rounds {
             // extract round key
             keys.push(s0);
 
@@ -210,10 +210,15 @@ impl Cipher for Present {
     }
 }
 
+impl Default for Present {
+    fn default() -> Self {
+        Present::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
 
     #[test]
     fn encryption_test() {

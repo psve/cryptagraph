@@ -305,9 +305,15 @@ impl Cipher for Twine {
     }
 }
 
+impl Default for Twine {
+    fn default() -> Self {
+        Twine::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use cipher;
+    use crate::cipher;
     
     #[test]
     fn encryption_test() {

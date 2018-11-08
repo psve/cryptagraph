@@ -39,11 +39,11 @@ fn get_vertex_set(properties: &SortedProperties,
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
-                let tmp = thread_properties.patterns().iter()
-                                                         .cloned()
-                                                         .skip(t)
-                                                         .step_by(*THREADS)
-                                                         .collect();
+                let tmp: Vec<_> = thread_properties.patterns().iter()
+                                                              .cloned()
+                                                              .skip(t)
+                                                              .step_by(*THREADS)
+                                                              .collect();
                 thread_properties.set_patterns(&tmp);
                 
                 // First, collect all input values
@@ -99,11 +99,11 @@ fn get_vertex_set(properties: &SortedProperties,
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
-                let tmp = thread_properties.patterns().iter()
-                                                         .cloned()
-                                                         .skip(t)
-                                                         .step_by(*THREADS)
-                                                         .collect();
+                let tmp: Vec<_> = thread_properties.patterns().iter()
+                                                              .cloned()
+                                                              .skip(t)
+                                                              .step_by(*THREADS)
+                                                              .collect();
                 thread_properties.set_patterns(&tmp);
                 
                 // Second, collect all output values that are also in the input set
@@ -172,11 +172,11 @@ fn gen_with_stages(properties: &SortedProperties,
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
-                let tmp = thread_properties.patterns().iter()
-                                                         .cloned()
-                                                         .skip(t)
-                                                         .step_by(*THREADS)
-                                                         .collect();
+                let tmp: Vec<_> = thread_properties.patterns().iter()
+                                                              .cloned()
+                                                              .skip(t)
+                                                              .step_by(*THREADS)
+                                                              .collect();
                 thread_properties.set_patterns(&tmp);
 
                 // Generate graph
@@ -215,9 +215,9 @@ fn gen_with_stages(properties: &SortedProperties,
                         Some(vertex_set) => {
                             // Construct stage pattern to match vertex set constraints
                             let input_mask = vertex_set.contains(&input);
-                            let input_mask = !1 * (input_mask as u64) ^ 1;
+                            let input_mask = (!1 * (input_mask as u64)) ^ 1;
                             let output_mask = vertex_set.contains(&output);
-                            let output_mask = ((1 << (rounds-1)) - 1) * (output_mask as u64) ^ (1 << (rounds-1));
+                            let output_mask = (((1 << (rounds-1)) - 1) * (output_mask as u64)) ^ (1 << (rounds-1));
                             let mask = input_mask & output_mask;
 
                             graph.add_edges(input, output, stages & mask & previous_mask, length);
@@ -280,11 +280,11 @@ fn extend(graph: &mut MultistageGraph,
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
-                let tmp = thread_properties.patterns().iter()
-                                                         .cloned()
-                                                         .skip(t)
-                                                         .step_by(*THREADS)
-                                                         .collect();
+                let tmp: Vec<_> = thread_properties.patterns().iter()
+                                                              .cloned()
+                                                              .skip(t)
+                                                              .step_by(*THREADS)
+                                                              .collect();
                 thread_properties.set_patterns(&tmp);
 
                 // Collect all edges that have corresponding output/input vertices in the 
@@ -600,14 +600,14 @@ pub fn generate_graph(cipher: &dyn Cipher,
         let start = time::precise_time_s();
         println!("Generating graph: {} properties ({} input, {} output).", 
             num_prop, num_input, num_output);
-        graph = gen_with_stages(&mut properties, 1, 0b1, 3, None, None);
+        graph = gen_with_stages(&properties, 1, 0b1, 3, None, None);
         println!("Graph has {} edges [{} s]\n", 
             graph.num_edges(), time::precise_time_s()-start);
     } else {
         if rounds == 2 {
             let start = time::precise_time_s();
             println!("Generating graph.");
-            graph = gen_with_stages(&mut properties, 2, 0b11, 3, None, None);
+            graph = gen_with_stages(&properties, 2, 0b11, 3, None, None);
             println!("Graph has {} edges [{} s]\n", 
                 graph.num_edges(), time::precise_time_s()-start);
         }
@@ -622,7 +622,7 @@ pub fn generate_graph(cipher: &dyn Cipher,
 
             let start = time::precise_time_s();
             println!("Generating graph.");
-            graph = gen_with_stages(&mut properties, 2, 0b11, 3, Some(&vertex_set), None);
+            graph = gen_with_stages(&properties, 2, 0b11, 3, Some(&vertex_set), None);
             println!("Graph has {} edges [{} s]\n", 
                 graph.num_edges(), time::precise_time_s()-start);
         }
@@ -669,7 +669,7 @@ pub fn generate_graph(cipher: &dyn Cipher,
                 
                 let start = time::precise_time_s();
                 println!("Generating graph.");
-                graph = gen_with_stages(&mut properties, rounds, stages, level, Some(&vertex_set), old_graph);
+                graph = gen_with_stages(&properties, rounds, stages, level, Some(&vertex_set), old_graph);
                 println!("Graph has {} edges [{} s]", 
                     graph.num_edges(), time::precise_time_s()-start);
 
@@ -680,7 +680,7 @@ pub fn generate_graph(cipher: &dyn Cipher,
 
                 let start = time::precise_time_s();
                 println!("Extending graph.");
-                extend(&mut graph, &mut properties, rounds, level, None, None);
+                extend(&mut graph, &properties, rounds, level, None, None);
                 println!("Extended graph has {} edges [{} s]", 
                         graph.num_edges(), time::precise_time_s()-start);
 
@@ -719,7 +719,7 @@ pub fn generate_graph(cipher: &dyn Cipher,
 
         let start = time::precise_time_s();
         println!("Extending final graph.");
-        extend(&mut graph, &mut properties, rounds, 3, input_allowed, output_allowed);
+        extend(&mut graph, &properties, rounds, 3, input_allowed, output_allowed);
         println!("Extended graph has {} edges [{} s]\n", 
                  graph.num_edges(), time::precise_time_s()-start);
     }
