@@ -93,7 +93,7 @@ impl MultistageGraph {
         let entry_tail = self.forward.entry(tail).or_insert_with(FnvHashMap::default);
         let entry_head = entry_tail.entry(head).or_insert((0, length));
 
-        if (entry_head.1 - length).abs() < std::f64::EPSILON {
+        if (entry_head.1 - length).abs() > std::f64::EPSILON {
             panic!("Lengths are incompatible.");
         }
 
@@ -102,7 +102,7 @@ impl MultistageGraph {
         let entry_head = self.backward.entry(head).or_insert_with(FnvHashMap::default);
         let entry_tail = entry_head.entry(tail).or_insert((0, length));
 
-        if (entry_tail.1 - length).abs() < std::f64::EPSILON {
+        if (entry_tail.1 - length).abs() > std::f64::EPSILON {
             panic!("Lengths are incompatible.");
         }
 
@@ -367,7 +367,7 @@ impl MultistageGraph {
                 for (head, (stages, length)) in heads.drain() {
                     let entry_head = entry_tail.entry(head).or_insert((0, length));
 
-                    if (entry_head.1 - length).abs() < std::f64::EPSILON {
+                    if (entry_head.1 - length).abs() > std::f64::EPSILON {
                         panic!("Lengths are incompatible.");
                     }
 
@@ -385,7 +385,7 @@ impl MultistageGraph {
                 for (tail, (stages, length)) in tails.drain() {
                     let entry_tail = entry_head.entry(tail).or_insert((0, length));
 
-                    if (entry_tail.1 - length).abs() < std::f64::EPSILON {
+                    if (entry_tail.1 - length).abs() > std::f64::EPSILON {
                         panic!("Lengths are incompatible.");
                     }
 
