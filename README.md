@@ -86,17 +86,19 @@ Distribution mode can be invoked by calling `cryptagraph dist`. It takes six par
  - `--mask_in` (`-i`): (*Optional*) Path to a file which restricts the input and output values of the approximations/differentials. Each line of the file must have the form `input,output` where both values are in hexadecimal without the `0x` prefix. 
 
 # Supported Ciphers <a name="ciphers"></a>
-The following ciphers are currently supported. 
+The following ciphers are currently supported. Some ciphers only have support for trail search, and not for finding correlation distributions. 
 
 | Cipher       | Name        |
 | ------------ | ----------- |
 | AES          | `aes`       |
 | BORON        | `boron`     |
+| DES          | `des`       |
 | EPCBC(48,96) | `epcbc48`   |
 | EPCBC(96,96) | `epcbc96`   |
 | Fly          | `fly`       |
 | GIFT-64      | `gift64`    |
 | GIFT-128     | `gift128`   |
+| Halka        | `halka`     |
 | Iceberg      | `iceberg`   |
 | Khazad       | `khazad`    |
 | KLEIN        | `klein`     |
