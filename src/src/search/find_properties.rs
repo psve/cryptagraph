@@ -131,7 +131,7 @@ pub fn parallel_find_properties(cipher: &Cipher,
         for t in 0..*THREADS {
             let result_tx = result_tx.clone();
 
-            scope.spawn(move || {
+            scope.spawn(move |_| {
                 let mut progress_bar = ProgressBar::new((0..graph.num_vertices(0))
                                                         .skip(t).step_by(*THREADS).len());
                 let mut result = vec![];

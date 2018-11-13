@@ -123,7 +123,7 @@ impl<'a> SortedProperties<'a> {
                 let mut thread_properties = self.clone();
                 let result_tx = result_tx.clone();
 
-                scope.spawn(move || {
+                scope.spawn(move |_| {
                     thread_properties.set_type_input();
                     
                     // Split the S-box patterns equally across threads

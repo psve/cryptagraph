@@ -222,7 +222,7 @@ pub fn get_correlations(cipher: &dyn Cipher,
             let lat = lat.clone();
             let lat_inv = lat_inv.clone();
 
-            scope.spawn(move || {
+            scope.spawn(move |_| {
                 let mut pool = MaskPool::new();
                 let mut thread_result = FnvHashMap::default();
                 let mut progress_bar = ProgressBar::new((0..num_keys).skip(t).step_by(num_threads).len());

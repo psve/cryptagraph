@@ -35,7 +35,7 @@ fn get_vertex_set(properties: &SortedProperties,
             let mut thread_properties = properties.clone();
             let result_tx = result_tx.clone();
 
-            scope.spawn(move || {
+            scope.spawn(move |_| {
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
@@ -95,7 +95,7 @@ fn get_vertex_set(properties: &SortedProperties,
             let result_tx = result_tx.clone();
             let input_set = &input_set;
 
-            scope.spawn(move || {
+            scope.spawn(move |_| {
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
@@ -157,7 +157,7 @@ fn gen_with_stages(properties: &SortedProperties,
             let mut thread_properties = properties.clone();
             let result_tx = result_tx.clone();
 
-            scope.spawn(move || {
+            scope.spawn(move |_| {
                 // For SPN ciphers, we can exploit the structure when the compressiond is 
                 // sufficiently coarse and not generate all properties explicitly 
                 let max_sbox_size = cmp::max(thread_properties.cipher().sbox(0).size_in(),
@@ -265,7 +265,7 @@ fn extend(graph: &mut MultistageGraph,
             let result_tx = result_tx.clone();
             let graph = &(*graph);
 
-            scope.spawn(move || {
+            scope.spawn(move |_| {
                 // For SPN ciphers, we can exploit the structure when the compressiond is 
                 // sufficiently coarse and not generate all properties explicitly 
                 let max_sbox_size = cmp::max(thread_properties.cipher().sbox(0).size_in(),
@@ -377,7 +377,7 @@ fn anchor_ends(cipher: &dyn Cipher,
             let start_labels = start_labels.clone();
             let end_labels = end_labels.clone();
 
-            scope.spawn(move || {
+            scope.spawn(move |_| {
                 let mut progress_bar = ProgressBar::new(start_labels.iter().skip(t)
                                                                     .step_by(*THREADS).len() + 
                                                         end_labels.iter().skip(t)
