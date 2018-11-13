@@ -356,7 +356,7 @@ fn anchor_ends(cipher: &dyn Cipher,
     let rounds = graph.stages();
 
     // Collect vertices in the second/second to last layer.
-    let start_labels: Vec<_> = graph.get_vertices_outgoing(0).iter().map(|&x| (x, 0)).collect();
+    let start_labels: Vec<_> = graph.get_vertices_outgoing(1).iter().map(|&x| (x, 0)).collect();
     let end_labels: Vec<_> = graph.get_vertices_incoming(rounds-1).iter().map(|&x| (x, rounds-1)).collect();
 
     // Determine number of anchors to add
