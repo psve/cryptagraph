@@ -107,8 +107,6 @@ impl Cipher for Skinny128 {
             output ^= ((input >> (i*8)) & 0xff) << (self.shift_rows_table[i]*8);
         }
 
-        println!("{:032x}", output);
-
         // Apply MixColumns
         output ^= (output & 0xffffffff0000000000000000) >> 32;
         output ^= (output & 0xffffffff) << 64;
