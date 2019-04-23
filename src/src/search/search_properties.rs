@@ -14,7 +14,7 @@ use crate::property::{Property, PropertyType};
 /// Dumps a graph to file for plotting with python graph-tool. 
 fn dump_to_graph_tool(graph: &MultistageGraph,
                       path: &str) {
-    /*let mut path = path.to_string();
+    let mut path = path.to_string();
     path.push_str(".graph");
 
     // Contents of previous files are overwritten
@@ -27,19 +27,16 @@ fn dump_to_graph_tool(graph: &MultistageGraph,
 
     let stages = graph.stages();
 
-    for i in 0..stages {
-        for j in graph.get_stage(i).unwrap().keys() {
-            writeln!(file, "{},{}", i, j).expect("Could not write to file.");
-        }
-    }        
-
-    for i in 0..stages-1 {
-        for (j, vertex_ref) in graph.get_stage(i).unwrap() {
-            for k in vertex_ref.successors.keys() {
-                writeln!(file, "{},{},{},{}", i, j, i+1, k).expect("Could not write to file.");       
+    for (tail, heads) in graph.forward_edges() {
+        for (head, (edges, _)) in heads {
+            for i in 0..stages {
+                if (edges >> i) & 0x1 == 1 {
+                    writeln!(file, "{},{},{},{}", i, tail, i+1, head)
+                        .expect("Could not write to file.");
+                }
             }
         }
-    }*/   
+    }
 }
 
 /// Dumps all vertices of a graph to the file <file_mask_out>.set. 

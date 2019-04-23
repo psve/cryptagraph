@@ -319,10 +319,10 @@ By specifying the `--file_graph` option, the python module `graphtool` (found
 
 For example, if we run
 ```
-cryptagraph -t linear -c mantis -r 4 -p 2000 -g mantis
+cryptagraph --type linear --cipher gift64 --rounds 11 --patterns 2000 --anchors 0 --file_graph gift
 ```
-a file `mantis.graph` is generated. The `graph_plot.py` script found in the `utility` folder can the
-be used to generate the following picture. ![](mantis.png)
+a file `gift.graph` is generated. The `graph_plot.py` script found in the `utility` folder can the
+be used to generate the following picture. ![](gift.png)
 
 # How does all this work? <a name="background"></a>
 If you want to know more about the algorithm *cryptagraph* uses you can read (most of) the details

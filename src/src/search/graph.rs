@@ -196,7 +196,7 @@ impl MultistageGraph {
         self.has_vertex_outgoing(v, stage) || self.has_vertex_incoming(v, stage)
     }
 
-    /// Returns the binary representation of thestages where the edge exists
+    /// Returns the binary representation of the stages where the edge exists
     pub fn get_edge(&self, tail: u128, head: u128) -> u64 {
         if let Some(heads) = self.forward.get(&tail) {
             if let Some(&(edge, _)) = heads.get(&head) {

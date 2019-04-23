@@ -1,41 +1,31 @@
+#!/bin/python
+
 from graph_tool.all import *
 import csv, sys
 
-def num_active(x):    
-    count = 0
-
-    for i in range(16):
-        if ((x >> 4*i) & 0xf) != 0:
-            count += 1
-
-    return count
-
 size = 1000
-# width = int(size * (16/9))
 width = int(size * 2)
 height = size
 
 path = sys.argv[1]
-vertex_data = []
-edge_data = []
+vertex_data = set()
+edge_data = set()
 
 with open(path, "r") as f:
     reader = csv.reader(f)
     
     for row in reader:
-        if len(row) == 2:
-            vertex_data.append([int(x) for x in row])
-        elif len(row) == 4:
-            edge_data.append([int(x) for x in row])
+        data = [int(x) for x in row]
+        vertex_data.add((data[0], data[1]))
+        vertex_data.add((data[2], data[3]))
+        edge_data.add((data[0], data[1], data[2], data[3]))
 
 print("Data read")
 
 vertices = dict()
-labels = dict()
 
 for x in vertex_data:
-    labels[len(vertices)] = (x[0], x[1])
-    vertices[(x[0], x[1])] = len(vertices)
+    vertices[x] = len(vertices)
 
 stages = max([x for (x,y) in vertices.keys()]) + 1
 
@@ -48,26 +38,11 @@ for e in edge_data:
 
 print("Graph generated")
 
-# start_vertices = [(x,y) for (x,y) in vertices.keys() if x == 0]
-# end_vertices = [(x,y) for (x,y) in vertices.keys() if x == stages-1]
-
-# s = vertices[start_vertices[0]]
-# t = vertices[end_vertices[0]]
-
-# for path in all_paths(g, s, t):
-#     x = [labels[i][1] for i in path]
-    
-#     for y in x:
-#         print("{:016x}->".format(y), end="")
-#     print()
-
 pos = g.new_vertex_property("vector<float>")
 max_name = max([x[1] for x in vertices.keys()])
-# max_name = max([num_active(x[1]) for x in vertices.keys()])
 
 for v in vertices.keys():
     x = (v[0]-1) / (stages-1) * width
-    # y = num_active(v[1]) / max_name * height
     y = v[1] / max_name * height
     pos[vertices[v]] = [x, y]
 
