@@ -69,6 +69,14 @@ impl Cipher for Mcrypton {
         }
     }
 
+    fn sbox_pos_in(&self, i: usize) -> usize {
+        i*self.sbox(i).size_in()
+    }
+
+    fn sbox_pos_out(&self, i: usize) -> usize {
+        i*self.sbox(i).size_out()
+    }
+
     fn linear_layer(&self, input: u128) -> u128{
         let mut output = 0;
 

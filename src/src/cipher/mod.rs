@@ -30,6 +30,12 @@ pub trait Cipher: Sync {
 
     /// Returns the i'th S-box of the cipher.
     fn sbox(&self, i: usize) -> &Sbox;
+
+    /// Returns the position of the LSB of the input to the i'th S-box of the cipher.
+    fn sbox_pos_in(&self, i: usize) -> usize;
+
+    /// Returns the position of the LSB of the output to the i'th S-box of the cipher.
+    fn sbox_pos_out(&self, i: usize) -> usize;
     
     /// Applies the linear layer of the cipher to the input.
     fn linear_layer(&self, input: u128) -> u128;

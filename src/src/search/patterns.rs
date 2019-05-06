@@ -163,13 +163,13 @@ impl SboxPattern {
         };
 
         // Collect active S-box positions
-        // This fails of the pattern wasn't complete
+        // This fails if the pattern wasn't complete
         let pattern: Vec<_> = internal_sbox_pattern.pattern.iter()
                                    .map(|x| x.expect("Tried to convert incomplete pattern."))
                                    .enumerate()
                                    .filter(|&(_,x)| x != non_property)
-                                   .map(|(i,x)| (i*cipher.sbox(i).size_in(), 
-                                                 i*cipher.sbox(i).size_out(), 
+                                   .map(|(i,x)| (cipher.sbox_pos_in(i), 
+                                                 cipher.sbox_pos_out(i), 
                                                  i, x))
                                    .collect();
 
@@ -181,8 +181,6 @@ impl SboxPattern {
             property,
             mask_in: cipher.sbox(0).mask_in() as u128,
             mask_out: cipher.sbox(0).mask_out() as u128,
-            // sbox_size_in: cipher.sbox(0).size_in(),
-            // sbox_size_out: cipher.sbox(0).size_out(),
             counter,
             status: PatternStatus::New
         }

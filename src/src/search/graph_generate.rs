@@ -445,7 +445,7 @@ fn patch(cipher: &dyn Cipher,
          -> usize {
     // TODO: Find a way to handle this case
     if cipher.sbox(0).size_in() != cipher.sbox(0).size_out() {
-        println!("Aborting patching due to S-box truncating/expanding S-box");
+        println!("Aborting patching due to truncating/expanding S-box");
         return 0;
     }
 
@@ -509,8 +509,8 @@ fn patch(cipher: &dyn Cipher,
                     let mut value = 1.0;
 
                     for (i, table) in tables.iter().enumerate() {
-                        let a = (input  >> (i * cipher.sbox(i).size_in())) & mask_in;
-                        let b = (out_inv >> (i * cipher.sbox(i).size_out())) & mask_out;
+                        let a = (input  >> (cipher.sbox_pos_in(i))) & mask_in;
+                        let b = (out_inv >> (cipher.sbox_pos_out(i))) & mask_out;
 
                         let v = table[a as usize][b as usize];
 

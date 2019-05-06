@@ -116,7 +116,7 @@ impl MultistageGraph {
         }
 
         let empty_edge;
-
+        
         let entry_tail_f = match self.forward.get_mut(&tail) {
             Some(entry_tail_f) => {
                 match entry_tail_f.get_mut(&head) {
