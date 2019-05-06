@@ -171,7 +171,7 @@ impl<'a> SortedProperties<'a> {
                     result_tx.send(new_patterns).expect("Thread could not send result");
                 });
             }
-        });
+        }).expect("Threads failed to join.");
 
         // Collect patterns from each thread and update properties
         let mut new_patterns = Vec::new();

@@ -76,7 +76,7 @@ fn get_vertex_set(properties: &SortedProperties,
                 result_tx.send(input_set).expect("Thread could not send result");
             });
         }
-    });
+    }).expect("Threads failed to join.");
     
     // Collect input sets from all threads
     let mut input_set: FnvHashSet<u128> = FnvHashSet::default();
@@ -126,7 +126,7 @@ fn get_vertex_set(properties: &SortedProperties,
                 result_tx.send(union_set).expect("Thread could not send result");
             });
         }
-    });
+    }).expect("Threads failed to join.");
 
     // Last, collect union sets from all threads
     let mut vertex_set: FnvHashSet<u128> = FnvHashSet::default();
@@ -233,7 +233,7 @@ fn gen_with_stages(properties: &SortedProperties,
                 result_tx.send(graph).expect("Thread could not send result");
             });
         }
-    });
+    }).expect("Threads failed to join.");
 
     let mut graph = MultistageGraph::new(rounds);
 
@@ -332,7 +332,7 @@ fn extend(graph: &mut MultistageGraph,
                 result_tx.send(edges).expect("Thread could not send result");
             });
         }
-    });
+    }).expect("Threads failed to join.");
 
     // Add edges from each thread
     for _ in 0..*THREADS {
@@ -426,7 +426,7 @@ fn anchor_ends(cipher: &dyn Cipher,
                 result_tx.send(edges).expect("Thread could not send result");
             });
         }
-    });
+    }).expect("Threads failed to join.");
 
     // Add edges from each thread
     for _ in 0..*THREADS {

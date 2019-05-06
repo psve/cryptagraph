@@ -169,7 +169,7 @@ pub fn parallel_find_properties(cipher: &Cipher,
                 result_tx.send((result, min_value, num_found, paths)).expect("Thread could not send result");
             });
         }
-    });
+    }).expect("Threads failed to join.");
 
     // Collect results from all threads
     let mut paths = 0;

@@ -311,7 +311,7 @@ pub fn get_correlations(cipher: &dyn Cipher,
                 result_tx.send(thread_result).expect("Thread could not send result");
             });
         }
-    });
+    }).expect("Threads failed to join.");
 
     let mut result = FnvHashMap::default();
 
