@@ -1,6 +1,5 @@
 //! Types for representing property patterns for an S-box layer.
 
-use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
@@ -25,7 +24,7 @@ impl InternalSboxPattern {
 
     /// Extends the current pattern to at most two "neighbouring" patterns
     fn extend(&self, 
-              property_values: &[SmallVec<[i16; 128]>], 
+              property_values: &[Vec<i16>], 
               property_type: PropertyType) 
               -> (Option<InternalSboxPattern>, Option<InternalSboxPattern>) {
         // We generate at most two new patterns
@@ -292,7 +291,7 @@ pub fn get_sorted_patterns(cipher: &dyn Cipher,
         ValueMap::new(cipher.sbox(i), property_type)
     }).collect();
 
-    let mut property_values: Vec<SmallVec<[_; 128]>> = value_maps.iter().map(|map| {
+    let mut property_values: Vec<Vec<_>> = value_maps.iter().map(|map| {
         map.keys().cloned().collect()
     }).collect();
 

@@ -4,16 +4,7 @@ use fnv::FnvHashMap;
 
 /// Computes the hamming weight of x.
 fn hw(x: u64) -> u64 {
-    let y = [( x & 0xff) as u8,
-             ((x >>  8) & 0xff) as u8,
-             ((x >> 16) & 0xff) as u8,
-             ((x >> 24) & 0xff) as u8,
-             ((x >> 32) & 0xff) as u8,
-             ((x >> 40) & 0xff) as u8,
-             ((x >> 48) & 0xff) as u8,
-             ((x >> 56) & 0xff) as u8];
-
-    hamming::weight(&y[..])
+    x.count_ones() as u64
 }
 
 /// A structure describing a directed multistage graph. 

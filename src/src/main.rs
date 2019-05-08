@@ -9,7 +9,6 @@ extern crate indexmap;
 extern crate itertools;
 extern crate num_cpus;
 extern crate rand;
-extern crate smallvec;
 extern crate structopt;
 extern crate time;
 
