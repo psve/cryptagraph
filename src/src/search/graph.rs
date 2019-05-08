@@ -109,7 +109,7 @@ impl MultistageGraph {
         entry_tail.0 |= stages;
     }
 
-    /// Add an edge from one or more stages of the graph.
+    /// Remove an edge from one or more stages of the graph.
     pub fn remove_edges(&mut self, tail: u128, head: u128, stages: u64) {
         if stages >= (1 << self.stages) {
             return
