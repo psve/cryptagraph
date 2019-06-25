@@ -2,6 +2,7 @@
  */
 macro_rules! test_linear_layer {
     ($impl:path) => {
+        #[test]
         #[allow(unused_imports)]
         use proptest::prelude::*;
 
@@ -27,6 +28,7 @@ macro_rules! test_linear_layer {
 
 macro_rules! test_encryption_decryption {
     ($impl:path) => {
+        #[test]
         #[allow(unused_imports)]
         use proptest::prelude::*;
 
@@ -61,7 +63,16 @@ macro_rules! cipher_test_suite {
     }
 }
 
+#[allow(unused_macros)]
 macro_rules! cipher_testvector_encryption {
     ($impl:path, $tests:expr) => {
+        #[test]
+        fn test_encryption() {
+            let cipher = <$impl>::new();
+            for (key, pt, ct) in expr.iter() {
+                let cct = cipher.encrypt(pt);
+                assert_eq!(pt, ct);
+            }
+        }
     }
 }

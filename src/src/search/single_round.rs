@@ -1,4 +1,4 @@
-//! Types for representing properties of a single round of a cipher in sorted order. 
+//! Types for representing properties of a single round of a cipher in sorted order.
 
 use crossbeam_utils;
 use num_cpus;
@@ -22,7 +22,7 @@ lazy_static! {
 /// generated using the Iterator trait.
 #[derive(Clone)]
 pub struct SortedProperties<'a> {
-    cipher: &'a Cipher,
+    cipher: &'a dyn Cipher,
     value_maps: Vec<ValueMap>,
     sbox_patterns: Vec<SboxPattern>,
     property_type: PropertyType,
@@ -35,10 +35,10 @@ impl<'a> SortedProperties<'a> {
     /// using an approach inspired by the paper
     /// "Efficient Algorithms for Extracting the K Most Critical Paths in Timing Analysis"
     /// by Yen, Du, and Ghanta.
-    pub fn new(cipher: &dyn Cipher, 
-               pattern_limit: usize, 
+    pub fn new(cipher: &dyn Cipher,
+               pattern_limit: usize,
                property_type: PropertyType,
-               property_filter: PropertyFilter) 
+               property_filter: PropertyFilter)
                -> SortedProperties {
         let (sbox_patterns, value_maps) = get_sorted_patterns(cipher, pattern_limit, property_type);
 
@@ -49,7 +49,7 @@ impl<'a> SortedProperties<'a> {
                          property_filter}
     }
 
-    /// Returns the number of properties which can be generated. 
+    /// Returns the number of properties which can be generated.
     pub fn len(&self) -> usize {
         let mut len = 0;
 
@@ -72,7 +72,7 @@ impl<'a> SortedProperties<'a> {
     }
 
     /// Returns a reference to the cipher the struct was generated with.
-    pub fn cipher(&self) -> &'a Cipher {
+    pub fn cipher(&self) -> &'a dyn Cipher {
         self.cipher
     }
 
@@ -107,16 +107,16 @@ impl<'a> SortedProperties<'a> {
     }
 
     /// Removes S-box patterns from a set of properties for which none of the resulting properties
-    /// are represented by the given graph. Note that the order of properties generated is not 
+    /// are represented by the given graph. Note that the order of properties generated is not
     /// preserved.
     ///
     /// `graph` is a graph compressed with `utility::compress`.
     /// The `level` supplied to this function must match that which the graph was created with.
     pub fn remove_dead_patterns(&mut self,
-                                graph: &MultistageGraph, 
+                                graph: &MultistageGraph,
                                 level: usize) {
         let (result_tx, result_rx) = mpsc::channel();
-        
+
         // Start scoped worker threads
         crossbeam_utils::thread::scope(|scope| {
             for t in 0..*THREADS {
@@ -125,7 +125,7 @@ impl<'a> SortedProperties<'a> {
 
                 scope.spawn(move |_| {
                     thread_properties.set_type_input();
-                    
+
                     // Split the S-box patterns equally across threads
                     // Note that this does not equally split the number of properties across threads,
                     // but hopefully it is close enough
@@ -150,10 +150,10 @@ impl<'a> SortedProperties<'a> {
                         }
 
                         let input = compress(property.input, level);
-                        let good = graph.forward_edges().contains_key(&input) 
+                        let good = graph.forward_edges().contains_key(&input)
                                 || graph.backward_edges().contains_key(&input);
                         good_patterns[pattern_idx] |= good;
-                        
+
                         if t == 0 {
                             progress_bar.increment();
                         }
@@ -191,13 +191,13 @@ impl<'a> IntoIterator for &'a SortedProperties<'a> {
     type IntoIter = SortedPropertiesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        SortedPropertiesIterator { 
+        SortedPropertiesIterator {
             cipher: self.cipher,
             value_maps: self.value_maps.clone(),
             sbox_patterns: self.sbox_patterns.clone(),
             property_type: self.property_type,
             property_filter: self.property_filter,
-            current_pattern: 0       
+            current_pattern: 0
         }
     }
 }
@@ -205,7 +205,7 @@ impl<'a> IntoIterator for &'a SortedProperties<'a> {
 /// An iterator over properties represented by a SortedProperties struct.
 #[derive(Clone)]
 pub struct SortedPropertiesIterator<'a> {
-    cipher: &'a Cipher,
+    cipher: &'a dyn Cipher,
     pub sbox_patterns: Vec<SboxPattern>,
     value_maps: Vec<ValueMap>,
     property_type: PropertyType,
@@ -218,13 +218,13 @@ impl<'a> Iterator for SortedPropertiesIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let max_length = self.sbox_patterns.len();
-        
+
         // Stop if we have generated all possible properties
         if self.current_pattern >= max_length {
             return None;
         }
 
-        // Generate next property by calling next on the current pattern. 
+        // Generate next property by calling next on the current pattern.
         // Repeat until we get a pattern or run out entirely
         let mut property = None;
 
@@ -243,10 +243,10 @@ impl<'a> Iterator for SortedPropertiesIterator<'a> {
                 }
             }
         }
-        
+
         let mut property = property.unwrap();
         let (input, output) = self.cipher
-                                  .sbox_mask_transform(property.input, 
+                                  .sbox_mask_transform(property.input,
                                                        property.output,
                                                        self.property_type);
         property.input = input;

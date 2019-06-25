@@ -1,7 +1,7 @@
 [package]
 name = "cryptagraph"
 version = "1.1.0"
-authors = ["Philip Vejre <philipvejre@gmail.com>"]
+authors = ["Philip Vejre <philipvejre@gmail.com>", "Mathias Hall-Andersen <mathias@hall-andersen.dk>"]
 edition = "2018"
 
 [profile.release]

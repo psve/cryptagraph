@@ -137,6 +137,7 @@ pub fn name_to_cipher(name : &str) -> Option<Box<dyn Cipher>> {
         "skinny64"  => Some(Box::new(skinny64::Skinny64::new())),
         "skinny128" => Some(Box::new(skinny128::Skinny128::new())),
         "twine"     => Some(Box::new(twine::Twine::new())),
+        "tc05"      => Some(Box::new(tc05::TC05::new())),
         _ => None
     }
 }

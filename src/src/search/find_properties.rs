@@ -19,7 +19,7 @@ lazy_static! {
 }
 
 /// Find all properties for a given graph starting with a specific input value.
-fn find_properties(cipher: &Cipher,
+fn find_properties(cipher: &dyn Cipher,
                    graph: &MultistageGraph,
                    property_type: PropertyType,
                    input: u128)
@@ -114,7 +114,7 @@ fn find_properties(cipher: &Cipher,
 /// * `property_type': The type of property the graph represents.
 /// * `allowed`: A set of allowed input-output pairs. Properties not matching these are filtered.
 /// * `num_keep`: Only the best `num_keep` properties are returned.
-pub fn parallel_find_properties(cipher: &Cipher,
+pub fn parallel_find_properties(cipher: &dyn Cipher,
                                 graph: &MultistageGraph,
                                 property_type: PropertyType,
                                 allowed: &FnvHashSet<(u128, u128)>,
