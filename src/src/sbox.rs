@@ -1,4 +1,4 @@
-//! Type representing an S-box. 
+//! Type representing an S-box.
 
 use crate::utility::parity_masks;
 use std::convert::TryInto;
@@ -81,7 +81,7 @@ impl Sbox {
             Ok(x) => x,
             Err(_) => panic!("Conversion error"),
         };
-
+        assert!(x < (1 << self.in_size));
         self.table[x]
     }
 

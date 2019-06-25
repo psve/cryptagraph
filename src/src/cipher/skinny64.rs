@@ -33,10 +33,10 @@ impl Skinny64 {
                          0x0e,0x1d,0x3a,0x35,0x2b,0x16,0x2c,0x18,0x30,0x21,0x02,0x05,0x0b,0x17,0x2e,
                          0x1c,0x38,0x31,0x23,0x06,0x0d,0x1b,0x36,0x2d,0x1a,0x34,0x29,0x12,0x24,0x08,
                          0x11,0x22,0x04];
-        Skinny64{size: 64, 
+        Skinny64{size: 64,
                key_size: 64,
-               sbox: Sbox::new(4, 4, table), 
-               isbox: Sbox::new(4, 4, itable), 
+               sbox: Sbox::new(4, 4, table),
+               isbox: Sbox::new(4, 4, itable),
                shift_rows_table,
                ishift_rows_table,
                key_permute,
@@ -48,7 +48,7 @@ impl Cipher for Skinny64 {
     fn structure(&self) -> CipherStructure {
         CipherStructure::Spn
     }
-    
+
     fn size(&self) -> usize {
         self.size
     }
@@ -163,7 +163,7 @@ impl Cipher for Skinny64 {
 
             // Shift + MixColumns
             output = self.linear_layer(output);
-            
+
             // Add round key
             output ^= round_key;
         }
@@ -177,7 +177,7 @@ impl Cipher for Skinny64 {
         for i in 0..32 {
             // Add round key
             output ^= round_keys[31-i];
-            
+
             // Shift + MixColumns
             output = self.linear_layer_inv(output);
 
@@ -196,24 +196,24 @@ impl Cipher for Skinny64 {
             output = tmp;
         }
 
-        output   
+        output
     }
 
     fn name(&self) -> String {
         String::from("SKINNY64")
     }
 
-    fn sbox_mask_transform(&self, 
-                           input: u128, 
-                           output: u128, 
-                           _property_type: PropertyType) 
+    fn sbox_mask_transform(&self,
+                           input: u128,
+                           output: u128,
+                           _property_type: PropertyType)
                            -> (u128, u128) {
         (input, self.linear_layer(output))
     }
 
     #[inline(always)]
-    fn whitening(&self) -> bool { 
-        false 
+    fn whitening(&self) -> bool {
+        false
     }
 }
 
@@ -226,7 +226,7 @@ impl Default for Skinny64 {
 #[cfg(test)]
 mod tests {
     use crate::cipher;
-    
+
     #[test]
     fn encryption_test() {
         let cipher = cipher::name_to_cipher("skinny64").unwrap();

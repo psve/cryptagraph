@@ -18,14 +18,14 @@ lazy_static! {
     static ref THREADS: usize = num_cpus::get();
 }
 
-/// Find all properties for a given graph starting with a specific input value. 
+/// Find all properties for a given graph starting with a specific input value.
 fn find_properties(cipher: &Cipher,
-                   graph: &MultistageGraph, 
+                   graph: &MultistageGraph,
                    property_type: PropertyType,
-                   input: u128) 
+                   input: u128)
                    -> IndexMap<u128, Property> {
     let start_property = Property::new(input, input, 1.0, 1);
-    
+
     // The edge map maps output values to properties over a number of rounds
     // It first contains an "empty" property
     let mut edge_map = IndexMap::new();
@@ -106,21 +106,21 @@ fn find_properties(cipher: &Cipher,
     edge_map
 }
 
-/// Find all properties for a given graph in a parallelised way. 
+/// Find all properties for a given graph in a parallelised way.
 ///
 /// # Parameters
 /// * `cipher`: The cipher we are analysing.
 /// * `graph`: A graph generated with `generate_graph`.
 /// * `property_type': The type of property the graph represents.
-/// * `allowed`: A set of allowed input-output pairs. Properties not matching these are filtered. 
-/// * `num_keep`: Only the best `num_keep` properties are returned. 
+/// * `allowed`: A set of allowed input-output pairs. Properties not matching these are filtered.
+/// * `num_keep`: Only the best `num_keep` properties are returned.
 pub fn parallel_find_properties(cipher: &Cipher,
                                 graph: &MultistageGraph,
                                 property_type: PropertyType,
                                 allowed: &FnvHashSet<(u128, u128)>,
-                                num_keep: usize) 
+                                num_keep: usize)
                                 -> (Vec<Property>, f64, u128) {
-    println!("Finding properties ({} input values, {} edges):", 
+    println!("Finding properties ({} input values, {} edges):",
              graph.num_vertices(0), graph.num_edges());
 
     let start = time::precise_time_s();
@@ -143,18 +143,18 @@ pub fn parallel_find_properties(cipher: &Cipher,
                 for &input in graph.get_vertices_outgoing(0).iter().skip(t).step_by(*THREADS) {
                     let properties = find_properties(cipher, &graph, property_type, input as u128);
                     num_found += properties.len();
-                    
+
                     for property in properties.values() {
-                        if allowed.is_empty() || 
+                        if allowed.is_empty() ||
                            allowed.contains(&(property.input, property.output)) {
                             paths += property.trails;
                             result.push(*property);
                         }
                     }
-                    
+
                     // Only keep best <num_keep> properties
                     result.sort_by(|a, b| b.value.partial_cmp(&a.value).unwrap());
-                    
+
                     if let Some(property) = result.last() {
                         min_value = min_value.min(property.value);
                     }
@@ -179,7 +179,7 @@ pub fn parallel_find_properties(cipher: &Cipher,
 
     for _ in 0..*THREADS {
         let mut thread_result = result_rx.recv().expect("Main could not receive result");
-        
+
         result.append(&mut thread_result.0);
         min_value = min_value.min(thread_result.1);
         num_found += thread_result.2;

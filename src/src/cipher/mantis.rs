@@ -47,7 +47,7 @@ impl Mantis {
             tweak_permute,
             itweak_permute,
             permute_cell_table,
-            ipermute_cell_table 
+            ipermute_cell_table
         }
     }
 }
@@ -141,10 +141,10 @@ impl Cipher for Mantis {
     }
 
     fn reflection_layer(&self, input: u128) -> u128 {
-        // Note that this reflection layer is not as defined in 
+        // Note that this reflection layer is not as defined in
         // the specification. It is specified such that if the S-box
         // application before and after reflection is replaced by a full
-        // round, this reflection layer ensures equivalent functionality. 
+        // round, this reflection layer ensures equivalent functionality.
         let mut output = self.linear_layer_inv(input);
 
         // Apply MixColumns
@@ -246,7 +246,7 @@ impl Cipher for Mantis {
             // Round key and constant
             output = tmp ^ self.constants[i];
             output ^= round_keys[i+1];
-            
+
             // Linear layer
             output = self.linear_layer(output);
         }
@@ -286,7 +286,7 @@ impl Cipher for Mantis {
         for i in 0..6 {
             // Inverse linear layer
             output = self.linear_layer_inv(tmp);
-            
+
             // Round key and constant
             output ^= round_keys[i+7];
             output ^= self.constants[5-i];
@@ -317,10 +317,10 @@ impl Cipher for Mantis {
         String::from("MANTIS")
     }
 
-    fn sbox_mask_transform(&self, 
-                           input: u128, 
-                           output: u128, 
-                           _property_type: PropertyType) 
+    fn sbox_mask_transform(&self,
+                           input: u128,
+                           output: u128,
+                           _property_type: PropertyType)
                            -> (u128, u128) {
         (input, self.linear_layer(output))
     }

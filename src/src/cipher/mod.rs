@@ -36,7 +36,7 @@ pub trait Cipher: Sync {
 
     /// Returns the position of the LSB of the output to the i'th S-box of the cipher.
     fn sbox_pos_out(&self, i: usize) -> usize;
-    
+
     /// Applies the linear layer of the cipher to the input.
     fn linear_layer(&self, input: u128) -> u128;
 
@@ -46,23 +46,25 @@ pub trait Cipher: Sync {
     /// Applies the reflection layer for Prince like ciphers.
     /// For all other cipher types, this can remain unimplemented.
     #[allow(unused_variables)]
-    fn reflection_layer(&self, input: u128) -> u128;
+    fn reflection_layer(&self, _input: u128) -> u128 {
+        panic!("Not implemented for this type of cipher")
+    }
 
     /// Computes a vector of round key from a cipher key. Note that the length of the output
     /// is not necessarily equal to `rounds`. See the `whitening` function.
     fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u128>;
 
-    /// Performs encryption with the cipher.
-    fn encrypt(&self, input: u128, round_keys: &[u128]) -> u128;
+    /// Performs encryption with the cipher (for testing)
+    fn encrypt(&self, input: u128, _round_keys: &[u128]) -> u128 { input }
 
-    /// Performs decryption with the cipher.
-    fn decrypt(&self, input: u128, round_keys: &[u128]) -> u128;
+    /// Performs decryption with the cipher (for testing).
+    fn decrypt(&self, input: u128, _round_keys: &[u128]) -> u128 { input }
 
     /// Returns the name of the cipher.
     fn name(&self) -> String;
 
-    /// Transforms the input and output mask of the S-box layer to an input and output mask 
-    /// of a round. Note that this transformation can depend on the property type. 
+    /// Transforms the input and output mask of the S-box layer to an input and output mask
+    /// of a round. Note that this transformation can depend on the property type.
     #[allow(unused_variables)]
     fn sbox_mask_transform(&self,
                            input: u128,
@@ -70,10 +72,13 @@ pub trait Cipher: Sync {
                            property_type: PropertyType)
                            -> (u128, u128);
 
-    /// Specifies if the cipher uses a pre-whitening key. In this case, the key-schedule returns 
-    /// rounds+1 round keys. 
+    /// Specifies if the cipher uses a pre-whitening key. In this case, the key-schedule returns
+    /// rounds+1 round keys.
     fn whitening(&self) -> bool;
 }
+
+#[macro_use]
+mod tests;
 
 pub mod aes;
 pub mod boron;
@@ -101,6 +106,7 @@ pub mod rectangle;
 pub mod skinny64;
 pub mod skinny128;
 pub mod twine;
+pub mod tc05;
 
 /// Converts the name of a cipher to an instance of that cipher.
 pub fn name_to_cipher(name : &str) -> Option<Box<dyn Cipher>> {

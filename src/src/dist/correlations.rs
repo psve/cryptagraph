@@ -1,10 +1,12 @@
-//! Types and functions for calculating linear correlations. 
+//! Types and functions for calculating linear correlations.
 
-use crossbeam_utils;
-use rand::{OsRng, RngCore};
-use fnv::FnvHashMap;
 use num_cpus;
+use crossbeam_utils;
+use fnv::FnvHashMap;
 use std::sync::mpsc;
+
+use rand::RngCore;
+use rand::rngs::OsRng;
 
 use crate::cipher::{Cipher, CipherStructure};
 use crate::property::Property;
@@ -22,7 +24,7 @@ impl MaskLat {
     #[inline(always)]
     fn correlation(cipher : &dyn Cipher,
                    input  : u128,
-                   output : u128) 
+                   output : u128)
                    -> f64 {
         let mut value = 1.0;
         let mut input = input;
@@ -82,7 +84,7 @@ impl MaskLat {
             progress_bar.increment();
             for &output in &outputs {
                 let value = MaskLat::correlation(cipher, input, output);
-                
+
                 if value*value > 0.0 {
                     let vector = mlat.map_input.get_mut(&input).expect("Error 1");
                     /* NOTE:
@@ -149,7 +151,7 @@ impl MaskPool {
     fn add(&mut self, mask: u128) {
         self.masks.insert((mask, mask), 1.0);
     }
-    
+
     /// Extend the current set by one round given an LAT and a round key.
     fn step(&mut self,
             lat: &MaskLat,
@@ -179,7 +181,7 @@ impl MaskPool {
     }
 }
 
-/// Calculates key dependent correlations for a set of intermediate masks and keys. 
+/// Calculates key dependent correlations for a set of intermediate masks and keys.
 ///
 /// # Parameters
 /// * `cipher`: The cipher to calculate correlations for.
@@ -202,7 +204,7 @@ pub fn get_correlations(cipher: &dyn Cipher,
     lat_inv.invert();
 
     println!("Generating correlations.");
-        
+
     // Generate keys
     let mut rng = OsRng::new().unwrap();
     let mut keys = vec![vec![0; cipher.key_size() / 8]; num_keys];
@@ -210,7 +212,7 @@ pub fn get_correlations(cipher: &dyn Cipher,
     for mut k in &mut keys {
         rng.fill_bytes(&mut k);
     }
-    
+
     let num_threads = num_cpus::get();
     let (result_tx, result_rx) = mpsc::channel();
 
@@ -226,7 +228,7 @@ pub fn get_correlations(cipher: &dyn Cipher,
                 let mut pool = MaskPool::new();
                 let mut thread_result = FnvHashMap::default();
                 let mut progress_bar = ProgressBar::new((0..num_keys).skip(t).step_by(num_threads).len());
-                
+
                 let rounds = if cipher.structure() == CipherStructure::Prince {
                     rounds - 1
                 } else {
@@ -266,10 +268,10 @@ pub fn get_correlations(cipher: &dyn Cipher,
                         pool.step(&lat, 0);
 
                         let mut pool_new = pool.clone();
-                        
+
                         for (k, &v) in &pool.masks {
                             let k_new = (k.0, cipher.reflection_layer(k.1));
-                            pool_new.masks.insert(k_new, v); 
+                            pool_new.masks.insert(k_new, v);
                         }
 
                         pool.step(&lat_inv, round_keys[rounds]);
