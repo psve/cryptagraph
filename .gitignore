@@ -8,7 +8,6 @@
 *.pdf
 *.synctex.gz
 *.masks
-Cargo.lock
 src/target/*
 *.sublime-project
 *.sublime-workspace
