@@ -6,7 +6,8 @@ use indexmap::IndexMap;
 use num_cpus;
 use std::f64;
 use std::sync::mpsc;
-use time;
+
+use std::time::Instant;
 
 use crate::cipher::{Cipher, CipherStructure};
 use crate::search::graph::MultistageGraph;
@@ -123,7 +124,7 @@ pub fn parallel_find_properties(cipher: &dyn Cipher,
     println!("Finding properties ({} input values, {} edges):",
              graph.num_vertices(0), graph.num_edges());
 
-    let start = time::precise_time_s();
+    let start = Instant::now();
     let (result_tx, result_rx) = mpsc::channel();
 
     // Start scoped worker threads
@@ -174,7 +175,7 @@ pub fn parallel_find_properties(cipher: &dyn Cipher,
     // Collect results from all threads
     let mut paths = 0;
     let mut num_found = 0;
-    let mut min_value = 1.0_f64;;
+    let mut min_value = 1.0_f64;
     let mut result = vec![];
 
     for _ in 0..*THREADS {
@@ -189,7 +190,7 @@ pub fn parallel_find_properties(cipher: &dyn Cipher,
     result.sort_by(|a, b| b.value.partial_cmp(&a.value).unwrap());
     result.truncate(num_keep);
 
-    println!("\nFound {} properties. [{} s]", num_found, time::precise_time_s()-start);
+    println!("\nFound {} properties. [{:?} s]", num_found, start.elapsed());
 
     (result, min_value, paths)
 }

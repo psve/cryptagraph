@@ -143,7 +143,7 @@ impl Cipher for Gift64 {
 
             k0 = (t0 >> 32) & 0xffffffffffffffff;
             k0 ^= (t1 << 32) & 0xffffffffffffffff;
-            k1 = (t1 >> 32) & 0xffffffffffffffff;;
+            k1 = (t1 >> 32) & 0xffffffffffffffff;
             k1 ^= ((((t0 & 0xffff) >> 12) ^ ((t0 & 0xffff) << 4)) & 0xffff) << 32;
             k1 ^= ((((t0 & 0xffff0000) >> 2) ^ ((t0 & 0xffff0000) << 14)) & 0xffff0000) << 32;
         }

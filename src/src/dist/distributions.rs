@@ -3,7 +3,8 @@
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use fnv::FnvHashMap;
-use time;
+
+use std::time::Instant;
 
 use crate::cipher::*;
 use crate::dist::correlations::get_correlations;
@@ -46,7 +47,7 @@ fn load_masks(path : &str) -> Option<Vec<u128>> {
 }
 
 /// Saves a set of correlations in a file. The file format is csv, and the headers have the form
-/// `input_output`. 
+/// `input_output`.
 fn dump_correlations(correlations: &FnvHashMap<(u128, u128), Vec<f64>>,
                      path: &str) {
     let mut file = OpenOptions::new()
@@ -68,7 +69,7 @@ fn dump_correlations(correlations: &FnvHashMap<(u128, u128), Vec<f64>>,
 
     for j in 0..values.first().expect("Empty data set.").len() {
         let mut line = String::new();
-        
+
         for v in &values {
             line.push_str(&format!("{},", v[j]));
         }
@@ -78,23 +79,23 @@ fn dump_correlations(correlations: &FnvHashMap<(u128, u128), Vec<f64>>,
 }
 
 /// Generates correlation distributions for a given cipher. The correlations are saved in a csv file
-/// with the suffix '.corrs'. The headers have the form `input_output`. 
+/// with the suffix '.corrs'. The headers have the form `input_output`.
 ///
 /// # Parameters
 /// * `cipher`: The cipher to calculate correlations for.
-/// * `file_mask_in`: Path to a file containing allowed input-output masks. 
+/// * `file_mask_in`: Path to a file containing allowed input-output masks.
 /// * `rounds`: Number of rounds to calculate correlations for.
 /// * `keys`: Number of master keys to generation correlations for.
 /// * `masks`: Path to a file containing a set of intermediate masks used when generating trails.
-/// * `output`: Prefix of the output file. 
+/// * `output`: Prefix of the output file.
 pub fn get_distributions(cipher: &dyn Cipher,
                          file_mask_in: &str,
                          rounds: usize,
                          keys: usize,
                          masks: &str,
                          output: &str) {
-    let start = time::precise_time_s();
-    
+    let start = Instant::now();
+
     // read mask files
     let masks = match load_masks(&masks) {
         Some(m) => m,
@@ -102,7 +103,7 @@ pub fn get_distributions(cipher: &dyn Cipher,
     };
 
     let allowed = read_allowed(file_mask_in);
-    
+
     println!("Cipher: {}", cipher.name());
     println!("Properties masks: {}", allowed.len());
     println!("Intermediate masks: {}", masks.len());
@@ -115,5 +116,5 @@ pub fn get_distributions(cipher: &dyn Cipher,
     let path = format!("{}.corrs", output);
     dump_correlations(&correlations, &path);
 
-    println!("Generation finished. [{} s]", time::precise_time_s()-start);
+    println!("Generation finished. [{:?} s]", start.elapsed());
 }
