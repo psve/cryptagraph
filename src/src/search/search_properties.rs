@@ -174,7 +174,7 @@ pub fn search_properties(cipher: &dyn Cipher,
 
     println!("\n------------------------------------------ RESULTS ---------------------------------------------\n");
 
-    println!("Search finished. [{:?} s]", start.elapsed());
+    println!("Search finished. [{:?} s]", start.elapsed().as_secs());
 
     if !result.is_empty() {
         println!("Smallest value: {}", min_value.log2());

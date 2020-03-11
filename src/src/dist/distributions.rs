@@ -116,5 +116,5 @@ pub fn get_distributions(cipher: &dyn Cipher,
     let path = format!("{}.corrs", output);
     dump_correlations(&correlations, &path);
 
-    println!("Generation finished. [{:?} s]", start.elapsed());
+    println!("Generation finished. [{:?} s]", start.elapsed().as_secs());
 }

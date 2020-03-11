@@ -190,7 +190,7 @@ pub fn parallel_find_properties(cipher: &dyn Cipher,
     result.sort_by(|a, b| b.value.partial_cmp(&a.value).unwrap());
     result.truncate(num_keep);
 
-    println!("\nFound {} properties. [{:?} s]", num_found, start.elapsed());
+    println!("\nFound {} properties. [{:?} s]", num_found, start.elapsed().as_secs());
 
     (result, min_value, paths)
 }

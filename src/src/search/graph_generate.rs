@@ -603,14 +603,14 @@ pub fn generate_graph(cipher: &dyn Cipher,
             num_prop, num_input, num_output);
         graph = gen_with_stages(&properties, 1, 0b1, 3, None, None);
         println!("Graph has {} edges [{:?} s]\n",
-            graph.num_edges(), start.elapsed());
+            graph.num_edges(), start.elapsed().as_secs());
     } else {
         if rounds == 2 {
             let start = Instant::now();
             println!("Generating graph.");
             graph = gen_with_stages(&properties, 2, 0b11, 3, None, None);
             println!("Graph has {} edges [{:?} s]\n",
-                graph.num_edges(), start.elapsed());
+                graph.num_edges(), start.elapsed().as_secs());
         }
 
         if rounds == 4 {
@@ -619,13 +619,13 @@ pub fn generate_graph(cipher: &dyn Cipher,
             let start = Instant::now();
             let vertex_set = get_vertex_set(&properties, None, 3);
             println!("{} vertices in set [{:?} s]\n",
-                    vertex_set.len(), start.elapsed());
+                    vertex_set.len(), start.elapsed().as_secs());
 
             let start = Instant::now();
             println!("Generating graph.");
             graph = gen_with_stages(&properties, 2, 0b11, 3, Some(&vertex_set), None);
             println!("Graph has {} edges [{:?} s]\n",
-                graph.num_edges(), start.elapsed());
+                graph.num_edges(), start.elapsed().as_secs());
         }
 
         if rounds > 4 {
@@ -663,7 +663,7 @@ pub fn generate_graph(cipher: &dyn Cipher,
                     get_vertex_set(&properties, Some(&vertex_set), level)
                 };
                 println!("{} vertices in set [{:?} s]\n",
-                        vertex_set.len(), start.elapsed());
+                        vertex_set.len(), start.elapsed().as_secs());
 
                 // All but the first and last stage
                 let stages = ((1 << (rounds-1)) - 1) ^ 1;
@@ -672,18 +672,18 @@ pub fn generate_graph(cipher: &dyn Cipher,
                 println!("Generating graph.");
                 graph = gen_with_stages(&properties, rounds, stages, level, Some(&vertex_set), old_graph);
                 println!("Graph has {} edges [{:?} s]",
-                    graph.num_edges(), start.elapsed());
+                    graph.num_edges(), start.elapsed().as_secs());
 
                 let start = Instant::now();
                 graph.prune(1, rounds-1);
                 println!("Pruned graph has {} edges [{:?} s]\n",
-                        graph.num_edges(), start.elapsed());
+                        graph.num_edges(), start.elapsed().as_secs());
 
                 let start = Instant::now();
                 println!("Extending graph.");
                 extend(&mut graph, &properties, rounds, level, None, None);
                 println!("Extended graph has {} edges [{:?} s]",
-                        graph.num_edges(), start.elapsed());
+                        graph.num_edges(), start.elapsed().as_secs());
 
                 let start = Instant::now();
                 if cipher.structure() == CipherStructure::Prince {
@@ -692,7 +692,7 @@ pub fn generate_graph(cipher: &dyn Cipher,
                     graph.prune(0, rounds);
                 }
                 println!("Pruned graph has {} edges [{:?} s]",
-                        graph.num_edges(), start.elapsed());
+                        graph.num_edges(), start.elapsed().as_secs());
 
                 // Update filters and remove dead patterns if we havn't generated the final graph
                 if level != 3 {
@@ -702,7 +702,7 @@ pub fn generate_graph(cipher: &dyn Cipher,
                     properties.remove_dead_patterns(&graph, level);
                     let patterns_after = properties.len_patterns();
                     println!("Removed {} dead patterns [{:?} s]",
-                        patterns_before - patterns_after, start.elapsed());
+                        patterns_before - patterns_after, start.elapsed().as_secs());
                 }
 
                 println!();
@@ -722,7 +722,7 @@ pub fn generate_graph(cipher: &dyn Cipher,
         println!("Extending final graph.");
         extend(&mut graph, &properties, rounds, 3, input_allowed, output_allowed);
         println!("Extended graph has {} edges [{:?} s]\n",
-                 graph.num_edges(), (start.elapsed()).as_secs());
+                 graph.num_edges(), start.elapsed().as_secs());
     }
 
     // Anchoring
@@ -731,7 +731,7 @@ pub fn generate_graph(cipher: &dyn Cipher,
         print!("Anchoring final graph: ");
         anchor_ends(cipher, property_type, &mut graph, anchors, input_allowed, output_allowed);
         println!("Anchored graph has {} edges [{:?} s]",
-                 graph.num_edges(), (start.elapsed()).as_secs());
+                 graph.num_edges(), start.elapsed().as_secs());
     }
 
     let start = Instant::now();
@@ -741,7 +741,7 @@ pub fn generate_graph(cipher: &dyn Cipher,
         graph.prune(0, rounds);
     }
     println!("Pruned graph has {} edges [{:?} s]\n",
-            graph.num_edges(), (start.elapsed()).as_secs());
+            graph.num_edges(), start.elapsed().as_secs());
 
     // Patch graph
     if cipher.structure() != CipherStructure::Feistel {
@@ -749,7 +749,7 @@ pub fn generate_graph(cipher: &dyn Cipher,
         println!("Patching graph.");
         let added = patch(cipher, property_type, &mut graph);
         println!("Added {} edges [{:?} s]\n",
-            added, (start.elapsed()).as_secs());
+            added, start.elapsed().as_secs());
     }
 
     println!("Final graph has {} edges\n", graph.num_edges());
