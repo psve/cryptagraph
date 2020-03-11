@@ -208,8 +208,10 @@ pub fn get_correlations(cipher: &dyn Cipher,
     // Generate keys
     let mut keys = vec![vec![0; cipher.key_size() / 8]; num_keys];
 
+    let mut rng = OsRng::new().unwrap();
+
     for mut k in &mut keys {
-        OsRng.fill_bytes(&mut k);
+        rng.fill_bytes(&mut k);
     }
 
     let num_threads = num_cpus::get();
