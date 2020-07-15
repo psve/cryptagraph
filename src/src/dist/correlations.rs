@@ -1,16 +1,16 @@
 //! Types and functions for calculating linear correlations.
 
-use num_cpus;
 use crossbeam_utils;
 use fnv::FnvHashMap;
+use num_cpus;
 use std::sync::mpsc;
 
-use rand::RngCore;
 use rand::rngs::OsRng;
+use rand::RngCore;
 
 use crate::cipher::{Cipher, CipherStructure};
 use crate::property::Property;
-use crate::utility::{ProgressBar, parity};
+use crate::utility::{parity, ProgressBar};
 
 /// Part of a linear approximation table for an entire round function of a cipher.
 #[derive(Clone)]
@@ -22,19 +22,16 @@ impl MaskLat {
     /// Takes an LAT of a component function and computes the correlation of parities over the
     /// bricklayer function.
     #[inline(always)]
-    fn correlation(cipher : &dyn Cipher,
-                   input  : u128,
-                   output : u128)
-                   -> f64 {
+    fn correlation(cipher: &dyn Cipher, input: u128, output: u128) -> f64 {
         let mut value = 1.0;
         let mut input = input;
         let mut output = output;
 
-        let w_in  = cipher.sbox(0).size_in();
+        let w_in = cipher.sbox(0).size_in();
         let w_out = cipher.sbox(0).size_out();
-        let m_in  = (1 << w_in) - 1;
+        let m_in = (1 << w_in) - 1;
         let m_out = (1 << w_out) - 1;
-        let values  = f64::from(1 << cipher.sbox(0).size_in());
+        let values = f64::from(1 << cipher.sbox(0).size_in());
 
         for i in 0..cipher.num_sboxes() {
             let hits = cipher.sbox(i).lat()[(input & m_in) as usize][(output & m_out) as usize];
@@ -42,7 +39,7 @@ impl MaskLat {
             value *= c;
 
             output >>= w_out;
-            input  >>= w_in;
+            input >>= w_in;
         }
 
         debug_assert_eq!(output, 0);
@@ -52,7 +49,7 @@ impl MaskLat {
     }
 
     /// Constructs a Lat over the bricklayer function for the particular set of parities.
-    fn new(cipher : &dyn Cipher, masks : &[u128]) -> MaskLat {
+    fn new(cipher: &dyn Cipher, masks: &[u128]) -> MaskLat {
         /* Assuming SPN; compute possible "outputs" for input set
          *
          * Alpha ^ Key Addition -> Substitution -> Linear
@@ -71,7 +68,7 @@ impl MaskLat {
 
         // construct full mask lat
         let mut mlat = MaskLat {
-            map_input : FnvHashMap::default(),
+            map_input: FnvHashMap::default(),
         };
 
         for input in masks {
@@ -85,7 +82,7 @@ impl MaskLat {
             for &output in &outputs {
                 let value = MaskLat::correlation(cipher, input, output);
 
-                if value*value > 0.0 {
+                if value * value > 0.0 {
                     let vector = mlat.map_input.get_mut(&input).expect("Error 1");
                     /* NOTE:
                      *   Applies linear layer to output
@@ -93,11 +90,11 @@ impl MaskLat {
                      *   new maskset (subset of Alpha)
                      */
                     let output = cipher.linear_layer(output);
-                    vector.push(Property{
+                    vector.push(Property {
                         input,
                         output,
                         value,
-                        trails : 1
+                        trails: 1,
                     });
                 }
             }
@@ -113,13 +110,15 @@ impl MaskLat {
         for v in self.map_input.values() {
             for p in v {
                 let inverse_property = Property {
-                    input  : p.output,
-                    output : p.input,
-                    value  : p.value,
-                    trails : p.trails
+                    input: p.output,
+                    output: p.input,
+                    value: p.value,
+                    trails: p.trails,
                 };
 
-                let entry = inverse.entry(inverse_property.input).or_insert_with(Vec::new);
+                let entry = inverse
+                    .entry(inverse_property.input)
+                    .or_insert_with(Vec::new);
                 entry.push(inverse_property);
             }
         }
@@ -128,7 +127,7 @@ impl MaskLat {
     }
 
     /// Gets any outputs matching a specific input.
-    fn lookup_input(&self, a : u128) -> Option<&Vec<Property>> {
+    fn lookup_input(&self, a: u128) -> Option<&Vec<Property>> {
         self.map_input.get(&a)
     }
 }
@@ -142,7 +141,7 @@ struct MaskPool {
 impl MaskPool {
     /// Create a new empty pool.
     fn new() -> MaskPool {
-        MaskPool{
+        MaskPool {
             masks: FnvHashMap::default(),
         }
     }
@@ -153,22 +152,24 @@ impl MaskPool {
     }
 
     /// Extend the current set by one round given an LAT and a round key.
-    fn step(&mut self,
-            lat: &MaskLat,
-            key: u128) {
+    fn step(&mut self, lat: &MaskLat, key: u128) {
         let mut pool_new = FnvHashMap::default();
 
         // propergate mask set
         for ((input, output), value) in &self.masks {
             if let Some(approximations) = lat.lookup_input(*output) {
                 for approx in approximations {
-                    let sign   = if parity(approx.output & key) == 1 { -1.0 } else { 1.0 };
+                    let sign = if parity(approx.output & key) == 1 {
+                        -1.0
+                    } else {
+                        1.0
+                    };
                     let delta = sign * (approx.value * value);
 
                     // add relation to accumulator
-                    let acc  = match pool_new.get(&(*input, approx.output)) {
-                        None    => delta,
-                        Some(c) => delta + c
+                    let acc = match pool_new.get(&(*input, approx.output)) {
+                        None => delta,
+                        Some(c) => delta + c,
                     };
 
                     // write back to pool
@@ -189,12 +190,13 @@ impl MaskPool {
 /// * `rounds`: Number of rounds to calculate correlations for.
 /// * `num_keys`: Number of master keys to generation correlations for.
 /// * `masks`: A set of intermediate masks to use when generating trails.
-pub fn get_correlations(cipher: &dyn Cipher,
-                        allowed: &[(u128, u128)],
-                        rounds: usize,
-                        num_keys: usize,
-                        masks: &[u128])
-                        -> FnvHashMap<(u128, u128), Vec<f64>> {
+pub fn get_correlations(
+    cipher: &dyn Cipher,
+    allowed: &[(u128, u128)],
+    rounds: usize,
+    num_keys: usize,
+    masks: &[u128],
+) -> FnvHashMap<(u128, u128), Vec<f64>> {
     // calculate LAT for masks between rounds (cipher dependent)
     println!("Calculating full approximation table.");
     let lat = MaskLat::new(cipher, masks);
@@ -206,9 +208,8 @@ pub fn get_correlations(cipher: &dyn Cipher,
     println!("Generating correlations.");
 
     // Generate keys
-    let mut keys = vec![vec![0; cipher.key_size() / 8]; num_keys];
-
     let mut rng = OsRng::new().unwrap();
+    let mut keys = vec![vec![0; cipher.key_size() / 8]; num_keys];
 
     for mut k in &mut keys {
         rng.fill_bytes(&mut k);
@@ -228,7 +229,8 @@ pub fn get_correlations(cipher: &dyn Cipher,
             scope.spawn(move |_| {
                 let mut pool = MaskPool::new();
                 let mut thread_result = FnvHashMap::default();
-                let mut progress_bar = ProgressBar::new((0..num_keys).skip(t).step_by(num_threads).len());
+                let mut progress_bar =
+                    ProgressBar::new((0..num_keys).skip(t).step_by(num_threads).len());
 
                 let rounds = if cipher.structure() == CipherStructure::Prince {
                     rounds - 1
@@ -237,15 +239,18 @@ pub fn get_correlations(cipher: &dyn Cipher,
                 };
 
                 for k in (0..num_keys).skip(t).step_by(num_threads) {
-
                     // generate rounds keys
                     let mut round_keys = if cipher.structure() == CipherStructure::Prince {
-                        cipher.key_schedule(rounds*2, &keys[k])
+                        cipher.key_schedule(rounds * 2, &keys[k])
                     } else {
                         cipher.key_schedule(rounds, &keys[k])
                     };
 
-                    let whitening_key = if cipher.whitening() { round_keys.remove(0) } else { 0 };
+                    let whitening_key = if cipher.whitening() {
+                        round_keys.remove(0)
+                    } else {
+                        0
+                    };
 
                     for (alpha, _) in allowed {
                         // initalize pool with chosen alpha
@@ -253,7 +258,7 @@ pub fn get_correlations(cipher: &dyn Cipher,
                     }
 
                     for &round_key in round_keys.iter().take(rounds) {
-                    // for round in 0..rounds {
+                        // for round in 0..rounds {
                         // "clock" all patterns one round
                         // pool.step(&lat, round_keys[round]);
                         pool.step(&lat, round_key);
@@ -278,8 +283,8 @@ pub fn get_correlations(cipher: &dyn Cipher,
                         pool.step(&lat_inv, round_keys[rounds]);
 
                         // Do remaining rounds
-                        for &round_key in round_keys.iter().skip(rounds+1) {
-                        // for round in 0..rounds {
+                        for &round_key in round_keys.iter().skip(rounds + 1) {
+                            // for round in 0..rounds {
                             // "clock" all patterns one round
                             // pool.step(&lat_inv, round_keys[rounds+1+round]);
                             pool.step(&lat_inv, round_key);
@@ -293,16 +298,19 @@ pub fn get_correlations(cipher: &dyn Cipher,
 
                     for (alpha, beta) in allowed {
                         let corr = match pool.masks.get(&(*alpha, *beta)) {
-                            Some(c) =>
-                                if cipher.whitening() && parity(*alpha & whitening_key) == 1  {
-                                    - (*c)
+                            Some(c) => {
+                                if cipher.whitening() && parity(*alpha & whitening_key) == 1 {
+                                    -(*c)
                                 } else {
                                     *c
-                                },
-                            None    => 0.0
+                                }
+                            }
+                            None => 0.0,
                         };
 
-                        let entry = thread_result.entry((*alpha, *beta)).or_insert_with(Vec::new);
+                        let entry = thread_result
+                            .entry((*alpha, *beta))
+                            .or_insert_with(Vec::new);
                         entry.push(corr);
                     }
 
@@ -311,10 +319,13 @@ pub fn get_correlations(cipher: &dyn Cipher,
                     }
                 }
 
-                result_tx.send(thread_result).expect("Thread could not send result");
+                result_tx
+                    .send(thread_result)
+                    .expect("Thread could not send result");
             });
         }
-    }).expect("Threads failed to join.");
+    })
+    .expect("Threads failed to join.");
 
     let mut result = FnvHashMap::default();
 

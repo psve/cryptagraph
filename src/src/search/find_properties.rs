@@ -6,12 +6,11 @@ use indexmap::IndexMap;
 use num_cpus;
 use std::f64;
 use std::sync::mpsc;
-
 use std::time::Instant;
 
 use crate::cipher::{Cipher, CipherStructure};
-use crate::search::graph::MultistageGraph;
 use crate::property::{Property, PropertyType};
+use crate::search::graph::MultistageGraph;
 use crate::utility::ProgressBar;
 
 // The number of threads used for parallel calls is fixed
@@ -20,11 +19,12 @@ lazy_static! {
 }
 
 /// Find all properties for a given graph starting with a specific input value.
-fn find_properties(cipher: &dyn Cipher,
-                   graph: &MultistageGraph,
-                   property_type: PropertyType,
-                   input: u128)
-                   -> IndexMap<u128, Property> {
+fn find_properties(
+    cipher: &dyn Cipher,
+    graph: &MultistageGraph,
+    property_type: PropertyType,
+    input: u128,
+) -> IndexMap<u128, Property> {
     let start_property = Property::new(input, input, 1.0, 1);
 
     // The edge map maps output values to properties over a number of rounds
@@ -51,10 +51,9 @@ fn find_properties(cipher: &dyn Cipher,
                         PropertyType::Differential => length,
                     };
 
-                    let entry = new_edge_map.entry(new_output as u128)
-                                            .or_insert(Property::new(property.input,
-                                                                     new_output as u128,
-                                                                     0.0, 0));
+                    let entry = new_edge_map
+                        .entry(new_output as u128)
+                        .or_insert(Property::new(property.input, new_output as u128, 0.0, 0));
 
                     (*entry).trails += property.trails;
                     (*entry).value += property.value * new_value;
@@ -68,7 +67,10 @@ fn find_properties(cipher: &dyn Cipher,
     // In case of Prince type cipher, go back through the graph as well
     if cipher.structure() == CipherStructure::Prince {
         // First apply reflection layer
-        edge_map = edge_map.iter().map(|(&k, &v)| (cipher.reflection_layer(k), v)).collect();
+        edge_map = edge_map
+            .iter()
+            .map(|(&k, &v)| (cipher.reflection_layer(k), v))
+            .collect();
 
         // Extend the edge map the desired number of rounds backwards
         for r in 0..graph.stages() {
@@ -79,7 +81,7 @@ fn find_properties(cipher: &dyn Cipher,
                 // Look up output in the single round map in order to extend one round
                 if let Some(inputs) = graph.backward_edges().get(output) {
                     for (&new_output, &(stages, length)) in inputs.iter() {
-                        if ((stages >> (graph.stages()-1-r)) & 0x1) != 1 {
+                        if ((stages >> (graph.stages() - 1 - r)) & 0x1) != 1 {
                             continue;
                         }
 
@@ -89,10 +91,9 @@ fn find_properties(cipher: &dyn Cipher,
                             PropertyType::Differential => length,
                         };
 
-                        let entry = new_edge_map.entry(new_output as u128)
-                                                .or_insert(Property::new(property.input,
-                                                                         new_output as u128,
-                                                                         0.0, 0));
+                        let entry = new_edge_map
+                            .entry(new_output as u128)
+                            .or_insert(Property::new(property.input, new_output as u128, 0.0, 0));
 
                         (*entry).trails += property.trails;
                         (*entry).value += property.value * new_value;
@@ -115,14 +116,18 @@ fn find_properties(cipher: &dyn Cipher,
 /// * `property_type': The type of property the graph represents.
 /// * `allowed`: A set of allowed input-output pairs. Properties not matching these are filtered.
 /// * `num_keep`: Only the best `num_keep` properties are returned.
-pub fn parallel_find_properties(cipher: &dyn Cipher,
-                                graph: &MultistageGraph,
-                                property_type: PropertyType,
-                                allowed: &FnvHashSet<(u128, u128)>,
-                                num_keep: usize)
-                                -> (Vec<Property>, f64, u128) {
-    println!("Finding properties ({} input values, {} edges):",
-             graph.num_vertices(0), graph.num_edges());
+pub fn parallel_find_properties(
+    cipher: &dyn Cipher,
+    graph: &MultistageGraph,
+    property_type: PropertyType,
+    allowed: &FnvHashSet<(u128, u128)>,
+    num_keep: usize,
+) -> (Vec<Property>, f64, u128) {
+    println!(
+        "Finding properties ({} input values, {} edges):",
+        graph.num_vertices(0),
+        graph.num_edges()
+    );
 
     let start = Instant::now();
     let (result_tx, result_rx) = mpsc::channel();
@@ -133,21 +138,27 @@ pub fn parallel_find_properties(cipher: &dyn Cipher,
             let result_tx = result_tx.clone();
 
             scope.spawn(move |_| {
-                let mut progress_bar = ProgressBar::new((0..graph.num_vertices(0))
-                                                        .skip(t).step_by(*THREADS).len());
+                let mut progress_bar =
+                    ProgressBar::new((0..graph.num_vertices(0)).skip(t).step_by(*THREADS).len());
                 let mut result = vec![];
                 let mut min_value = 1.0_f64;
                 let mut num_found = 0;
                 let mut paths = 0;
 
                 // Split input values between threads and call find_properties
-                for &input in graph.get_vertices_outgoing(0).iter().skip(t).step_by(*THREADS) {
+                for &input in graph
+                    .get_vertices_outgoing(0)
+                    .iter()
+                    .skip(t)
+                    .step_by(*THREADS)
+                {
                     let properties = find_properties(cipher, &graph, property_type, input as u128);
                     num_found += properties.len();
 
                     for property in properties.values() {
-                        if allowed.is_empty() ||
-                           allowed.contains(&(property.input, property.output)) {
+                        if allowed.is_empty()
+                            || allowed.contains(&(property.input, property.output))
+                        {
                             paths += property.trails;
                             result.push(*property);
                         }
@@ -167,10 +178,13 @@ pub fn parallel_find_properties(cipher: &dyn Cipher,
                     }
                 }
 
-                result_tx.send((result, min_value, num_found, paths)).expect("Thread could not send result");
+                result_tx
+                    .send((result, min_value, num_found, paths))
+                    .expect("Thread could not send result");
             });
         }
-    }).expect("Threads failed to join.");
+    })
+    .expect("Threads failed to join.");
 
     // Collect results from all threads
     let mut paths = 0;
@@ -190,7 +204,11 @@ pub fn parallel_find_properties(cipher: &dyn Cipher,
     result.sort_by(|a, b| b.value.partial_cmp(&a.value).unwrap());
     result.truncate(num_keep);
 
-    println!("\nFound {} properties. [{:?} s]", num_found, start.elapsed().as_secs());
+    println!(
+        "\nFound {} properties. [{:?} s]",
+        num_found,
+        start.elapsed().as_secs()
+    );
 
     (result, min_value, paths)
 }

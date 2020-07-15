@@ -2,21 +2,20 @@
 //! rounds of a cipher.
 
 use crossbeam_utils;
-use fnv::{FnvHashSet, FnvHashMap};
+use fnv::{FnvHashMap, FnvHashSet};
 use indexmap::IndexMap;
 use itertools::interleave;
 use num_cpus;
 use std::cmp;
 use std::sync::mpsc;
-
 use std::time::Instant;
 
 use crate::cipher::*;
-use crate::property::{PropertyType, PropertyFilter, MaskMap};
+use crate::property::{MaskMap, PropertyFilter, PropertyType};
 use crate::search::graph::MultistageGraph;
 use crate::search::prince_extra::prince_pruning_new;
 use crate::search::single_round::SortedProperties;
-use crate::utility::{ProgressBar, compress};
+use crate::utility::{compress, ProgressBar};
 
 // The number of threads used for parallel calls is fixed
 lazy_static! {
@@ -24,10 +23,11 @@ lazy_static! {
 }
 
 /// Finds the set of all vertices that have both an input and an output.
-fn get_vertex_set(properties: &SortedProperties,
-                  previous: Option<&FnvHashSet<u128>>,
-                  level: usize)
-                  -> FnvHashSet<u128> {
+fn get_vertex_set(
+    properties: &SortedProperties,
+    previous: Option<&FnvHashSet<u128>>,
+    level: usize,
+) -> FnvHashSet<u128> {
     let (result_tx, result_rx) = mpsc::channel();
 
     // Start scoped worker threads
@@ -40,11 +40,13 @@ fn get_vertex_set(properties: &SortedProperties,
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
-                let tmp: Vec<_> = thread_properties.patterns().iter()
-                                                              .cloned()
-                                                              .skip(t)
-                                                              .step_by(*THREADS)
-                                                              .collect();
+                let tmp: Vec<_> = thread_properties
+                    .patterns()
+                    .iter()
+                    .cloned()
+                    .skip(t)
+                    .step_by(*THREADS)
+                    .collect();
                 thread_properties.set_patterns(&tmp);
 
                 // First, collect all input values
@@ -55,14 +57,14 @@ fn get_vertex_set(properties: &SortedProperties,
 
                 for (property, _) in &thread_properties {
                     if let Some(previous) = previous {
-                        let old = compress(property.input, level-1);
+                        let old = compress(property.input, level - 1);
 
                         if !previous.contains(&old) {
                             if t == 0 {
                                 progress_bar.increment();
                             }
 
-                            continue
+                            continue;
                         }
                     }
 
@@ -74,10 +76,13 @@ fn get_vertex_set(properties: &SortedProperties,
                     }
                 }
 
-                result_tx.send(input_set).expect("Thread could not send result");
+                result_tx
+                    .send(input_set)
+                    .expect("Thread could not send result");
             });
         }
-    }).expect("Threads failed to join.");
+    })
+    .expect("Threads failed to join.");
 
     // Collect input sets from all threads
     let mut input_set: FnvHashSet<u128> = FnvHashSet::default();
@@ -100,11 +105,13 @@ fn get_vertex_set(properties: &SortedProperties,
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
-                let tmp: Vec<_> = thread_properties.patterns().iter()
-                                                              .cloned()
-                                                              .skip(t)
-                                                              .step_by(*THREADS)
-                                                              .collect();
+                let tmp: Vec<_> = thread_properties
+                    .patterns()
+                    .iter()
+                    .cloned()
+                    .skip(t)
+                    .step_by(*THREADS)
+                    .collect();
                 thread_properties.set_patterns(&tmp);
 
                 // Second, collect all output values that are also in the input set
@@ -124,10 +131,13 @@ fn get_vertex_set(properties: &SortedProperties,
                     }
                 }
 
-                result_tx.send(union_set).expect("Thread could not send result");
+                result_tx
+                    .send(union_set)
+                    .expect("Thread could not send result");
             });
         }
-    }).expect("Threads failed to join.");
+    })
+    .expect("Threads failed to join.");
 
     // Last, collect union sets from all threads
     let mut vertex_set: FnvHashSet<u128> = FnvHashSet::default();
@@ -141,15 +151,16 @@ fn get_vertex_set(properties: &SortedProperties,
 }
 
 /// Generates a graph according to a set of properties and a stage pattern.
-fn gen_with_stages(properties: &SortedProperties,
-                   rounds: usize,
-                   stages: u64,
-                   level: usize,
-                   vertex_set: Option<&FnvHashSet<u128>>,
-                   previous_graph: Option<&MultistageGraph>)
-                   -> MultistageGraph {
+fn gen_with_stages(
+    properties: &SortedProperties,
+    rounds: usize,
+    stages: u64,
+    level: usize,
+    vertex_set: Option<&FnvHashSet<u128>>,
+    previous_graph: Option<&MultistageGraph>,
+) -> MultistageGraph {
     // Block size of the compression
-    let block = 1 << (3-level);
+    let block = 1 << (3 - level);
     let (result_tx, result_rx) = mpsc::channel();
 
     // Start scoped worker threads
@@ -161,10 +172,13 @@ fn gen_with_stages(properties: &SortedProperties,
             scope.spawn(move |_| {
                 // For SPN ciphers, we can exploit the structure when the compressiond is
                 // sufficiently coarse and not generate all properties explicitly
-                let max_sbox_size = cmp::max(thread_properties.cipher().sbox(0).size_in(),
-                                             thread_properties.cipher().sbox(0).size_out());
-                if block >= max_sbox_size  &&
-                   thread_properties.cipher().structure() == CipherStructure::Spn {
+                let max_sbox_size = cmp::max(
+                    thread_properties.cipher().sbox(0).size_in(),
+                    thread_properties.cipher().sbox(0).size_out(),
+                );
+                if block >= max_sbox_size
+                    && thread_properties.cipher().structure() == CipherStructure::Spn
+                {
                     thread_properties.set_type_output();
                 } else {
                     thread_properties.set_type_all();
@@ -173,11 +187,13 @@ fn gen_with_stages(properties: &SortedProperties,
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
-                let tmp: Vec<_> = thread_properties.patterns().iter()
-                                                              .cloned()
-                                                              .skip(t)
-                                                              .step_by(*THREADS)
-                                                              .collect();
+                let tmp: Vec<_> = thread_properties
+                    .patterns()
+                    .iter()
+                    .cloned()
+                    .skip(t)
+                    .step_by(*THREADS)
+                    .collect();
                 thread_properties.set_patterns(&tmp);
 
                 // Generate graph
@@ -189,8 +205,8 @@ fn gen_with_stages(properties: &SortedProperties,
 
                     // Filter based on edges in the previous graph
                     if let Some(previous_graph) = previous_graph {
-                        let old_input = compress(property.input, level-1);
-                        let old_output = compress(property.output, level-1);
+                        let old_input = compress(property.input, level - 1);
+                        let old_output = compress(property.output, level - 1);
 
                         previous_mask = previous_graph.get_edge(old_input, old_output);
 
@@ -205,11 +221,7 @@ fn gen_with_stages(properties: &SortedProperties,
 
                     let input = compress(property.input, level);
                     let output = compress(property.output, level);
-                    let length = if level != 3 {
-                        0.0
-                    } else {
-                        property.value
-                    };
+                    let length = if level != 3 { 0.0 } else { property.value };
 
                     // Filter based on the vertex set
                     match vertex_set {
@@ -218,12 +230,13 @@ fn gen_with_stages(properties: &SortedProperties,
                             let input_mask = vertex_set.contains(&input);
                             let input_mask = (!1 * (input_mask as u64)) ^ 1;
                             let output_mask = vertex_set.contains(&output);
-                            let output_mask = (((1 << (rounds-1)) - 1) * (output_mask as u64)) ^ (1 << (rounds-1));
+                            let output_mask = (((1 << (rounds - 1)) - 1) * (output_mask as u64))
+                                ^ (1 << (rounds - 1));
                             let mask = input_mask & output_mask;
 
                             graph.add_edges(input, output, stages & mask & previous_mask, length);
-                        },
-                        None => graph.add_edges(input, output, stages & previous_mask, length)
+                        }
+                        None => graph.add_edges(input, output, stages & previous_mask, length),
                     }
 
                     if t == 0 {
@@ -234,7 +247,8 @@ fn gen_with_stages(properties: &SortedProperties,
                 result_tx.send(graph).expect("Thread could not send result");
             });
         }
-    }).expect("Threads failed to join.");
+    })
+    .expect("Threads failed to join.");
 
     let mut graph = MultistageGraph::new(rounds);
 
@@ -249,14 +263,16 @@ fn gen_with_stages(properties: &SortedProperties,
 
 /// Adds edges in the first and last stage of the graph. The edges are only added if they connect
 /// to an existing vertex.
-fn extend(graph: &mut MultistageGraph,
-          properties: &SortedProperties,
-          rounds: usize,
-          level: usize,
-          input_allowed: Option<&FnvHashSet<u128>>,
-          output_allowed: Option<&FnvHashSet<u128>>) {
+fn extend(
+    graph: &mut MultistageGraph,
+    properties: &SortedProperties,
+    rounds: usize,
+    level: usize,
+    input_allowed: Option<&FnvHashSet<u128>>,
+    output_allowed: Option<&FnvHashSet<u128>>,
+) {
     // Block size of the compression
-    let block = 1 << (3-level);
+    let block = 1 << (3 - level);
     let (result_tx, result_rx) = mpsc::channel();
 
     // Start scoped worker threads
@@ -269,10 +285,13 @@ fn extend(graph: &mut MultistageGraph,
             scope.spawn(move |_| {
                 // For SPN ciphers, we can exploit the structure when the compressiond is
                 // sufficiently coarse and not generate all properties explicitly
-                let max_sbox_size = cmp::max(thread_properties.cipher().sbox(0).size_in(),
-                                             thread_properties.cipher().sbox(0).size_out());
-                if block >= max_sbox_size  &&
-                   thread_properties.cipher().structure() == CipherStructure::Spn {
+                let max_sbox_size = cmp::max(
+                    thread_properties.cipher().sbox(0).size_in(),
+                    thread_properties.cipher().sbox(0).size_out(),
+                );
+                if block >= max_sbox_size
+                    && thread_properties.cipher().structure() == CipherStructure::Spn
+                {
                     thread_properties.set_type_output();
                 } else {
                     thread_properties.set_type_all();
@@ -281,11 +300,13 @@ fn extend(graph: &mut MultistageGraph,
                 // Split the S-box patterns equally across threads
                 // Note that this does not equally split the number of properties across threads,
                 // but hopefully it is close enough
-                let tmp: Vec<_> = thread_properties.patterns().iter()
-                                                              .cloned()
-                                                              .skip(t)
-                                                              .step_by(*THREADS)
-                                                              .collect();
+                let tmp: Vec<_> = thread_properties
+                    .patterns()
+                    .iter()
+                    .cloned()
+                    .skip(t)
+                    .step_by(*THREADS)
+                    .collect();
                 thread_properties.set_patterns(&tmp);
 
                 // Collect all edges that have corresponding output/input vertices in the
@@ -309,18 +330,16 @@ fn extend(graph: &mut MultistageGraph,
 
                     if let Some(output_allowed) = output_allowed {
                         if output_allowed.contains(&output) {
-                            stages ^= (graph.has_vertex_incoming(input, rounds-1) as u64) << (rounds-1);
+                            stages ^= (graph.has_vertex_incoming(input, rounds - 1) as u64)
+                                << (rounds - 1);
                         }
                     } else {
-                        stages ^= (graph.has_vertex_incoming(input, rounds-1) as u64) << (rounds-1);
+                        stages ^=
+                            (graph.has_vertex_incoming(input, rounds - 1) as u64) << (rounds - 1);
                     }
 
                     if stages != 0 {
-                        let length = if level != 3 {
-                            0.0
-                        } else {
-                            property.value
-                        };
+                        let length = if level != 3 { 0.0 } else { property.value };
 
                         edges.insert((input, output), (stages, length));
                     }
@@ -333,7 +352,8 @@ fn extend(graph: &mut MultistageGraph,
                 result_tx.send(edges).expect("Thread could not send result");
             });
         }
-    }).expect("Threads failed to join.");
+    })
+    .expect("Threads failed to join.");
 
     // Add edges from each thread
     for _ in 0..*THREADS {
@@ -346,25 +366,35 @@ fn extend(graph: &mut MultistageGraph,
 }
 
 /// Adds good edges from to/from each vertex in the second/second to last layer.
-fn anchor_ends(cipher: &dyn Cipher,
-               property_type: PropertyType,
-               graph: &mut MultistageGraph,
-               anchors: Option<usize>,
-               input_allowed: Option<&FnvHashSet<u128>>,
-               output_allowed: Option<&FnvHashSet<u128>>) {
+fn anchor_ends(
+    cipher: &dyn Cipher,
+    property_type: PropertyType,
+    graph: &mut MultistageGraph,
+    anchors: Option<usize>,
+    input_allowed: Option<&FnvHashSet<u128>>,
+    output_allowed: Option<&FnvHashSet<u128>>,
+) {
     let (result_tx, result_rx) = mpsc::channel();
     let mask_map = MaskMap::new(cipher, property_type);
     let rounds = graph.stages();
 
     // Collect vertices in the second/second to last layer.
-    let start_labels: Vec<_> = graph.get_vertices_outgoing(1).iter().map(|&x| (x, 0)).collect();
-    let end_labels: Vec<_> = graph.get_vertices_incoming(rounds-1).iter().map(|&x| (x, rounds-1)).collect();
+    let start_labels: Vec<_> = graph
+        .get_vertices_outgoing(1)
+        .iter()
+        .map(|&x| (x, 0))
+        .collect();
+    let end_labels: Vec<_> = graph
+        .get_vertices_incoming(rounds - 1)
+        .iter()
+        .map(|&x| (x, rounds - 1))
+        .collect();
 
     // Determine number of anchors to add
     let num_labels = start_labels.len() + end_labels.len();
     let max_anchors = match anchors {
         Some(x) => 1 << x,
-        None    => 1 << 17
+        None => 1 << 17,
     };
     let limit = 0.max(max_anchors - (graph.num_vertices(0) + graph.num_vertices(rounds)) as i64);
     let num_anchor = (limit as f64 / num_labels as f64).ceil() as usize;
@@ -379,15 +409,17 @@ fn anchor_ends(cipher: &dyn Cipher,
             let end_labels = end_labels.clone();
 
             scope.spawn(move |_| {
-                let mut progress_bar = ProgressBar::new(start_labels.iter().skip(t)
-                                                                    .step_by(*THREADS).len() +
-                                                        end_labels.iter().skip(t)
-                                                                  .step_by(*THREADS).len());
+                let mut progress_bar = ProgressBar::new(
+                    start_labels.iter().skip(t).step_by(*THREADS).len()
+                        + end_labels.iter().skip(t).step_by(*THREADS).len(),
+                );
                 let mut edges = IndexMap::new();
 
-
-                for (label, stage) in interleave(start_labels, end_labels).take(limit as usize)
-                                        .skip(t).step_by(*THREADS) {
+                for (label, stage) in interleave(start_labels, end_labels)
+                    .take(limit as usize)
+                    .skip(t)
+                    .step_by(*THREADS)
+                {
                     if stage == 0 {
                         // Invert input to get output
                         let output = cipher.linear_layer_inv(label as u128);
@@ -427,7 +459,8 @@ fn anchor_ends(cipher: &dyn Cipher,
                 result_tx.send(edges).expect("Thread could not send result");
             });
         }
-    }).expect("Threads failed to join.");
+    })
+    .expect("Threads failed to join.");
 
     // Add edges from each thread
     for _ in 0..*THREADS {
@@ -440,10 +473,7 @@ fn anchor_ends(cipher: &dyn Cipher,
 }
 
 /// Patches the graph, i.e. adds any missing edges between already existing vertices.
-fn patch(cipher: &dyn Cipher,
-         property_type: PropertyType,
-         graph: &mut MultistageGraph)
-         -> usize {
+fn patch(cipher: &dyn Cipher, property_type: PropertyType, graph: &mut MultistageGraph) -> usize {
     // TODO: Find a way to handle this case
     if cipher.sbox(0).size_in() != cipher.sbox(0).size_out() {
         println!("Aborting patching due to truncating/expanding S-box");
@@ -455,7 +485,7 @@ fn patch(cipher: &dyn Cipher,
 
     for i in 0..cipher.num_sboxes() {
         match property_type {
-            PropertyType::Linear       => tables.push(cipher.sbox(i).lat().clone()),
+            PropertyType::Linear => tables.push(cipher.sbox(i).lat().clone()),
             PropertyType::Differential => tables.push(cipher.sbox(i).ddt().clone()),
         }
     }
@@ -464,7 +494,7 @@ fn patch(cipher: &dyn Cipher,
     let mask_in = (1 << cipher.sbox(0).size_in()) - 1;
     let mask_out = (1 << cipher.sbox(0).size_out()) - 1;
     // NOTE: This wouldn't work for truncating/expanding S-boxes
-    let level = 3 - (cipher.sbox(0).size_in() as f32).log2()  as usize;
+    let level = 3 - (cipher.sbox(0).size_in() as f32).log2() as usize;
 
     let num_vertices = (0..=graph.stages()).fold(0, |num, x| num + graph.num_vertices(x));
     let mut progress_bar = ProgressBar::new(num_vertices);
@@ -477,7 +507,7 @@ fn patch(cipher: &dyn Cipher,
 
     let vertices = graph.get_vertices_outgoing(0);
 
-    for &input in &vertices{
+    for &input in &vertices {
         let input_c = compress(input, level);
         let entry = input_map.entry(input_c).or_insert_with(Vec::new);
         entry.push(input);
@@ -485,10 +515,10 @@ fn patch(cipher: &dyn Cipher,
     }
 
     for s in 0..stages {
-        let vertices = if s+1 == graph.stages() {
-            graph.get_vertices_incoming(s+1)
+        let vertices = if s + 1 == graph.stages() {
+            graph.get_vertices_incoming(s + 1)
         } else {
-            graph.get_vertices_outgoing(s+1)
+            graph.get_vertices_outgoing(s + 1)
         };
 
         for &output in &vertices {
@@ -510,7 +540,7 @@ fn patch(cipher: &dyn Cipher,
                     let mut value = 1.0;
 
                     for (i, table) in tables.iter().enumerate() {
-                        let a = (input  >> (cipher.sbox_pos_in(i))) & mask_in;
+                        let a = (input >> (cipher.sbox_pos_in(i))) & mask_in;
                         let b = (out_inv >> (cipher.sbox_pos_out(i))) & mask_out;
 
                         let v = table[a as usize][b as usize];
@@ -523,7 +553,7 @@ fn patch(cipher: &dyn Cipher,
                         match property_type {
                             PropertyType::Linear => {
                                 value *= (2.0 * v as f64 / tables[i][0][0] as f64 - 1.0).powi(2);
-                            },
+                            }
                             PropertyType::Differential => {
                                 value *= v as f64 / tables[i][0][0] as f64;
                             }
@@ -557,16 +587,17 @@ fn patch(cipher: &dyn Cipher,
 /// * `patterns`: Tje number of patterns to generate.
 /// * `anchors`: The number of anchors added in the input and output stages.
 /// * `allowed`: A set of allowed input-output pairs. Properties not matching these are filtered.
-pub fn generate_graph(cipher: &dyn Cipher,
-                      property_type: PropertyType,
-                      rounds: usize,
-                      patterns: usize,
-                      anchors: Option<usize>,
-                      allowed: &FnvHashSet<(u128, u128)>)
-                      -> MultistageGraph {
+pub fn generate_graph(
+    cipher: &dyn Cipher,
+    property_type: PropertyType,
+    rounds: usize,
+    patterns: usize,
+    anchors: Option<usize>,
+    allowed: &FnvHashSet<(u128, u128)>,
+) -> MultistageGraph {
     // Generate the set of properties to consider
-    let mut properties = SortedProperties::new(
-        cipher, patterns, property_type, PropertyFilter::All);
+    let mut properties =
+        SortedProperties::new(cipher, patterns, property_type, PropertyFilter::All);
     let mut graph = MultistageGraph::new(rounds);
 
     properties.set_type_all();
@@ -577,8 +608,8 @@ pub fn generate_graph(cipher: &dyn Cipher,
     let num_output = properties.len();
 
     // Change allowed inputs/outputs for Prince-like ciphers
-    let mut input_allowed: FnvHashSet<_>  = allowed.iter().map(|(a,_)| *a).collect();
-    let mut output_allowed: FnvHashSet<_> = allowed.iter().map(|(_,b)| *b).collect();
+    let mut input_allowed: FnvHashSet<_> = allowed.iter().map(|(a, _)| *a).collect();
+    let mut output_allowed: FnvHashSet<_> = allowed.iter().map(|(_, b)| *b).collect();
     if cipher.structure() == CipherStructure::Prince {
         input_allowed = input_allowed.union(&output_allowed).cloned().collect();
         output_allowed = FnvHashSet::default();
@@ -599,33 +630,49 @@ pub fn generate_graph(cipher: &dyn Cipher,
     // Rounds 1 to 4 are treated specially
     if rounds == 1 || rounds == 3 {
         let start = Instant::now();
-        println!("Generating graph: {} properties ({} input, {} output).",
-            num_prop, num_input, num_output);
+        println!(
+            "Generating graph: {} properties ({} input, {} output).",
+            num_prop, num_input, num_output
+        );
         graph = gen_with_stages(&properties, 1, 0b1, 3, None, None);
-        println!("Graph has {} edges [{:?} s]\n",
-            graph.num_edges(), start.elapsed().as_secs());
+        println!(
+            "Graph has {} edges [{:?} s]\n",
+            graph.num_edges(),
+            start.elapsed().as_secs()
+        );
     } else {
         if rounds == 2 {
             let start = Instant::now();
             println!("Generating graph.");
             graph = gen_with_stages(&properties, 2, 0b11, 3, None, None);
-            println!("Graph has {} edges [{:?} s]\n",
-                graph.num_edges(), start.elapsed().as_secs());
+            println!(
+                "Graph has {} edges [{:?} s]\n",
+                graph.num_edges(),
+                start.elapsed().as_secs()
+            );
         }
 
         if rounds == 4 {
-            println!("Finding vertex set: {} properties ({} input, {} output).",
-                num_prop, num_input, num_output);
+            println!(
+                "Finding vertex set: {} properties ({} input, {} output).",
+                num_prop, num_input, num_output
+            );
             let start = Instant::now();
             let vertex_set = get_vertex_set(&properties, None, 3);
-            println!("{} vertices in set [{:?} s]\n",
-                    vertex_set.len(), start.elapsed().as_secs());
+            println!(
+                "{} vertices in set [{:?} s]\n",
+                vertex_set.len(),
+                start.elapsed().as_secs()
+            );
 
             let start = Instant::now();
             println!("Generating graph.");
             graph = gen_with_stages(&properties, 2, 0b11, 3, Some(&vertex_set), None);
-            println!("Graph has {} edges [{:?} s]\n",
-                graph.num_edges(), start.elapsed().as_secs());
+            println!(
+                "Graph has {} edges [{:?} s]\n",
+                graph.num_edges(),
+                start.elapsed().as_secs()
+            );
         }
 
         if rounds > 4 {
@@ -644,15 +691,13 @@ pub fn generate_graph(cipher: &dyn Cipher,
                 properties.set_type_output();
                 let num_output = properties.len();
 
-                println!("#### Level {}: {} properties ({} input, {} output). ####\n",
-                    level, num_prop, num_input, num_output);
+                println!(
+                    "#### Level {}: {} properties ({} input, {} output). ####\n",
+                    level, num_prop, num_input, num_output
+                );
 
                 // We take the previous graph into account when generating the new one
-                let old_graph = if level != 1 {
-                    Some(&graph)
-                } else {
-                    None
-                };
+                let old_graph = if level != 1 { Some(&graph) } else { None };
 
                 let start = Instant::now();
                 println!("Finding vertex set.");
@@ -662,28 +707,47 @@ pub fn generate_graph(cipher: &dyn Cipher,
                 } else {
                     get_vertex_set(&properties, Some(&vertex_set), level)
                 };
-                println!("{} vertices in set [{:?} s]\n",
-                        vertex_set.len(), start.elapsed().as_secs());
+                println!(
+                    "{} vertices in set [{:?} s]\n",
+                    vertex_set.len(),
+                    start.elapsed().as_secs()
+                );
 
                 // All but the first and last stage
-                let stages = ((1 << (rounds-1)) - 1) ^ 1;
+                let stages = ((1 << (rounds - 1)) - 1) ^ 1;
 
                 let start = Instant::now();
                 println!("Generating graph.");
-                graph = gen_with_stages(&properties, rounds, stages, level, Some(&vertex_set), old_graph);
-                println!("Graph has {} edges [{:?} s]",
-                    graph.num_edges(), start.elapsed().as_secs());
+                graph = gen_with_stages(
+                    &properties,
+                    rounds,
+                    stages,
+                    level,
+                    Some(&vertex_set),
+                    old_graph,
+                );
+                println!(
+                    "Graph has {} edges [{:?} s]",
+                    graph.num_edges(),
+                    start.elapsed().as_secs()
+                );
 
                 let start = Instant::now();
-                graph.prune(1, rounds-1);
-                println!("Pruned graph has {} edges [{:?} s]\n",
-                        graph.num_edges(), start.elapsed().as_secs());
+                graph.prune(1, rounds - 1);
+                println!(
+                    "Pruned graph has {} edges [{:?} s]\n",
+                    graph.num_edges(),
+                    start.elapsed().as_secs()
+                );
 
                 let start = Instant::now();
                 println!("Extending graph.");
                 extend(&mut graph, &properties, rounds, level, None, None);
-                println!("Extended graph has {} edges [{:?} s]",
-                        graph.num_edges(), start.elapsed().as_secs());
+                println!(
+                    "Extended graph has {} edges [{:?} s]",
+                    graph.num_edges(),
+                    start.elapsed().as_secs()
+                );
 
                 let start = Instant::now();
                 if cipher.structure() == CipherStructure::Prince {
@@ -691,18 +755,24 @@ pub fn generate_graph(cipher: &dyn Cipher,
                 } else {
                     graph.prune(0, rounds);
                 }
-                println!("Pruned graph has {} edges [{:?} s]",
-                        graph.num_edges(), start.elapsed().as_secs());
+                println!(
+                    "Pruned graph has {} edges [{:?} s]",
+                    graph.num_edges(),
+                    start.elapsed().as_secs()
+                );
 
                 // Update filters and remove dead patterns if we havn't generated the final graph
                 if level != 3 {
-                let start = Instant::now();
+                    let start = Instant::now();
                     println!("\nRemoving dead patterns.");
                     let patterns_before = properties.len_patterns();
                     properties.remove_dead_patterns(&graph, level);
                     let patterns_after = properties.len_patterns();
-                    println!("Removed {} dead patterns [{:?} s]",
-                        patterns_before - patterns_after, start.elapsed().as_secs());
+                    println!(
+                        "Removed {} dead patterns [{:?} s]",
+                        patterns_before - patterns_after,
+                        start.elapsed().as_secs()
+                    );
                 }
 
                 println!();
@@ -710,8 +780,10 @@ pub fn generate_graph(cipher: &dyn Cipher,
         }
     }
 
-    println!("#### Final steps: {} properties ({} input, {} output). ####\n",
-        num_prop, num_input, num_output);
+    println!(
+        "#### Final steps: {} properties ({} input, {} output). ####\n",
+        num_prop, num_input, num_output
+    );
 
     // Extending
     if rounds > 2 {
@@ -720,18 +792,38 @@ pub fn generate_graph(cipher: &dyn Cipher,
 
         let start = Instant::now();
         println!("Extending final graph.");
-        extend(&mut graph, &properties, rounds, 3, input_allowed, output_allowed);
-        println!("Extended graph has {} edges [{:?} s]\n",
-                 graph.num_edges(), start.elapsed().as_secs());
+        extend(
+            &mut graph,
+            &properties,
+            rounds,
+            3,
+            input_allowed,
+            output_allowed,
+        );
+        println!(
+            "Extended graph has {} edges [{:?} s]\n",
+            graph.num_edges(),
+            start.elapsed().as_secs()
+        );
     }
 
     // Anchoring
     if rounds > 1 && cipher.structure() != CipherStructure::Feistel {
         let start = Instant::now();
         print!("Anchoring final graph: ");
-        anchor_ends(cipher, property_type, &mut graph, anchors, input_allowed, output_allowed);
-        println!("Anchored graph has {} edges [{:?} s]",
-                 graph.num_edges(), start.elapsed().as_secs());
+        anchor_ends(
+            cipher,
+            property_type,
+            &mut graph,
+            anchors,
+            input_allowed,
+            output_allowed,
+        );
+        println!(
+            "Anchored graph has {} edges [{:?} s]",
+            graph.num_edges(),
+            start.elapsed().as_secs()
+        );
     }
 
     let start = Instant::now();
@@ -740,16 +832,22 @@ pub fn generate_graph(cipher: &dyn Cipher,
     } else {
         graph.prune(0, rounds);
     }
-    println!("Pruned graph has {} edges [{:?} s]\n",
-            graph.num_edges(), start.elapsed().as_secs());
+    println!(
+        "Pruned graph has {} edges [{:?} s]\n",
+        graph.num_edges(),
+        start.elapsed().as_secs()
+    );
 
     // Patch graph
     if cipher.structure() != CipherStructure::Feistel {
         let start = Instant::now();
         println!("Patching graph.");
         let added = patch(cipher, property_type, &mut graph);
-        println!("Added {} edges [{:?} s]\n",
-            added, start.elapsed().as_secs());
+        println!(
+            "Added {} edges [{:?} s]\n",
+            added,
+            start.elapsed().as_secs()
+        );
     }
 
     println!("Final graph has {} edges\n", graph.num_edges());
