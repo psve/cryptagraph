@@ -319,7 +319,7 @@ By specifying the `--file_graph` option, the python module `graphtool` (found
 
 For example, if we run
 ```
-cryptagraph --type linear --cipher gift64 --rounds 11 --patterns 2000 --anchors 0 --file_graph gift
+cryptagraph search --type linear --cipher gift64 --rounds 11 --patterns 2000 --anchors 0 --file_graph gift
 ```
 a file `gift.graph` is generated. The `graph_plot.py` script found in the `utility` folder can the
 be used to generate the following picture. ![](gift.png)
