@@ -3,7 +3,8 @@
 use fnv::FnvHashSet;
 use std::fs::{File, OpenOptions};
 use std::io::{Write, BufReader, BufRead};
-use time;
+
+use std::time::Instant;
 
 use crate::cipher::Cipher;
 use crate::search::find_properties::parallel_find_properties;
@@ -137,7 +138,7 @@ pub fn search_properties(cipher: &dyn Cipher,
     println!();
 
 
-    let start = time::precise_time_s();
+    let start = Instant::now();
     // Restrict the number of results printed
     let keep = match num_keep {
         Some(x) => x,
@@ -173,7 +174,7 @@ pub fn search_properties(cipher: &dyn Cipher,
 
     println!("\n------------------------------------------ RESULTS ---------------------------------------------\n");
 
-    println!("Search finished. [{} s]", time::precise_time_s()-start);
+    println!("Search finished. [{:?} s]", start.elapsed().as_secs());
 
     if !result.is_empty() {
         println!("Smallest value: {}", min_value.log2());
