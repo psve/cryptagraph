@@ -8,7 +8,6 @@ edition = "2018"
 incremental=true
 
 [dependencies]
-time = "*"
 rand = "*"
 structopt = "*"
 structopt-derive = "*"
