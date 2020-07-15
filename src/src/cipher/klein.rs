@@ -1,8 +1,8 @@
 //! Implementation of KLEIN.
 
-use crate::sbox::Sbox;
-use crate::cipher::{CipherStructure, Cipher};
+use crate::cipher::{Cipher, CipherStructure};
 use crate::property::PropertyType;
+use crate::sbox::Sbox;
 use std::mem;
 
 /*****************************************************************
@@ -12,19 +12,21 @@ use std::mem;
 /// A structure representing the KLEIN cipher.
 #[derive(Clone)]
 pub struct Klein {
-    size     : usize,
-    key_size : usize,
-    sbox     : Sbox,
+    size: usize,
+    key_size: usize,
+    sbox: Sbox,
 }
 
 impl Klein {
     /// Create a new instance of the cipher.
     pub fn new() -> Klein {
-        let table = vec![0x7,0x4,0xa,0x9,0x1,0xf,0xb,0x0,0xc,0x3,0x2,0x6,0x8,0xe,0xd,0x5];
-        Klein{
-            size: 64, 
-            key_size: 64, 
-            sbox: Sbox::new(4, 4, table)
+        let table = vec![
+            0x7, 0x4, 0xa, 0x9, 0x1, 0xf, 0xb, 0x0, 0xc, 0x3, 0x2, 0x6, 0x8, 0xe, 0xd, 0x5,
+        ];
+        Klein {
+            size: 64,
+            key_size: 64,
+            sbox: Sbox::new(4, 4, table),
         }
     }
 }
@@ -32,7 +34,7 @@ impl Klein {
 /**
 Calculate y*02 in the Rijndael finite field
 */
-fn mult_02(y: u8) -> u8{
+fn mult_02(y: u8) -> u8 {
     let t = y << 1;
     let u = 0xff * ((y >> 7) & 0x1);
     (u & 0x1b) ^ t
@@ -41,14 +43,14 @@ fn mult_02(y: u8) -> u8{
 /**
 Calculate y*04 in the Rijndael finite field
 */
-fn mult_04(y: u8) -> u8{
+fn mult_04(y: u8) -> u8 {
     mult_02(mult_02(y))
 }
 
 /**
 Calculate y*08 in the Rijndael finite field
 */
-fn mult_08(y: u8) -> u8{
+fn mult_08(y: u8) -> u8 {
     mult_02(mult_04(y))
 }
 
@@ -56,7 +58,7 @@ impl Cipher for Klein {
     fn structure(&self) -> CipherStructure {
         CipherStructure::Spn
     }
-    
+
     fn size(&self) -> usize {
         self.size
     }
@@ -74,14 +76,14 @@ impl Cipher for Klein {
     }
 
     fn sbox_pos_in(&self, i: usize) -> usize {
-        i*self.sbox(i).size_in()
+        i * self.sbox(i).size_in()
     }
 
     fn sbox_pos_out(&self, i: usize) -> usize {
-        i*self.sbox(i).size_out()
+        i * self.sbox(i).size_out()
     }
 
-    fn linear_layer(&self, input: u128) -> u128{
+    fn linear_layer(&self, input: u128) -> u128 {
         let mut output = input as u64;
 
         // RotateNibbles
@@ -89,59 +91,75 @@ impl Cipher for Klein {
 
         // MixNibbles
         for i in 0..2 {
-            let mut x = [((output >> (i*32+24)) & 0xff) as u8,
-                         ((output >> (i*32+16)) & 0xff) as u8,
-                         ((output >> (i*32+ 8)) & 0xff) as u8, 
-                         ((output >> (i*32   )) & 0xff) as u8];
+            let mut x = [
+                ((output >> (i * 32 + 24)) & 0xff) as u8,
+                ((output >> (i * 32 + 16)) & 0xff) as u8,
+                ((output >> (i * 32 + 8)) & 0xff) as u8,
+                ((output >> (i * 32)) & 0xff) as u8,
+            ];
 
             let t = x[0] ^ x[1] ^ x[2] ^ x[3];
             let u = x[3] ^ x[0];
-            
+
             for j in 0..3 {
-                x[j] = x[j] ^ mult_02(x[j]^x[j+1]) ^ t;
+                x[j] = x[j] ^ mult_02(x[j] ^ x[j + 1]) ^ t;
             }
             x[3] = x[3] ^ mult_02(u) ^ t;
 
-            output &= !(0xffffffff << (i*32));
-            output ^= u64::from(x[0]) << (i*32+24);
-            output ^= u64::from(x[1]) << (i*32+16);
-            output ^= u64::from(x[2]) << (i*32+8);
-            output ^= u64::from(x[3]) << (i*32);
+            output &= !(0xffffffff << (i * 32));
+            output ^= u64::from(x[0]) << (i * 32 + 24);
+            output ^= u64::from(x[1]) << (i * 32 + 16);
+            output ^= u64::from(x[2]) << (i * 32 + 8);
+            output ^= u64::from(x[3]) << (i * 32);
         }
 
         u128::from(output)
     }
 
     fn linear_layer_inv(&self, input: u128) -> u128 {
-        let mut output = input as u64; 
+        let mut output = input as u64;
 
         // MixNibbles inverse
         for i in 0..2 {
-            let x = [((output >> (i*32+24)) & 0xff) as u8,
-                     ((output >> (i*32+16)) & 0xff) as u8,
-                     ((output >> (i*32+ 8)) & 0xff) as u8, 
-                     ((output >> (i*32   )) & 0xff) as u8];
+            let x = [
+                ((output >> (i * 32 + 24)) & 0xff) as u8,
+                ((output >> (i * 32 + 16)) & 0xff) as u8,
+                ((output >> (i * 32 + 8)) & 0xff) as u8,
+                ((output >> (i * 32)) & 0xff) as u8,
+            ];
 
             let mut y = [0, 0, 0, 0];
 
-            y[0] = mult_08(x[0]^x[1]^x[2]^x[3]) ^
-                   mult_04(x[0]^x[2]) ^ mult_02(x[0]^x[1]) ^
-                   x[1] ^ x[2] ^ x[3];
-            y[1] = mult_08(x[1]^x[2]^x[3]^x[0]) ^
-                   mult_04(x[1]^x[3]) ^ mult_02(x[1]^x[2]) ^
-                   x[2] ^ x[3] ^ x[0];
-            y[2] = mult_08(x[2]^x[3]^x[0]^x[1]) ^
-                   mult_04(x[2]^x[0]) ^ mult_02(x[2]^x[3]) ^
-                   x[3] ^ x[0] ^ x[1];
-            y[3] = mult_08(x[3]^x[0]^x[1]^x[2]) ^
-                   mult_04(x[3]^x[1]) ^ mult_02(x[3]^x[0]) ^
-                   x[0] ^ x[1] ^ x[2];
+            y[0] = mult_08(x[0] ^ x[1] ^ x[2] ^ x[3])
+                ^ mult_04(x[0] ^ x[2])
+                ^ mult_02(x[0] ^ x[1])
+                ^ x[1]
+                ^ x[2]
+                ^ x[3];
+            y[1] = mult_08(x[1] ^ x[2] ^ x[3] ^ x[0])
+                ^ mult_04(x[1] ^ x[3])
+                ^ mult_02(x[1] ^ x[2])
+                ^ x[2]
+                ^ x[3]
+                ^ x[0];
+            y[2] = mult_08(x[2] ^ x[3] ^ x[0] ^ x[1])
+                ^ mult_04(x[2] ^ x[0])
+                ^ mult_02(x[2] ^ x[3])
+                ^ x[3]
+                ^ x[0]
+                ^ x[1];
+            y[3] = mult_08(x[3] ^ x[0] ^ x[1] ^ x[2])
+                ^ mult_04(x[3] ^ x[1])
+                ^ mult_02(x[3] ^ x[0])
+                ^ x[0]
+                ^ x[1]
+                ^ x[2];
 
-            output &= !(0xffffffff << (i*32));
-            output ^= u64::from(y[0]) << (i*32+24);
-            output ^= u64::from(y[1]) << (i*32+16);
-            output ^= u64::from(y[2]) << (i*32+8);
-            output ^= u64::from(y[3]) << (i*32);
+            output &= !(0xffffffff << (i * 32));
+            output ^= u64::from(y[0]) << (i * 32 + 24);
+            output ^= u64::from(y[1]) << (i * 32 + 16);
+            output ^= u64::from(y[2]) << (i * 32 + 8);
+            output ^= u64::from(y[3]) << (i * 32);
         }
 
         // RotateNibbles inverse
@@ -154,7 +172,7 @@ impl Cipher for Klein {
         panic!("Not implemented for this type of cipher")
     }
 
-    fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u128> {
+    fn key_schedule(&self, rounds: usize, key: &[u8]) -> Vec<u128> {
         if key.len() * 8 != self.key_size {
             panic!("invalid key-length");
         }
@@ -167,7 +185,7 @@ impl Cipher for Klein {
             k1 <<= 8;
             k0 <<= 8;
             k1 |= u128::from(key[i]);
-            k0 |= u128::from(key[i+4]);
+            k0 |= u128::from(key[i + 4]);
         }
 
         for r in 0..=rounds {
@@ -179,7 +197,8 @@ impl Cipher for Klein {
             mem::swap(&mut k0, &mut k1);
 
             for i in 2..6 {
-                k0 = (k0 & !(0xf << (4*i))) ^ (u128::from(self.sbox.apply((k0 >> (4*i)) & 0xf)) << (4*i));
+                k0 = (k0 & !(0xf << (4 * i)))
+                    ^ (u128::from(self.sbox.apply((k0 >> (4 * i)) & 0xf)) << (4 * i));
             }
 
             k1 ^= ((r + 1) as u128) << 8;
@@ -199,7 +218,7 @@ impl Cipher for Klein {
             let mut tmp = 0;
 
             for j in 0..16 {
-                tmp ^= u128::from(self.sbox.apply((output >> (4*j)) & 0xf)) << (4*j);
+                tmp ^= u128::from(self.sbox.apply((output >> (4 * j)) & 0xf)) << (4 * j);
             }
 
             // Linear layer
@@ -215,16 +234,16 @@ impl Cipher for Klein {
 
         for i in 0..12 {
             // Add key
-            output ^= round_keys[12-i];
+            output ^= round_keys[12 - i];
 
             // Linear layer
             output = self.linear_layer_inv(output);
-            
+
             // SubNibbles
             let mut tmp = 0;
 
             for j in 0..16 {
-                tmp ^= u128::from(self.sbox.apply((output >> (4*j)) & 0xf)) << (4*j);
+                tmp ^= u128::from(self.sbox.apply((output >> (4 * j)) & 0xf)) << (4 * j);
             }
 
             output = tmp;
@@ -238,11 +257,12 @@ impl Cipher for Klein {
         String::from("KLEIN")
     }
 
-    fn sbox_mask_transform(&self, 
-                           input: u128, 
-                           output: u128, 
-                           _property_type: PropertyType) 
-                           -> (u128, u128) {
+    fn sbox_mask_transform(
+        &self,
+        input: u128,
+        output: u128,
+        _property_type: PropertyType,
+    ) -> (u128, u128) {
         (input, self.linear_layer(output))
     }
 
@@ -260,7 +280,7 @@ impl Default for Klein {
 
 #[cfg(test)]
 mod tests {
-    use crate::cipher; 
+    use crate::cipher;
 
     #[test]
     fn encryption_test() {

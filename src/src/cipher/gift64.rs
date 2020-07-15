@@ -1,8 +1,8 @@
 //! Implementation of GIFT-64.
 
-use crate::sbox::Sbox;
-use crate::cipher::{CipherStructure, Cipher};
+use crate::cipher::{Cipher, CipherStructure};
 use crate::property::PropertyType;
+use crate::sbox::Sbox;
 
 /*****************************************************************
                             GIFT64
@@ -19,28 +19,33 @@ pub struct Gift64 {
 }
 
 impl Gift64 {
-    const PERMUTATION     : [[u128 ; 0x100] ; 8] = include!("data/gift.perm");
-    const PERMUTATION_INV : [[u128 ; 0x100] ; 8] = include!("data/gift.perm.inv");
-    
+    const PERMUTATION: [[u128; 0x100]; 8] = include!("data/gift.perm");
+    const PERMUTATION_INV: [[u128; 0x100]; 8] = include!("data/gift.perm.inv");
+
     /// Create a new instance of the cipher.
     pub fn new() -> Gift64 {
-        let table = vec![0x1, 0xa, 0x4, 0xc, 0x6, 0xf, 0x3, 0x9,
-                         0x2, 0xd, 0xb, 0x7, 0x5, 0x0, 0x8, 0xe];
-        let itable = vec![0xd, 0x0, 0x8, 0x6, 0x2, 0xc, 0x4, 0xb, 
-                          0xe, 0x7, 0x1, 0xa, 0x3, 0x9, 0xf, 0x5];
-        let constants = [0x01,0x03,0x07,0x0f,0x1f,0x3e,0x3d,0x3b,0x37,0x2f,0x1e,0x3c,0x39,0x33,0x27,
-                         0x0e,0x1d,0x3a,0x35,0x2b,0x16,0x2c,0x18,0x30,0x21,0x02,0x05,0x0b,0x17,0x2e,
-                         0x1c,0x38,0x31,0x23,0x06,0x0d,0x1b,0x36,0x2d,0x1a,0x34,0x29,0x12,0x24,0x08,
-                         0x11,0x22,0x04];
+        let table = vec![
+            0x1, 0xa, 0x4, 0xc, 0x6, 0xf, 0x3, 0x9, 0x2, 0xd, 0xb, 0x7, 0x5, 0x0, 0x8, 0xe,
+        ];
+        let itable = vec![
+            0xd, 0x0, 0x8, 0x6, 0x2, 0xc, 0x4, 0xb, 0xe, 0x7, 0x1, 0xa, 0x3, 0x9, 0xf, 0x5,
+        ];
+        let constants = [
+            0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3e, 0x3d, 0x3b, 0x37, 0x2f, 0x1e, 0x3c, 0x39, 0x33,
+            0x27, 0x0e, 0x1d, 0x3a, 0x35, 0x2b, 0x16, 0x2c, 0x18, 0x30, 0x21, 0x02, 0x05, 0x0b,
+            0x17, 0x2e, 0x1c, 0x38, 0x31, 0x23, 0x06, 0x0d, 0x1b, 0x36, 0x2d, 0x1a, 0x34, 0x29,
+            0x12, 0x24, 0x08, 0x11, 0x22, 0x04,
+        ];
 
-        Gift64{size: 64, 
-             key_size: 128,
-             sbox: Sbox::new(4, 4, table), 
-             isbox: Sbox::new(4, 4, itable),
-             constants}
+        Gift64 {
+            size: 64,
+            key_size: 128,
+            sbox: Sbox::new(4, 4, table),
+            isbox: Sbox::new(4, 4, itable),
+            constants,
+        }
     }
 }
-
 
 impl Cipher for Gift64 {
     fn structure(&self) -> CipherStructure {
@@ -64,17 +69,17 @@ impl Cipher for Gift64 {
     }
 
     fn sbox_pos_in(&self, i: usize) -> usize {
-        i*self.sbox(i).size_in()
+        i * self.sbox(i).size_in()
     }
 
     fn sbox_pos_out(&self, i: usize) -> usize {
-        i*self.sbox(i).size_out()
+        i * self.sbox(i).size_out()
     }
 
-    fn linear_layer(&self, input: u128) -> u128{
+    fn linear_layer(&self, input: u128) -> u128 {
         let mut output = 0;
-        output ^= Gift64::PERMUTATION[0][((input      ) & 0xff) as usize];
-        output ^= Gift64::PERMUTATION[1][((input >>  8) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION[0][((input) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION[1][((input >> 8) & 0xff) as usize];
         output ^= Gift64::PERMUTATION[2][((input >> 16) & 0xff) as usize];
         output ^= Gift64::PERMUTATION[3][((input >> 24) & 0xff) as usize];
         output ^= Gift64::PERMUTATION[4][((input >> 32) & 0xff) as usize];
@@ -87,8 +92,8 @@ impl Cipher for Gift64 {
 
     fn linear_layer_inv(&self, input: u128) -> u128 {
         let mut output = 0;
-        output ^= Gift64::PERMUTATION_INV[0][((input      ) & 0xff) as usize];
-        output ^= Gift64::PERMUTATION_INV[1][((input >>  8) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION_INV[0][((input) & 0xff) as usize];
+        output ^= Gift64::PERMUTATION_INV[1][((input >> 8) & 0xff) as usize];
         output ^= Gift64::PERMUTATION_INV[2][((input >> 16) & 0xff) as usize];
         output ^= Gift64::PERMUTATION_INV[3][((input >> 24) & 0xff) as usize];
         output ^= Gift64::PERMUTATION_INV[4][((input >> 32) & 0xff) as usize];
@@ -103,7 +108,7 @@ impl Cipher for Gift64 {
         panic!("Not implemented for this type of cipher")
     }
 
-    fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u128> {
+    fn key_schedule(&self, rounds: usize, key: &[u8]) -> Vec<u128> {
         if key.len() * 8 != self.key_size {
             panic!("invalid key-length");
         }
@@ -117,15 +122,15 @@ impl Cipher for Gift64 {
             k1 <<= 8;
             k0 <<= 8;
             k1 |= u128::from(key[i]);
-            k0 |= u128::from(key[i+8]);
+            k0 |= u128::from(key[i + 8]);
         }
 
         for r in 0..rounds {
             let mut round_key = 0;
 
             for i in 0..16 {
-                round_key ^= ((k0 >> i) & 0x1) << (4*i);
-                round_key ^= ((k0 >> (i+16)) & 0x1) << (4*i+1);
+                round_key ^= ((k0 >> i) & 0x1) << (4 * i);
+                round_key ^= ((k0 >> (i + 16)) & 0x1) << (4 * i + 1);
             }
 
             round_key ^= 1 << 63;
@@ -159,7 +164,7 @@ impl Cipher for Gift64 {
             let mut tmp = 0;
 
             for j in 0..16 {
-                tmp ^= u128::from(self.sbox.apply((output >> (4*j)) & 0xf)) << (4*j);
+                tmp ^= u128::from(self.sbox.apply((output >> (4 * j)) & 0xf)) << (4 * j);
             }
 
             // Apply linear layer
@@ -177,16 +182,16 @@ impl Cipher for Gift64 {
 
         for i in 0..28 {
             // Add round key
-            output ^= round_keys[27-i];
+            output ^= round_keys[27 - i];
 
             // Apply linear layer
             output = self.linear_layer_inv(output);
-            
+
             // Apply S-box
             let mut tmp = 0;
 
             for j in 0..16 {
-                tmp ^= u128::from(self.isbox.apply((output >> (4*j)) & 0xf)) << (4*j);
+                tmp ^= u128::from(self.isbox.apply((output >> (4 * j)) & 0xf)) << (4 * j);
             }
 
             output = tmp;
@@ -199,17 +204,18 @@ impl Cipher for Gift64 {
         String::from("GIFT64")
     }
 
-    fn sbox_mask_transform(&self, 
-                           input: u128, 
-                           output: u128, 
-                           _property_type: PropertyType) 
-                           -> (u128, u128) {
+    fn sbox_mask_transform(
+        &self,
+        input: u128,
+        output: u128,
+        _property_type: PropertyType,
+    ) -> (u128, u128) {
         (input, self.linear_layer(output))
     }
 
     #[inline(always)]
-    fn whitening(&self) -> bool { 
-        false 
+    fn whitening(&self) -> bool {
+        false
     }
 }
 
@@ -221,21 +227,25 @@ impl Default for Gift64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::cipher; 
-    
+    use crate::cipher;
+
     #[test]
     fn encryption_decryption_test() {
         let cipher = cipher::name_to_cipher("gift64").unwrap();
-        let key = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let key = [
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
         let round_keys = cipher.key_schedule(28, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);
 
         assert_eq!(plaintext, cipher.decrypt(ciphertext, &round_keys));
 
-        let key = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
-                   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+        let key = [
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff,
+        ];
         let round_keys = cipher.key_schedule(28, &key);
         let plaintext = 0x0123456789abcdef;
         let ciphertext = cipher.encrypt(plaintext, &round_keys);

@@ -1,8 +1,8 @@
 //! Implementation of BORON with an 80-bit key.
 
-use crate::sbox::Sbox;
-use crate::cipher::{CipherStructure, Cipher};
+use crate::cipher::{Cipher, CipherStructure};
 use crate::property::PropertyType;
+use crate::sbox::Sbox;
 
 /*****************************************************************
                             BORON
@@ -11,22 +11,28 @@ use crate::property::PropertyType;
 /// A structure representing the BORON cipher.
 #[derive(Clone)]
 pub struct Boron {
-    size     : usize,
-    key_size : usize,
-    sbox     : Sbox,
-    isbox    : Sbox,
+    size: usize,
+    key_size: usize,
+    sbox: Sbox,
+    isbox: Sbox,
 }
 
 impl Boron {
     /// Create a new instance of the cipher.
     pub fn new() -> Boron {
-        let table = vec![0xe,0x4,0xb,0x1,0x7,0x9,0xc,0xa,0xd,0x2,0x0,0xf,0x8,0x5,0x3,0x6];
-        let itable = vec![0xa,0x3,0x9,0xe,0x1,0xd,0xf,0x4,0xc,0x5,0x7,0x2,0x6,0x8,0x0,0xb];
+        let table = vec![
+            0xe, 0x4, 0xb, 0x1, 0x7, 0x9, 0xc, 0xa, 0xd, 0x2, 0x0, 0xf, 0x8, 0x5, 0x3, 0x6,
+        ];
+        let itable = vec![
+            0xa, 0x3, 0x9, 0xe, 0x1, 0xd, 0xf, 0x4, 0xc, 0x5, 0x7, 0x2, 0x6, 0x8, 0x0, 0xb,
+        ];
 
-        Boron{size: 64,
-              key_size: 80,
-              sbox: Sbox::new(4, 4, table),
-              isbox: Sbox::new(4, 4, itable)}
+        Boron {
+            size: 64,
+            key_size: 80,
+            sbox: Sbox::new(4, 4, table),
+            isbox: Sbox::new(4, 4, itable),
+        }
     }
 }
 
@@ -52,14 +58,14 @@ impl Cipher for Boron {
     }
 
     fn sbox_pos_in(&self, i: usize) -> usize {
-        i*self.sbox(i).size_in()
+        i * self.sbox(i).size_in()
     }
 
     fn sbox_pos_out(&self, i: usize) -> usize {
-        i*self.sbox(i).size_out()
+        i * self.sbox(i).size_out()
     }
 
-    fn linear_layer(&self, input: u128) -> u128{
+    fn linear_layer(&self, input: u128) -> u128 {
         let mut output = 0;
 
         // Block shuffle
@@ -86,7 +92,7 @@ impl Cipher for Boron {
 
     fn linear_layer_inv(&self, input: u128) -> u128 {
         let mut output = input;
-        
+
         // XOR
         output ^= (output & 0xffff00000000) << 16;
         output ^= (output & 0xffff0000) >> 16;
@@ -116,13 +122,13 @@ impl Cipher for Boron {
         panic!("Not implemented for this type of cipher")
     }
 
-    fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u128> {
+    fn key_schedule(&self, rounds: usize, key: &[u8]) -> Vec<u128> {
         if key.len() * 8 != self.key_size {
             panic!("invalid key-length");
         }
 
         let mut keys = vec![];
-        let mut s : u128 = 0;
+        let mut s: u128 = 0;
 
         // load key into 80-bit state
         for &k in key.iter().take(10) {
@@ -133,7 +139,7 @@ impl Cipher for Boron {
         for r in 0..=rounds {
             keys.push(s & 0xffffffffffffffff);
 
-            s = ((s << 13) & 0xffffffffffffffffffff) ^  ((s >> 67) & 0xffffffffffffffffffff);
+            s = ((s << 13) & 0xffffffffffffffffffff) ^ ((s >> 67) & 0xffffffffffffffffffff);
 
             let tmp = s & 0xf;
             s &= 0xfffffffffffffffffff0;
@@ -156,7 +162,7 @@ impl Cipher for Boron {
             let mut tmp = 0;
 
             for j in 0..16 {
-                tmp ^= u128::from(self.sbox.apply((output >> (4*j)) & 0xf)) << (4*j);
+                tmp ^= u128::from(self.sbox.apply((output >> (4 * j)) & 0xf)) << (4 * j);
             }
 
             // Apply linear layer
@@ -182,11 +188,11 @@ impl Cipher for Boron {
             let mut tmp = 0;
 
             for j in 0..16 {
-                tmp ^= u128::from(self.isbox.apply((output >> (4*j)) & 0xf)) << (4*j);
+                tmp ^= u128::from(self.isbox.apply((output >> (4 * j)) & 0xf)) << (4 * j);
             }
 
             // Add round key
-            output = tmp ^ round_keys[25-i]
+            output = tmp ^ round_keys[25 - i]
         }
 
         output
@@ -196,11 +202,12 @@ impl Cipher for Boron {
         String::from("BORON")
     }
 
-    fn sbox_mask_transform(&self,
-                           input: u128,
-                           output: u128,
-                           _property_type: PropertyType)
-                           -> (u128, u128) {
+    fn sbox_mask_transform(
+        &self,
+        input: u128,
+        output: u128,
+        _property_type: PropertyType,
+    ) -> (u128, u128) {
         (input, self.linear_layer(output))
     }
 

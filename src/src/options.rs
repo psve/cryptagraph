@@ -1,13 +1,16 @@
 use crate::property::PropertyType;
 
 #[derive(Clone, StructOpt)]
-#[structopt(name = "Cryptagraph", about = "Search for linear and differential properties of block ciphers.")]
+#[structopt(
+    name = "Cryptagraph",
+    about = "Search for linear and differential properties of block ciphers."
+)]
 pub enum CryptagraphOptions {
     #[structopt(name = "search")]
     Search {
         #[structopt(short = "c", long = "cipher")]
         /**
-        Name of the cipher to analyse. Current available ciphers are: 
+        Name of the cipher to analyse. Current available ciphers are:
         aes, boron, des, epcbc48, epcbc96, fly, gift64, gift128, halka, iceberg, khazad, klein, led, mantis, mcrypton, mibs, midori, present, pride, prince, puffin, qarma, rectangle, skinny64, skinny128, twine
         */
         cipher: String,
@@ -27,13 +30,13 @@ pub enum CryptagraphOptions {
 
         #[structopt(short = "p", long = "patterns")]
         /**
-        The number of S-box patterns to generate. The number of patterns determine how many different properties over a single round are analysed. 
+        The number of S-box patterns to generate. The number of patterns determine how many different properties over a single round are analysed.
         */
         num_patterns: usize,
 
         #[structopt(short = "a", long = "anchors")]
         /**
-        If provided, this parameter parameter overrides the default number of anchors. The number of anchors is 2^(<a>). 
+        If provided, this parameter parameter overrides the default number of anchors. The number of anchors is 2^(<a>).
         */
         anchors: Option<usize>,
 
@@ -51,7 +54,7 @@ pub enum CryptagraphOptions {
 
         #[structopt(short = "n", long = "num_keep")]
         /**
-        The number of properties to display as output. If specified together with <mask_out>, the 
+        The number of properties to display as output. If specified together with <mask_out>, the
         results are also written to the file <mask_out>.app.
         */
         num_keep: Option<usize>,
@@ -67,7 +70,7 @@ pub enum CryptagraphOptions {
     Dist {
         #[structopt(short = "c", long = "cipher")]
         /**
-        Name of the cipher to analyse. Current available ciphers are: 
+        Name of the cipher to analyse. Current available ciphers are:
         aes, epcbc48, epcbc96, fly, gift64, gift128, khazad, klein, led, mantis, mibs, midori, present, pride, prince, puffin, qarma, rectangle, skinny64, skinny128, twine
         */
         cipher: String,
@@ -101,5 +104,5 @@ pub enum CryptagraphOptions {
         Name of output file. File name is <output>.corrs
         */
         output: String,
-    }
+    },
 }

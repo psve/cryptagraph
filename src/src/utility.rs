@@ -1,15 +1,11 @@
-//! A collection of utility functions used throughout the library. 
+//! A collection of utility functions used throughout the library.
 
 use std::io::{self, Write};
 
 /// Finds the parity of `<input, alpha> ^ <outout, beta>`, where `<_,_>` is the inner product
-/// over GF(2). Taken from 
+/// over GF(2). Taken from
 /// [here](http://www.graphics.stanford.edu/~seander/bithacks.html#ParityMultiply).
-pub fn parity_masks(input: u128,
-                    output: u128,
-                    alpha: u128,
-                    beta: u128)
-                    -> u128 {
+pub fn parity_masks(input: u128, output: u128, alpha: u128, beta: u128) -> u128 {
     let mut y = (input & alpha) | ((output & beta) << 64);
 
     y ^= y >> 1;
@@ -19,7 +15,7 @@ pub fn parity_masks(input: u128,
     (y >> 124) & 1
 }
 
-/// Calculates the modulo 2 sum of the bits in the input. 
+/// Calculates the modulo 2 sum of the bits in the input.
 pub fn parity(input: u128) -> u128 {
     let mut y = input;
 
@@ -31,22 +27,20 @@ pub fn parity(input: u128) -> u128 {
 }
 
 static COMP_PATTERN: [u128; 4] = [
-    0x0101_0101_0101_0101_0101_0101_0101_0101, 
-    0x1111_1111_1111_1111_1111_1111_1111_1111, 
-    0x5555_5555_5555_5555_5555_5555_5555_5555, 
-    0xffff_ffff_ffff_ffff_ffff_ffff_ffff_ffff
-]; 
+    0x0101_0101_0101_0101_0101_0101_0101_0101,
+    0x1111_1111_1111_1111_1111_1111_1111_1111,
+    0x5555_5555_5555_5555_5555_5555_5555_5555,
+    0xffff_ffff_ffff_ffff_ffff_ffff_ffff_ffff,
+];
 
-/// Compresses `x` such that if a block of 2<sup>(3-`level`)</sup> bits is non-zero, then that 
+/// Compresses `x` such that if a block of 2<sup>(3-`level`)</sup> bits is non-zero, then that
 /// block is set to the value 1 in the output.
 #[inline(always)]
-pub fn compress(x: u128, 
-                level: usize) 
-                -> u128 {
+pub fn compress(x: u128, level: usize) -> u128 {
     // We use bit patterns to reduce the amount of work done
     let mut y = x;
-    for i in 0..(3-level) {
-        y = y | (y >> (1<<i));
+    for i in 0..(3 - level) {
+        y = y | (y >> (1 << i));
     }
 
     y & COMP_PATTERN[level]

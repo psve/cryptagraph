@@ -1,8 +1,8 @@
 //! Implementation of mCrpyton.
 
-use crate::sbox::Sbox;
-use crate::cipher::{CipherStructure, Cipher};
+use crate::cipher::{Cipher, CipherStructure};
 use crate::property::PropertyType;
+use crate::sbox::Sbox;
 
 /*****************************************************************
                             mCrypton
@@ -17,7 +17,7 @@ pub struct Mcrypton {
     sbox1: Sbox,
     sbox2: Sbox,
     sbox3: Sbox,
-    constants: [u128; 13]
+    constants: [u128; 13],
 }
 
 impl Mcrypton {
@@ -27,16 +27,20 @@ impl Mcrypton {
         let table1 = vec![1, 12, 7, 10, 6, 13, 5, 3, 15, 11, 2, 0, 8, 4, 9, 14];
         let table2 = vec![7, 14, 12, 2, 0, 9, 13, 10, 3, 15, 5, 8, 6, 4, 11, 1];
         let table3 = vec![11, 0, 10, 7, 13, 6, 4, 2, 12, 14, 3, 9, 1, 5, 15, 8];
-        
-        let constants = [0x1111, 0x2222, 0x4444, 0x8888, 0x3333, 0x6666, 
-                         0xcccc, 0xbbbb, 0x5555, 0xaaaa, 0x7777, 0xeeee, 0xffff];
-        Mcrypton{size: 64, 
-               key_size: 64,
-               sbox0: Sbox::new(4, 4, table0), 
-               sbox1: Sbox::new(4, 4, table1), 
-               sbox2: Sbox::new(4, 4, table2), 
-               sbox3: Sbox::new(4, 4, table3), 
-               constants}
+
+        let constants = [
+            0x1111, 0x2222, 0x4444, 0x8888, 0x3333, 0x6666, 0xcccc, 0xbbbb, 0x5555, 0xaaaa, 0x7777,
+            0xeeee, 0xffff,
+        ];
+        Mcrypton {
+            size: 64,
+            key_size: 64,
+            sbox0: Sbox::new(4, 4, table0),
+            sbox1: Sbox::new(4, 4, table1),
+            sbox2: Sbox::new(4, 4, table2),
+            sbox3: Sbox::new(4, 4, table3),
+            constants,
+        }
     }
 }
 
@@ -44,7 +48,7 @@ impl Cipher for Mcrypton {
     fn structure(&self) -> CipherStructure {
         CipherStructure::Spn
     }
-    
+
     fn size(&self) -> usize {
         self.size
     }
@@ -61,23 +65,23 @@ impl Cipher for Mcrypton {
         let j = ((i / 4) + (i % 4)) % 4;
 
         match j {
-             0 => &self.sbox0,
-             1 => &self.sbox1,
-             2 => &self.sbox2,
-             3 => &self.sbox3,
+            0 => &self.sbox0,
+            1 => &self.sbox1,
+            2 => &self.sbox2,
+            3 => &self.sbox3,
             _ => unreachable!(),
         }
     }
 
     fn sbox_pos_in(&self, i: usize) -> usize {
-        i*self.sbox(i).size_in()
+        i * self.sbox(i).size_in()
     }
 
     fn sbox_pos_out(&self, i: usize) -> usize {
-        i*self.sbox(i).size_out()
+        i * self.sbox(i).size_out()
     }
 
-    fn linear_layer(&self, input: u128) -> u128{
+    fn linear_layer(&self, input: u128) -> u128 {
         let mut output = 0;
 
         // Apply pi
@@ -85,20 +89,16 @@ impl Cipher for Mcrypton {
 
         for c in 0..4 {
             for r in 0..4 {
-                let mut m =  
-                       masks[(c+r)   % 4]
-                    ^ (masks[(c+r+1) % 4] << 16)
-                    ^ (masks[(c+r+2) % 4] << 32)
-                    ^ (masks[(c+r+3) % 4] << 48);
-                m <<= 4*c;
+                let mut m = masks[(c + r) % 4]
+                    ^ (masks[(c + r + 1) % 4] << 16)
+                    ^ (masks[(c + r + 2) % 4] << 32)
+                    ^ (masks[(c + r + 3) % 4] << 48);
+                m <<= 4 * c;
 
-                let x = (input & m) >> (4*c);
-                let y =  (x & 0xf)
-                      ^ ((x >> 16) & 0xf)
-                      ^ ((x >> 32) & 0xf)
-                      ^ ((x >> 48) & 0xf);
+                let x = (input & m) >> (4 * c);
+                let y = (x & 0xf) ^ ((x >> 16) & 0xf) ^ ((x >> 32) & 0xf) ^ ((x >> 48) & 0xf);
 
-                output ^= y << (4*c + 16*r);
+                output ^= y << (4 * c + 16 * r);
             }
         }
 
@@ -108,7 +108,7 @@ impl Cipher for Mcrypton {
 
         for c in 0..4 {
             for r in 0..4 {
-                output ^= ((tmp >> (4*c + 16*r)) & 0xf) << (4*r + 16*c);
+                output ^= ((tmp >> (4 * c + 16 * r)) & 0xf) << (4 * r + 16 * c);
             }
         }
 
@@ -123,7 +123,7 @@ impl Cipher for Mcrypton {
 
         for c in 0..4 {
             for r in 0..4 {
-                output ^= ((tmp >> (4*c + 16*r)) & 0xf) << (4*r + 16*c);
+                output ^= ((tmp >> (4 * c + 16 * r)) & 0xf) << (4 * r + 16 * c);
             }
         }
 
@@ -134,20 +134,16 @@ impl Cipher for Mcrypton {
 
         for c in 0..4 {
             for r in 0..4 {
-                let mut m =  
-                       masks[(c+r)   % 4]
-                    ^ (masks[(c+r+1) % 4] << 16)
-                    ^ (masks[(c+r+2) % 4] << 32)
-                    ^ (masks[(c+r+3) % 4] << 48);
-                m <<= 4*c;
+                let mut m = masks[(c + r) % 4]
+                    ^ (masks[(c + r + 1) % 4] << 16)
+                    ^ (masks[(c + r + 2) % 4] << 32)
+                    ^ (masks[(c + r + 3) % 4] << 48);
+                m <<= 4 * c;
 
-                let x = (tmp & m) >> (4*c);
-                let y =  (x & 0xf)
-                      ^ ((x >> 16) & 0xf)
-                      ^ ((x >> 32) & 0xf)
-                      ^ ((x >> 48) & 0xf);
+                let x = (tmp & m) >> (4 * c);
+                let y = (x & 0xf) ^ ((x >> 16) & 0xf) ^ ((x >> 32) & 0xf) ^ ((x >> 48) & 0xf);
 
-                output ^= y << (4*c + 16*r);
+                output ^= y << (4 * c + 16 * r);
             }
         }
 
@@ -158,7 +154,7 @@ impl Cipher for Mcrypton {
         panic!("Not implemented for this type of cipher")
     }
 
-    fn key_schedule(&self, _rounds : usize, key: &[u8]) -> Vec<u128> {
+    fn key_schedule(&self, _rounds: usize, key: &[u8]) -> Vec<u128> {
         if key.len() * 8 != self.key_size {
             panic!("invalid key-length");
         }
@@ -178,17 +174,18 @@ impl Cipher for Mcrypton {
         String::from("mCrypton")
     }
 
-    fn sbox_mask_transform(&self, 
-                           input: u128, 
-                           output: u128, 
-                           _property_type: PropertyType) 
-                           -> (u128, u128) {
+    fn sbox_mask_transform(
+        &self,
+        input: u128,
+        output: u128,
+        _property_type: PropertyType,
+    ) -> (u128, u128) {
         (input, self.linear_layer(output))
     }
 
     #[inline(always)]
-    fn whitening(&self) -> bool { 
-        true 
+    fn whitening(&self) -> bool {
+        true
     }
 }
 

@@ -29,8 +29,8 @@ impl Sbox {
             out_size,
             table,
             lat,
-            ddt
-         }
+            ddt,
+        }
     }
 
     /// Generates the LAT associated with the S-box.
@@ -42,10 +42,12 @@ impl Sbox {
         for (plaintext, &ciphertext) in table.iter().enumerate() {
             for alpha in 0..rows {
                 for beta in 0..cols {
-                    let parity = parity_masks(plaintext as u128,
-                                              u128::from(ciphertext),
-                                              alpha as u128,
-                                              beta as u128);
+                    let parity = parity_masks(
+                        plaintext as u128,
+                        u128::from(ciphertext),
+                        alpha as u128,
+                        beta as u128,
+                    );
 
                     lat[alpha as usize][beta as usize] += (1 - parity) as usize;
                 }

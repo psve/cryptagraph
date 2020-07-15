@@ -60,7 +60,7 @@ macro_rules! cipher_test_suite {
     ($impl:path) => {
         test_linear_layer!($impl);
         test_encryption_decryption!($impl);
-    }
+    };
 }
 
 #[allow(unused_macros)]
@@ -74,5 +74,5 @@ macro_rules! cipher_testvector_encryption {
                 assert_eq!(pt, ct);
             }
         }
-    }
+    };
 }

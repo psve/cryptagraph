@@ -1,24 +1,24 @@
-//! Representations of various properties of a block cipher. 
+//! Representations of various properties of a block cipher.
 //!
-//! Currently only linear approximations and differentials are represented. 
+//! Currently only linear approximations and differentials are represented.
 
+use crate::cipher::Cipher;
+use crate::sbox::Sbox;
+use fnv::FnvHashMap;
 use itertools::Itertools;
-use std::str::FromStr;
 use std::cmp::Ordering;
+use std::collections::hash_map::Keys;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use fnv::FnvHashMap;
-use std::collections::hash_map::Keys;
-use crate::sbox::Sbox;
-use crate::cipher::Cipher;
+use std::str::FromStr;
 
-/// Types of properties currently representable. 
+/// Types of properties currently representable.
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum PropertyType {
     /// Linear approximations.
     Linear,
     /// Differentials.
-    Differential
+    Differential,
 }
 
 impl FromStr for PropertyType {
@@ -26,9 +26,9 @@ impl FromStr for PropertyType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "linear"       => Ok(PropertyType::Linear),
+            "linear" => Ok(PropertyType::Linear),
             "differential" => Ok(PropertyType::Differential),
-            _              => Err(String::from("Unknown property type.")),
+            _ => Err(String::from("Unknown property type.")),
         }
     }
 }
@@ -41,7 +41,7 @@ pub enum PropertyFilter {
     /// Output only the input.
     Input,
     /// Output only the output.
-    Output
+    Output,
 }
 
 /// A structure representing a property (e.g. a linear approximation or differential).
@@ -59,14 +59,10 @@ pub struct Property {
 
 impl Property {
     /// Creates a new property.
-    pub fn new(input: u128, 
-               output: u128, 
-               value: f64, 
-               trails: u128) 
-               -> Property {
+    pub fn new(input: u128, output: u128, value: f64, trails: u128) -> Property {
         Property {
-            input, 
-            output, 
+            input,
+            output,
             value,
             trails,
         }
@@ -172,9 +168,9 @@ impl ValueMap {
         }
 
         ValueMap {
-            map, 
-            input_map, 
-            output_map
+            map,
+            input_map,
+            output_map,
         }
     }
 
@@ -227,9 +223,7 @@ pub struct MaskMap {
 
 impl MaskMap {
     /// Create a new mapping from a specific cipher.
-    pub fn new(cipher: &dyn Cipher,
-               property_type: PropertyType) 
-               -> MaskMap {
+    pub fn new(cipher: &dyn Cipher, property_type: PropertyType) -> MaskMap {
         let non_property = match property_type {
             PropertyType::Linear => cipher.sbox(0).linear_balance(),
             PropertyType::Differential => cipher.sbox(0).differential_zero(),
@@ -269,11 +263,10 @@ impl MaskMap {
             for v in output_map.values_mut() {
                 v.sort_by(|x, y| y.1.cmp(&x.1));
             }
-            
+
             input_maps.push(input_map);
             output_maps.push(output_map);
         }
-
 
         MaskMap {
             input_maps,
@@ -283,27 +276,28 @@ impl MaskMap {
     }
 
     /// Given the output value of a property over an S-box layer, returns the best input values,
-    /// i.e. those with highest values. 
-    pub fn get_best_inputs(&self,
-                           cipher: &dyn Cipher,
-                           output: u128,
-                           limit: usize)
-                           -> Vec<(u128, f64)> {
+    /// i.e. those with highest values.
+    pub fn get_best_inputs(
+        &self,
+        cipher: &dyn Cipher,
+        output: u128,
+        limit: usize,
+    ) -> Vec<(u128, f64)> {
         let mask_out = cipher.sbox(0).mask_out();
         let size_out = cipher.sbox(0).size_out();
         let trivial = match self.property_type {
             PropertyType::Linear => f64::from(cipher.sbox(0).linear_balance()),
-            PropertyType::Differential => f64::from(cipher.sbox(0).differential_trivial())
+            PropertyType::Differential => f64::from(cipher.sbox(0).differential_trivial()),
         };
 
         // Extract active positions and output values
         let mut active = Vec::new();
 
         for i in 0..cipher.num_sboxes() {
-            let x = (output >> (i*size_out)) & mask_out;
+            let x = (output >> (i * size_out)) & mask_out;
 
             if x != 0 {
-                active.push(((i*size_out), i, x));
+                active.push(((i * size_out), i, x));
             }
         }
 
@@ -313,7 +307,7 @@ impl MaskMap {
         for &(_, j, x) in &active {
             match self.output_maps[j].get(&x) {
                 Some(ref v) => good_inputs.push(v.iter().take(2).cloned().collect()),
-                None => return Vec::new()
+                None => return Vec::new(),
             }
         }
 
@@ -322,7 +316,7 @@ impl MaskMap {
         for parts in good_inputs.iter().multi_cartesian_product().take(limit) {
             let mut input = 0;
             let mut value = 1.0;
-            
+
             for (i, (sbox_idx, _, _)) in active.iter().enumerate() {
                 input ^= parts[i].0 << sbox_idx;
                 value *= f64::from(parts[i].1) / trivial;
@@ -339,27 +333,28 @@ impl MaskMap {
     }
 
     /// Given the input value of a property over an S-box layer, returns the best output values,
-    /// i.e. those with highest values. 
-    pub fn get_best_outputs(&self,
-                            cipher: &dyn Cipher,
-                            input: u128,
-                            limit: usize)
-                            -> Vec<(u128, f64)> {
+    /// i.e. those with highest values.
+    pub fn get_best_outputs(
+        &self,
+        cipher: &dyn Cipher,
+        input: u128,
+        limit: usize,
+    ) -> Vec<(u128, f64)> {
         let mask_in = cipher.sbox(0).mask_in();
         let size_in = cipher.sbox(0).size_in();
         let trivial = match self.property_type {
             PropertyType::Linear => f64::from(cipher.sbox(0).linear_balance()),
-            PropertyType::Differential => f64::from(cipher.sbox(0).differential_trivial())
+            PropertyType::Differential => f64::from(cipher.sbox(0).differential_trivial()),
         };
 
         // Extract active positions and output values
         let mut active = Vec::new();
 
         for i in 0..cipher.num_sboxes() {
-            let x = (input >> (i*size_in)) & mask_in;
+            let x = (input >> (i * size_in)) & mask_in;
 
             if x != 0 {
-                active.push(((i*size_in), i, x));
+                active.push(((i * size_in), i, x));
             }
         }
 
@@ -369,7 +364,7 @@ impl MaskMap {
         for &(_, j, x) in &active {
             match self.input_maps[j].get(&x) {
                 Some(ref v) => good_outputs.push(v.iter().take(2).cloned().collect()),
-                None => return Vec::new()
+                None => return Vec::new(),
             }
         }
 
@@ -378,7 +373,7 @@ impl MaskMap {
         for parts in good_outputs.iter().multi_cartesian_product().take(limit) {
             let mut output = 0;
             let mut value = 1.0;
-            
+
             for (i, (sbox_idx, _, _)) in active.iter().enumerate() {
                 output ^= parts[i].0 << sbox_idx;
                 value *= f64::from(parts[i].1) / trivial;

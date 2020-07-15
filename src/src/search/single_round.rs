@@ -5,10 +5,10 @@ use num_cpus;
 use std::sync::mpsc;
 
 use crate::cipher::Cipher;
-use crate::property::{Property, PropertyType, PropertyFilter, ValueMap};
+use crate::property::{Property, PropertyFilter, PropertyType, ValueMap};
 use crate::search::graph::MultistageGraph;
-use crate::search::patterns::{SboxPattern, get_sorted_patterns};
-use crate::utility::{ProgressBar, compress};
+use crate::search::patterns::{get_sorted_patterns, SboxPattern};
+use crate::utility::{compress, ProgressBar};
 
 // The number of threads used for parallel calls is fixed
 lazy_static! {
@@ -35,18 +35,21 @@ impl<'a> SortedProperties<'a> {
     /// using an approach inspired by the paper
     /// "Efficient Algorithms for Extracting the K Most Critical Paths in Timing Analysis"
     /// by Yen, Du, and Ghanta.
-    pub fn new(cipher: &dyn Cipher,
-               pattern_limit: usize,
-               property_type: PropertyType,
-               property_filter: PropertyFilter)
-               -> SortedProperties {
+    pub fn new(
+        cipher: &dyn Cipher,
+        pattern_limit: usize,
+        property_type: PropertyType,
+        property_filter: PropertyFilter,
+    ) -> SortedProperties {
         let (sbox_patterns, value_maps) = get_sorted_patterns(cipher, pattern_limit, property_type);
 
-        SortedProperties{cipher,
-                         value_maps,
-                         sbox_patterns,
-                         property_type,
-                         property_filter}
+        SortedProperties {
+            cipher,
+            value_maps,
+            sbox_patterns,
+            property_type,
+            property_filter,
+        }
     }
 
     /// Returns the number of properties which can be generated.
@@ -55,8 +58,8 @@ impl<'a> SortedProperties<'a> {
 
         for pattern in &self.sbox_patterns {
             let combinations = match self.property_filter {
-                PropertyFilter::All    => pattern.num_prop(&self.value_maps),
-                PropertyFilter::Input  => pattern.num_input(&self.value_maps),
+                PropertyFilter::All => pattern.num_prop(&self.value_maps),
+                PropertyFilter::Input => pattern.num_input(&self.value_maps),
                 PropertyFilter::Output => pattern.num_output(&self.value_maps),
             };
 
@@ -112,9 +115,7 @@ impl<'a> SortedProperties<'a> {
     ///
     /// `graph` is a graph compressed with `utility::compress`.
     /// The `level` supplied to this function must match that which the graph was created with.
-    pub fn remove_dead_patterns(&mut self,
-                                graph: &MultistageGraph,
-                                level: usize) {
+    pub fn remove_dead_patterns(&mut self, graph: &MultistageGraph, level: usize) {
         let (result_tx, result_rx) = mpsc::channel();
 
         // Start scoped worker threads
@@ -129,11 +130,13 @@ impl<'a> SortedProperties<'a> {
                     // Split the S-box patterns equally across threads
                     // Note that this does not equally split the number of properties across threads,
                     // but hopefully it is close enough
-                    let tmp: Vec<_> = thread_properties.patterns().iter()
-                                                       .cloned()
-                                                       .skip(t)
-                                                       .step_by(*THREADS)
-                                                       .collect();
+                    let tmp: Vec<_> = thread_properties
+                        .patterns()
+                        .iter()
+                        .cloned()
+                        .skip(t)
+                        .step_by(*THREADS)
+                        .collect();
                     thread_properties.set_patterns(&tmp);
 
                     // Find patterns to keep
@@ -151,7 +154,7 @@ impl<'a> SortedProperties<'a> {
 
                         let input = compress(property.input, level);
                         let good = graph.forward_edges().contains_key(&input)
-                                || graph.backward_edges().contains_key(&input);
+                            || graph.backward_edges().contains_key(&input);
                         good_patterns[pattern_idx] |= good;
 
                         if t == 0 {
@@ -168,10 +171,13 @@ impl<'a> SortedProperties<'a> {
                         }
                     }
 
-                    result_tx.send(new_patterns).expect("Thread could not send result");
+                    result_tx
+                        .send(new_patterns)
+                        .expect("Thread could not send result");
                 });
             }
-        }).expect("Threads failed to join.");
+        })
+        .expect("Threads failed to join.");
 
         // Collect patterns from each thread and update properties
         let mut new_patterns = Vec::new();
@@ -197,7 +203,7 @@ impl<'a> IntoIterator for &'a SortedProperties<'a> {
             sbox_patterns: self.sbox_patterns.clone(),
             property_type: self.property_type,
             property_filter: self.property_filter,
-            current_pattern: 0
+            current_pattern: 0,
         }
     }
 }
@@ -210,7 +216,7 @@ pub struct SortedPropertiesIterator<'a> {
     value_maps: Vec<ValueMap>,
     property_type: PropertyType,
     property_filter: PropertyFilter,
-    current_pattern: usize
+    current_pattern: usize,
 }
 
 impl<'a> Iterator for SortedPropertiesIterator<'a> {
@@ -245,10 +251,9 @@ impl<'a> Iterator for SortedPropertiesIterator<'a> {
         }
 
         let mut property = property.unwrap();
-        let (input, output) = self.cipher
-                                  .sbox_mask_transform(property.input,
-                                                       property.output,
-                                                       self.property_type);
+        let (input, output) =
+            self.cipher
+                .sbox_mask_transform(property.input, property.output, self.property_type);
         property.input = input;
         property.output = output;
 

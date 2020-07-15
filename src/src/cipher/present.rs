@@ -1,8 +1,8 @@
 //! Implementation of PRESENT with an 80-bit key.
 
-use crate::sbox::Sbox;
-use crate::cipher::{CipherStructure, Cipher};
+use crate::cipher::{Cipher, CipherStructure};
 use crate::property::PropertyType;
+use crate::sbox::Sbox;
 
 /*****************************************************************
                             PRESENT
@@ -11,32 +11,32 @@ use crate::property::PropertyType;
 /// A structure representing the PRESENT cipher.
 #[derive(Clone)]
 pub struct Present {
-    size     : usize,
-    key_size : usize,
-    sbox     : Sbox,
-    isbox    : Sbox,
+    size: usize,
+    key_size: usize,
+    sbox: Sbox,
+    isbox: Sbox,
 }
 
 impl Present {
-    const PERMUTATION_INV : [[u128 ; 0x100] ; 8] = include!("data/present.inv.perm");
-    const PERMUTATION     : [[u128 ; 0x100] ; 8] = include!("data/present.perm");
-    const SBOX : [u8 ; 16] = [0xc, 0x5, 0x6, 0xb,
-                              0x9, 0x0, 0xa, 0xd,
-                              0x3, 0xe, 0xf, 0x8,
-                              0x4, 0x7, 0x1, 0x2];
-    const ISBOX : [u8 ; 16] = [0x5, 0xe, 0xf, 0x8,
-                               0xc, 0x1, 0x2, 0xd,
-                               0xb, 0x4, 0x6, 0x3,
-                               0x0, 0x7, 0x9, 0xa];
-    
+    const PERMUTATION_INV: [[u128; 0x100]; 8] = include!("data/present.inv.perm");
+    const PERMUTATION: [[u128; 0x100]; 8] = include!("data/present.perm");
+    const SBOX: [u8; 16] = [
+        0xc, 0x5, 0x6, 0xb, 0x9, 0x0, 0xa, 0xd, 0x3, 0xe, 0xf, 0x8, 0x4, 0x7, 0x1, 0x2,
+    ];
+    const ISBOX: [u8; 16] = [
+        0x5, 0xe, 0xf, 0x8, 0xc, 0x1, 0x2, 0xd, 0xb, 0x4, 0x6, 0x3, 0x0, 0x7, 0x9, 0xa,
+    ];
+
     /// Create a new instance of the cipher.
     pub fn new() -> Present {
         let table: Vec<_> = From::from(&Present::SBOX[0..]);
         let itable: Vec<_> = From::from(&Present::ISBOX[0..]);
-        Present{size: 64,
-                key_size: 80,
-                sbox: Sbox::new(4, 4, table),
-                isbox: Sbox::new(4, 4, itable)}
+        Present {
+            size: 64,
+            key_size: 80,
+            sbox: Sbox::new(4, 4, table),
+            isbox: Sbox::new(4, 4, itable),
+        }
     }
 }
 
@@ -62,17 +62,17 @@ impl Cipher for Present {
     }
 
     fn sbox_pos_in(&self, i: usize) -> usize {
-        i*self.sbox(i).size_in()
+        i * self.sbox(i).size_in()
     }
 
     fn sbox_pos_out(&self, i: usize) -> usize {
-        i*self.sbox(i).size_out()
+        i * self.sbox(i).size_out()
     }
 
-    fn linear_layer(&self, input: u128) -> u128{
+    fn linear_layer(&self, input: u128) -> u128 {
         let mut output = 0;
-        output ^= Present::PERMUTATION[0][((input as u64      ) & 0xff) as usize];
-        output ^= Present::PERMUTATION[1][((input as u64 >>  8) & 0xff) as usize];
+        output ^= Present::PERMUTATION[0][((input as u64) & 0xff) as usize];
+        output ^= Present::PERMUTATION[1][((input as u64 >> 8) & 0xff) as usize];
         output ^= Present::PERMUTATION[2][((input as u64 >> 16) & 0xff) as usize];
         output ^= Present::PERMUTATION[3][((input as u64 >> 24) & 0xff) as usize];
         output ^= Present::PERMUTATION[4][((input as u64 >> 32) & 0xff) as usize];
@@ -85,8 +85,8 @@ impl Cipher for Present {
 
     fn linear_layer_inv(&self, input: u128) -> u128 {
         let mut output = 0;
-        output ^= Present::PERMUTATION_INV[0][((input as u64      ) & 0xff) as usize];
-        output ^= Present::PERMUTATION_INV[1][((input as u64 >>  8) & 0xff) as usize];
+        output ^= Present::PERMUTATION_INV[0][((input as u64) & 0xff) as usize];
+        output ^= Present::PERMUTATION_INV[1][((input as u64 >> 8) & 0xff) as usize];
         output ^= Present::PERMUTATION_INV[2][((input as u64 >> 16) & 0xff) as usize];
         output ^= Present::PERMUTATION_INV[3][((input as u64 >> 24) & 0xff) as usize];
         output ^= Present::PERMUTATION_INV[4][((input as u64 >> 32) & 0xff) as usize];
@@ -101,14 +101,14 @@ impl Cipher for Present {
         panic!("Not implemented for this type of cipher")
     }
 
-    fn key_schedule(&self, rounds : usize, key: &[u8]) -> Vec<u128> {
+    fn key_schedule(&self, rounds: usize, key: &[u8]) -> Vec<u128> {
         if key.len() * 8 != self.key_size {
             panic!("invalid key-length");
         }
 
         let mut keys = vec![];
-        let mut s0 : u64 = 0;
-        let mut s1 : u64 = 0;
+        let mut s0: u64 = 0;
+        let mut s1: u64 = 0;
 
         // load key into 80-bit state (s0 || s1)
         for &k in key.iter().take(8) {
@@ -128,7 +128,7 @@ impl Cipher for Present {
             assert!(s1 >> 16 == 0);
 
             {
-                let mut t0 : u64 = 0;
+                let mut t0: u64 = 0;
                 t0 |= s0 << 61;
                 t0 |= s1 << (64 - (3 + 16));
                 t0 |= s0 >> 19;
@@ -146,7 +146,7 @@ impl Cipher for Present {
             }
 
             // add round constant
-            let rnd = ((r+1) & 0b11111) as u64;
+            let rnd = ((r + 1) & 0b11111) as u64;
             s0 ^= rnd >> 1;
             s1 ^= (rnd & 1) << 15;
         }
@@ -164,7 +164,7 @@ impl Cipher for Present {
             let mut tmp = 0;
 
             for j in 0..16 {
-                tmp ^= u128::from(self.sbox.apply((output >> (4*j)) & 0xf)) << (4*j);
+                tmp ^= u128::from(self.sbox.apply((output >> (4 * j)) & 0xf)) << (4 * j);
             }
 
             // Apply linear layer
@@ -190,11 +190,11 @@ impl Cipher for Present {
             let mut tmp = 0;
 
             for j in 0..16 {
-                tmp ^= u128::from(self.isbox.apply((output >> (4*j)) & 0xf)) << (4*j);
+                tmp ^= u128::from(self.isbox.apply((output >> (4 * j)) & 0xf)) << (4 * j);
             }
 
             // Add round key
-            output = tmp ^ round_keys[31-i]
+            output = tmp ^ round_keys[31 - i]
         }
 
         output
@@ -204,11 +204,12 @@ impl Cipher for Present {
         String::from("PRESENT")
     }
 
-    fn sbox_mask_transform(&self,
-                           input: u128,
-                           output: u128,
-                           _property_type: PropertyType)
-                           -> (u128, u128) {
+    fn sbox_mask_transform(
+        &self,
+        input: u128,
+        output: u128,
+        _property_type: PropertyType,
+    ) -> (u128, u128) {
         (input, self.linear_layer(output))
     }
 
