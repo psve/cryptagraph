@@ -53,7 +53,7 @@ pub struct Property {
     pub output: u128,
     /// The value of the property.
     pub value: f64,
-    /// The number of trains contaiend in the property.
+    /// The number of trails contained in the property.
     pub trails: u128,
 }
 
